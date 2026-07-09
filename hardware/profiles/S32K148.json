@@ -1,0 +1,19 @@
+{
+  "name": "S32K148",
+  "vendor": "NXP",
+  "family": "S32K1",
+  "architecture": "Armv7E-M",
+  "core": "Arm Cortex-M4F",
+  "cpu_frequency_mhz": 112,
+  "flash_kb": 2048,
+  "ram_kb": 256,
+  "fpu": true,
+  "dma": true,
+  "mpu": true,
+  "cache": false,
+  "adc_units": 2,
+  "can_units": 3,
+  "uart_units": 3,
+  "spi_units": 3,
+  "i2c_units": 2
+}
