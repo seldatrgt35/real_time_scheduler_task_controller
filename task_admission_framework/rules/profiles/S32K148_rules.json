@@ -1,0 +1,74 @@
+[
+  {
+    "hardware": "S32K148",
+    "period_ms": 5,
+    "criticality": "HIGH",
+    "max_complexity": 60,
+    "description": "Initial engineering estimate for 5 ms task on S32K148",
+    "source": "STAR default rules v0.2",
+    "validated": false
+  },
+  {
+    "hardware": "S32K148",
+    "period_ms": 10,
+    "criticality": "HIGH",
+    "max_complexity": 120,
+    "description": "Initial engineering estimate for 10 ms task on S32K148",
+    "source": "STAR default rules v0.2",
+    "validated": false
+  },
+  {
+    "hardware": "S32K148",
+    "period_ms": 20,
+    "criticality": "HIGH",
+    "max_complexity": 250,
+    "description": "Initial engineering estimate for 20 ms task on S32K148",
+    "source": "STAR default rules v0.2",
+    "validated": false
+  },
+  {
+    "hardware": "S32K148",
+    "period_ms": 50,
+    "criticality": "HIGH",
+    "max_complexity": 600,
+    "description": "Initial engineering estimate for 50 ms task on S32K148",
+    "source": "STAR default rules v0.2",
+    "validated": false
+  },
+  {
+    "hardware": "S32K148",
+    "period_ms": 100,
+    "criticality": "HIGH",
+    "max_complexity": 1200,
+    "description": "Initial engineering estimate for 100 ms task on S32K148",
+    "source": "STAR default rules v0.2",
+    "validated": false
+  },
+  {
+    "hardware": "S32K148",
+    "period_ms": 250,
+    "criticality": "HIGH",
+    "max_complexity": 3000,
+    "description": "Initial engineering estimate for 250 ms task on S32K148",
+    "source": "STAR default rules v0.2",
+    "validated": false
+  },
+  {
+    "hardware": "S32K148",
+    "period_ms": 500,
+    "criticality": "HIGH",
+    "max_complexity": 6000,
+    "description": "Initial engineering estimate for 500 ms task on S32K148",
+    "source": "STAR default rules v0.2",
+    "validated": false
+  },
+  {
+    "hardware": "S32K148",
+    "period_ms": 1000,
+    "criticality": "HIGH",
+    "max_complexity": 12000,
+    "description": "Initial engineering estimate for 1000 ms task on S32K148",
+    "source": "STAR default rules v0.2",
+    "validated": false
+  }
+]

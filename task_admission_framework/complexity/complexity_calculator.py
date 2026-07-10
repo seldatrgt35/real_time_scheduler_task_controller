@@ -48,7 +48,6 @@ class ComplexityCalculator:
     ) -> Iterable[CostBreakdown]:
         feature_occurrences = {
             "Function Calls": feature_vector.total_function_calls,
-            "API Calls": feature_vector.total_api_calls,
             "Loops": feature_vector.total_loops,
             "Branches": feature_vector.total_branches,
             "Switches": feature_vector.total_switches,
@@ -72,16 +71,20 @@ class ComplexityCalculator:
                 subtotal=occurrences * base_cost,
             )
 
+        for api_name, occurrences in sorted(feature_vector.api_call_counts.items()):
+            if occurrences <= 0:
+                continue
+
+            entry = cost_database.get_entry(api_name)
+            if entry is None:
+                continue
+
+            yield CostBreakdown(
+                name=api_name,
+                occurrences=occurrences,
+                base_cost=entry.base_weight,
+                subtotal=occurrences * entry.base_weight,
+            )
+
     def _resolve_base_cost(self, feature_name: str, cost_database: CostDatabase) -> int:
-        if feature_name == "API Calls":
-            return self._aggregate_api_base_cost(cost_database)
         return self._FEATURE_BASE_COSTS[feature_name]
-
-    @staticmethod
-    def _aggregate_api_base_cost(cost_database: CostDatabase) -> int:
-        entries = cost_database.list_entries()
-        if not entries:
-            return 0
-
-        total_weight = sum(entry.base_weight for entry in entries)
-        return round(total_weight / len(entries))

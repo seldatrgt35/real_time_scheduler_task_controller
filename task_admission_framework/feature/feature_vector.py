@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,3 +20,4 @@ class FeatureVector:
     blocking_calls: int
     dynamic_memory_calls: int
     recursion_detected: bool
+    api_call_counts: dict[str, int] = field(default_factory=dict)

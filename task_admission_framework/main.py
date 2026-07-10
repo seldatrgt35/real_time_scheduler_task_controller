@@ -1,0 +1,412 @@
+"""Command-line entry point for the STAR analysis pipeline."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+from typing import Any
+
+from task_admission_framework.admission.admission_controller import AdmissionController
+from task_admission_framework.admission.admission_decision import AdmissionDecision
+from task_admission_framework.descriptor.task_descriptor import TaskDescriptor
+from task_admission_framework.hardware.hardware_profile import HardwareProfile
+from task_admission_framework.pipeline.exceptions import PipelineError
+from task_admission_framework.report.complexity_report import ComplexityReport
+from task_admission_framework.rules.admission_rule import AdmissionRule
+from task_admission_framework.rules.exceptions import RuleError
+from task_admission_framework.rules.rule_database import RuleDatabase
+from task_admission_framework.rules.rule_loader import RuleLoader
+
+
+def print_complexity_report(report: ComplexityReport) -> None:
+    """Print the explainable STAR complexity report."""
+
+    print("-" * 72)
+    print("STAR Complexity Report")
+    print(f"Task: {report.task_name}")
+    print(f"Complexity Score: {report.total_score}")
+    print(f"Total Features: {report.total_features}")
+    print("Category Breakdown:")
+    print(f"  Computation: {report.computation_cost}")
+    print(f"  Control Flow: {report.control_flow_cost}")
+    print(f"  Memory: {report.memory_cost}")
+    print(f"  RTOS: {report.rtos_cost}")
+    print(f"  Peripheral: {report.peripheral_cost}")
+    print(f"  Floating Point: {report.floating_point_cost}")
+    print(f"  API: {report.api_cost}")
+    print(f"  Other: {report.other_cost}")
+    print("Detailed Breakdown:")
+    for item in report.breakdown:
+        print(
+            f"  {item.name}: "
+            f"{item.occurrences} x {item.base_cost} = {item.subtotal}"
+        )
+    print("-" * 72)
+
+
+def print_task_descriptor(
+    descriptor: TaskDescriptor,
+    validation_status: str,
+) -> None:
+    """Print the source-independent task descriptor."""
+
+    print("-" * 72)
+    print("Task Descriptor")
+    print(f"Task Name: {descriptor.task_name}")
+    print(f"Entry Function: {descriptor.entry_function}")
+    print(f"Period: {descriptor.period_ms} ms")
+    print(f"Deadline: {descriptor.deadline_ms} ms")
+    print(f"Priority: {descriptor.priority}")
+    print(f"Stack Size: {descriptor.stack_size} bytes")
+    print(f"Criticality: {descriptor.criticality.name}")
+    print(f"Validation Status: {validation_status}")
+    print("-" * 72)
+
+
+def print_hardware_profile(
+    profile: HardwareProfile,
+    validation_status: str,
+) -> None:
+    """Print target hardware capabilities."""
+
+    print("-" * 72)
+    print("Hardware Profile")
+    print(f"Name: {profile.name}")
+    print(f"Vendor: {profile.vendor}")
+    print(f"Family: {profile.family}")
+    print(f"Architecture: {profile.architecture}")
+    print(f"Core: {profile.core}")
+    print(f"CPU Frequency: {profile.cpu_frequency_mhz} MHz")
+    print(f"Flash: {profile.flash_kb} KB")
+    print(f"RAM: {profile.ram_kb} KB")
+    print(f"FPU: {'Yes' if profile.fpu else 'No'}")
+    print(f"DMA: {'Yes' if profile.dma else 'No'}")
+    print(f"MPU: {'Yes' if profile.mpu else 'No'}")
+    print(f"Cache: {'Yes' if profile.cache else 'No'}")
+    print(f"ADC Units: {profile.adc_units}")
+    print(f"CAN Units: {profile.can_units}")
+    print(f"UART Units: {profile.uart_units}")
+    print(f"SPI Units: {profile.spi_units}")
+    print(f"I2C Units: {profile.i2c_units}")
+    print(f"Validation Status: {validation_status}")
+    print("-" * 72)
+
+
+def print_rules(rules: list[AdmissionRule]) -> None:
+    """Print loaded admission threshold rules without evaluating a task."""
+
+    print("-" * 120)
+    print("STAR Rule Database")
+    print(
+        f"{'Hardware':<12}"
+        f"{'Period':<10}"
+        f"{'Criticality':<18}"
+        f"{'Max Complexity':<18}"
+        f"{'Validated':<12}"
+        f"{'Description':<52}"
+        "Source"
+    )
+    for rule in rules:
+        criticality = rule.criticality if rule.criticality is not None else "ANY"
+        print(
+            f"{rule.hardware:<12}"
+            f"{rule.period_ms:<10}"
+            f"{criticality:<18}"
+            f"{rule.max_complexity:<18.1f}"
+            f"{str(rule.validated):<12}"
+            f"{rule.description:<52}"
+            f"{rule.source}"
+        )
+    print("-" * 120)
+
+
+def print_admission_result(session, decision: AdmissionDecision) -> None:
+    """Print CLI admission output."""
+
+    descriptor = session.task_descriptor
+    hardware = session.hardware_profile
+    report = session.complexity_report
+
+    print("-" * 72)
+    print("STAR Admission Result")
+    print(f"Task: {descriptor.task_name}")
+    print(f"Entry Function: {descriptor.entry_function}")
+    print(f"Hardware: {hardware.name}")
+    print(f"Period: {descriptor.period_ms} ms")
+    print(f"Deadline: {descriptor.deadline_ms} ms")
+    print(f"Criticality: {descriptor.criticality.name}")
+    print()
+    print(f"Complexity Score: {decision.complexity_score}")
+    print(f"Rule Maximum Complexity: {decision.max_complexity}")
+    print(f"Rule Source: {decision.rule_source}")
+    print(f"Rule Validated: {decision.rule_validated}")
+    print()
+    print(f"Decision: {decision.status.name}")
+    print(f"Reason: {decision.reason}")
+    print()
+    print("Complexity Breakdown:")
+    for item in report.breakdown:
+        print(
+            f"  {item.name}: "
+            f"{item.occurrences} x {item.base_cost} = {item.subtotal}"
+        )
+    print("-" * 72)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the STAR command-line parser."""
+
+    parser = argparse.ArgumentParser(
+        prog="python -m task_admission_framework.main",
+        description="STAR static task analysis command line interface.",
+    )
+    subparsers = parser.add_subparsers(dest="command")
+
+    analyze_parser = subparsers.add_parser(
+        "analyze",
+        help="Analyze a C task source file and evaluate admission.",
+    )
+    analyze_parser.add_argument("--source", required=True, help="Path to the C file.")
+    analyze_parser.add_argument(
+        "--descriptor",
+        required=True,
+        help="Path to the task descriptor YAML file.",
+    )
+    analyze_parser.add_argument(
+        "--hardware",
+        required=True,
+        help="Path to the hardware profile JSON file.",
+    )
+    analyze_parser.add_argument(
+        "--rules",
+        required=True,
+        help="Path to the rule profile JSON file.",
+    )
+    subparsers.add_parser("gui", help="Open the desktop file picker interface.")
+
+    taskset_parser = subparsers.add_parser(
+        "analyze-taskset",
+        help="Analyze a group of tasks and compute total STAR load.",
+    )
+    taskset_parser.add_argument(
+        "--config",
+        required=True,
+        help="Path to taskset_config.json.",
+    )
+
+    return parser
+
+
+def load_rule_database(rule_path: Path) -> RuleDatabase:
+    """Load rules and create the in-memory rule database."""
+
+    rules = RuleLoader().load(rule_path)
+    return RuleDatabase(rules)
+
+
+def run_demo() -> None:
+    """Run the built-in STAR demo using example files."""
+
+    base_path = Path(__file__).parent
+    source_path = base_path / "examples" / "sensor_task.c"
+    descriptor_path = base_path / "examples" / "sensor_task.yaml"
+    hardware_profile_path = base_path / "hardware" / "profiles" / "S32K148.json"
+    rule_profile_path = base_path / "rules" / "profiles" / "S32K148_rules.json"
+
+    try:
+        from task_admission_framework.pipeline.analysis_pipeline import AnalysisPipeline
+
+        session = AnalysisPipeline().analyze(
+            source_file=source_path,
+            descriptor_file=descriptor_path,
+            hardware_profile_file=hardware_profile_path,
+        )
+    except PipelineError as exc:
+        print(f"STAR analysis failed: {exc}")
+        return
+
+    print_complexity_report(session.complexity_report)
+    print_task_descriptor(session.task_descriptor, "Valid")
+    print_hardware_profile(session.hardware_profile, "Valid")
+
+    try:
+        rule_database = load_rule_database(rule_profile_path)
+        rule_database.find_rule("S32K148", 10, "HIGH")
+    except RuleError as exc:
+        print(f"STAR rule database failed: {exc}")
+        return
+
+    print_rules(rule_database.list_rules())
+
+
+def run_analyze(args: argparse.Namespace) -> None:
+    """Run CLI analysis for user-provided input paths."""
+
+    source_path = Path(args.source)
+    descriptor_path = Path(args.descriptor)
+    hardware_path = Path(args.hardware)
+    rule_path = Path(args.rules)
+
+    missing_paths = [
+        path
+        for path in (source_path, descriptor_path, hardware_path, rule_path)
+        if not path.exists()
+    ]
+    if missing_paths:
+        for path in missing_paths:
+            print(f"STAR CLI error: file not found: {path}")
+        return
+
+    try:
+        from task_admission_framework.pipeline.analysis_pipeline import AnalysisPipeline
+
+        session = AnalysisPipeline().analyze(
+            source_file=source_path,
+            descriptor_file=descriptor_path,
+            hardware_profile_file=hardware_path,
+        )
+    except PipelineError as exc:
+        print(f"STAR analysis failed: {exc}")
+        return
+
+    try:
+        rule_database = load_rule_database(rule_path)
+        decision = AdmissionController().evaluate(session, rule_database)
+    except RuleError as exc:
+        print(f"STAR rule database failed: {exc}")
+        return
+
+    print_admission_result(session, decision)
+
+
+def run_analyze_taskset(args: argparse.Namespace) -> None:
+    """Run static complexity-based task-set analysis from JSON config."""
+
+    config_path = Path(args.config)
+    if not config_path.exists():
+        print(f"STAR task-set error: file not found: {config_path}")
+        return
+
+    try:
+        from task_admission_framework.taskset.exceptions import TaskSetError
+        from task_admission_framework.taskset.taskset_analyzer import TaskSetAnalyzer
+
+        entries = load_taskset_entries(config_path)
+        result = TaskSetAnalyzer().analyze(entries)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"STAR task-set config failed: {exc}")
+        return
+    except (PipelineError, RuleError, TaskSetError) as exc:
+        print(f"STAR task-set analysis failed: {exc}")
+        return
+
+    print_taskset_result(result)
+
+
+def load_taskset_entries(config_path: Path):
+    """Load TaskSetEntry objects from a JSON task-set config."""
+
+    from task_admission_framework.taskset.taskset_entry import TaskSetEntry
+
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON config: {config_path}") from exc
+
+    tasks = data.get("tasks")
+    if not isinstance(tasks, list) or not tasks:
+        raise ValueError("taskset config must contain a non-empty 'tasks' list.")
+
+    return [
+        TaskSetEntry(
+            name=str(item["name"]),
+            source_file=resolve_taskset_path(config_path, item["source_file"]),
+            entry_function=str(item["entry_function"]),
+            period_ms=int(item["period_ms"]),
+            deadline_ms=int(item["deadline_ms"]),
+            priority=int(item["priority"]),
+            criticality=str(item["criticality"]).upper(),
+            hardware_profile_file=resolve_taskset_path(
+                config_path,
+                item["hardware_profile_file"],
+            ),
+            rules_file=resolve_taskset_path(config_path, item["rules_file"]),
+        )
+        for item in tasks
+    ]
+
+
+def resolve_taskset_path(config_path: Path, raw_path: Any) -> Path:
+    """Resolve config paths from CWD first, then relative to config file."""
+
+    path = Path(str(raw_path))
+    if path.is_absolute() or path.exists():
+        return path
+
+    relative_to_config = config_path.parent / path
+    if relative_to_config.exists():
+        return relative_to_config
+
+    return path
+
+
+def print_taskset_result(result) -> None:
+    """Print a table for task-set STAR load analysis."""
+
+    print("-" * 128)
+    print("Task Set Result")
+    print(
+        f"{'Task':<18}"
+        f"{'Function':<24}"
+        f"{'Period':<10}"
+        f"{'Deadline':<10}"
+        f"{'Priority':<10}"
+        f"{'Criticality':<16}"
+        f"{'Score':<10}"
+        f"{'Rule Max':<12}"
+        f"{'Task Load':<12}"
+        "Decision"
+    )
+    for task in result.task_results:
+        print(
+            f"{task.task_name:<18}"
+            f"{task.entry_function:<24}"
+            f"{task.period_ms:<10}"
+            f"{task.deadline_ms:<10}"
+            f"{task.priority:<10}"
+            f"{task.criticality:<16}"
+            f"{task.complexity_score:<10.2f}"
+            f"{task.rule_max_complexity:<12.2f}"
+            f"{task.task_load:<12.2f}"
+            f"{task.admission_status}"
+        )
+    print("-" * 128)
+    print(f"Total STAR Load: {result.total_star_load:.2f}")
+    print(f"System Status: {result.system_status}")
+    print(f"System Reason: {result.system_reason}")
+
+
+def main() -> None:
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if args.command == "analyze":
+        run_analyze(args)
+        return
+
+    if args.command == "gui":
+        from task_admission_framework.gui import run_gui
+
+        run_gui()
+        return
+
+    if args.command == "analyze-taskset":
+        run_analyze_taskset(args)
+        return
+
+    run_demo()
+
+
+if __name__ == "__main__":
+    main()

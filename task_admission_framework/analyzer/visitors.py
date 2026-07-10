@@ -11,6 +11,18 @@ from task_admission_framework.database.api_database import ApiDatabase
 from task_admission_framework.model.task_profile import TaskProfile
 
 
+def _available_cursor_kinds(*names: str) -> set[CursorKind]:
+    return {
+        cursor_kind
+        for name in names
+        if (cursor_kind := getattr(CursorKind, name, None)) is not None
+    }
+
+
+def _cursor_kind_name(cursor: Cursor) -> str:
+    return getattr(cursor.kind, "name", str(cursor.kind))
+
+
 class AstVisitor(ABC):
     """Base visitor interface for Clang AST cursors."""
 
@@ -38,11 +50,24 @@ class ControlFlowVisitor(AstVisitor):
 class FunctionCallVisitor(AstVisitor):
     """Records function calls and maps known calls to API categories."""
 
+    _CALL_KIND_NAMES = {
+        "CALL_EXPR",
+        "CXX_MEMBER_CALL_EXPR",
+        "CXX_OPERATOR_CALL_EXPR",
+        "CXX_CONSTRUCT_EXPR",
+    }
+    _CALL_KINDS = _available_cursor_kinds(
+        "CALL_EXPR",
+        "CXX_MEMBER_CALL_EXPR",
+        "CXX_OPERATOR_CALL_EXPR",
+        "CXX_CONSTRUCT_EXPR",
+    )
+
     def __init__(self, api_database: ApiDatabase) -> None:
         self._api_database = api_database
 
     def visit(self, cursor: Cursor, profile: TaskProfile) -> None:
-        if cursor.kind != CursorKind.CALL_EXPR:
+        if not self._is_call_cursor(cursor):
             return
 
         call_name = self._extract_call_name(cursor)
@@ -60,8 +85,15 @@ class FunctionCallVisitor(AstVisitor):
         if self._api_database.is_dynamic_memory(call_name):
             profile.dynamic_memory = True
 
-        if self._api_database.is_blocking(call_name) and call_name not in profile.blocking_calls:
+        if self._api_database.is_blocking(call_name):
             profile.blocking_calls.append(call_name)
+
+    @classmethod
+    def _is_call_cursor(cls, cursor: Cursor) -> bool:
+        return (
+            cursor.kind in cls._CALL_KINDS
+            or _cursor_kind_name(cursor) in cls._CALL_KIND_NAMES
+        )
 
     @staticmethod
     def _extract_call_name(cursor: Cursor) -> str | None:
@@ -69,7 +101,15 @@ class FunctionCallVisitor(AstVisitor):
             return cursor.spelling
         if cursor.referenced and cursor.referenced.spelling:
             return cursor.referenced.spelling
-        return cursor.displayname or None
+        if cursor.displayname:
+            return cursor.displayname
+
+        for child in cursor.get_children():
+            child_name = FunctionCallVisitor._extract_call_name(child)
+            if child_name:
+                return child_name
+
+        return None
 
 
 class DataUsageVisitor(AstVisitor):

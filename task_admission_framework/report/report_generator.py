@@ -16,7 +16,6 @@ class ReportGenerator:
 
     _CATEGORY_BY_BREAKDOWN_NAME: dict[str, CostCategory] = {
         "Function Calls": CostCategory.COMPUTATION,
-        "API Calls": CostCategory.OTHER,
         "Loops": CostCategory.CONTROL_FLOW,
         "Branches": CostCategory.CONTROL_FLOW,
         "Switches": CostCategory.CONTROL_FLOW,
@@ -39,6 +38,7 @@ class ReportGenerator:
     )
     _MEMORY_NAMES = {"malloc", "calloc", "realloc", "free"}
     _FLOATING_POINT_NAMES = {"Floating Point Operations"}
+    _STRUCTURAL_BREAKDOWN_NAMES = set(_CATEGORY_BY_BREAKDOWN_NAME)
 
     def generate(
         self,
@@ -96,7 +96,11 @@ class ReportGenerator:
 
     @staticmethod
     def _aggregate_api_cost(breakdown: list[CostBreakdown]) -> int:
-        return sum(item.subtotal for item in breakdown if item.name == "API Calls")
+        return sum(
+            item.subtotal
+            for item in breakdown
+            if item.name not in ReportGenerator._STRUCTURAL_BREAKDOWN_NAMES
+        )
 
     @staticmethod
     def _count_total_features(feature_vector: FeatureVector) -> int:

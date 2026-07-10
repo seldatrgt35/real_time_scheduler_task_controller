@@ -26,6 +26,11 @@ class FeatureExtractor:
             blocking_calls=len(profile.blocking_calls),
             dynamic_memory_calls=self._count_dynamic_memory_calls(profile),
             recursion_detected=profile.recursion_detected,
+            api_call_counts={
+                api_name: occurrences
+                for api_name, occurrences in profile.api_usage.items()
+                if occurrences > 0
+            },
         )
 
     @staticmethod

@@ -1,0 +1,26 @@
+{
+  "tasks": [
+    {
+      "name": "SensorTaskFast",
+      "source_file": "task_admission_framework/examples/sensor_task.c",
+      "entry_function": "SensorTask",
+      "period_ms": 5,
+      "deadline_ms": 5,
+      "priority": 3,
+      "criticality": "HIGH",
+      "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
+      "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
+    },
+    {
+      "name": "SensorTaskNominal",
+      "source_file": "task_admission_framework/examples/sensor_task.c",
+      "entry_function": "SensorTask",
+      "period_ms": 10,
+      "deadline_ms": 10,
+      "priority": 2,
+      "criticality": "HIGH",
+      "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
+      "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
+    }
+  ]
+}
