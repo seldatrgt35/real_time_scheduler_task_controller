@@ -452,13 +452,30 @@ class StarGui:
             f"Deadline: {descriptor.deadline_ms} ms",
             f"Criticality: {descriptor.criticality.name}",
             "",
-            f"Complexity Score: {decision.complexity_score}",
-            f"Rule Maximum Complexity: {decision.max_complexity}",
-            f"Rule Source: {decision.rule_source}",
-            f"Rule Validated: {decision.rule_validated}",
+            (
+                "Code Complexity Score: "
+                f"{decision.complexity_score:.1f} / "
+                f"{decision.hardware_adjusted_max_complexity:.2f}"
+            ),
+            f"Complexity Load: {decision.star_load_indicator:.0%}",
             "",
-            f"Decision: {decision.status.name}",
+            f"Static Admission: {decision.status.name}",
             f"Reason: {decision.reason}",
+            "",
+            "Hardware Details:",
+            f"  S32K148 Reference Limit: {decision.max_complexity:.2f}",
+            f"  Hardware Scaling: {decision.hardware_scaling_factor:.2f}",
+            (
+                "  Adjusted Limit: "
+                f"{decision.hardware_adjusted_max_complexity:.2f}"
+            ),
+            f"  Hardware Model: {decision.hardware_adjustment_mode.name}",
+            *([f"  Note: {decision.warning}"] if decision.warning is not None else []),
+            "",
+            (
+                "Note: This is a static complexity-based result, not a WCET or "
+                "scheduler guarantee."
+            ),
             "",
             "Complexity Breakdown:",
         ]
@@ -481,9 +498,10 @@ class StarGui:
                 f"{'Priority':<10}"
                 f"{'Criticality':<16}"
                 f"{'Score':<10}"
-                f"{'Rule Max':<12}"
-                f"{'Load':<10}"
-                "Decision"
+                f"{'Adj Max':<12}"
+                f"{'STAR Load':<12}"
+                f"{'Static':<10}"
+                "Scheduler"
             ),
         ]
         for task in result.task_results:
@@ -496,16 +514,23 @@ class StarGui:
                 f"{task.criticality:<16}"
                 f"{task.complexity_score:<10.2f}"
                 f"{task.rule_max_complexity:<12.2f}"
-                f"{task.task_load:<10.2f}"
-                f"{task.admission_status}"
+                f"{task.task_load:<12.2f}"
+                f"{task.admission_status:<10}"
+                f"{task.scheduler_status}"
             )
 
         lines.extend(
             [
                 "",
-                f"Total STAR Load: {result.total_star_load:.2f}",
+                f"STAR Complexity Load Indicator: {result.total_star_load:.2f}",
                 f"System Status: {result.system_status}",
                 f"System Reason: {result.system_reason}",
+                f"Scheduler Feasibility: {result.scheduler_status}",
+                f"Scheduler Reason: {result.scheduler_reason}",
+                (
+                    "This is a static complexity-based risk indicator, not a "
+                    "WCET-based scheduler guarantee."
+                ),
                 "",
                 "Individual Task Analysis",
             ]
@@ -519,10 +544,12 @@ class StarGui:
                     f"  Function: {task.entry_function}",
                     f"  Period: {task.period_ms} ms",
                     f"  Score: {task.complexity_score:.2f}",
-                    f"  Rule Max: {task.rule_max_complexity:.2f}",
-                    f"  Load: {task.task_load:.2f}",
-                    f"  Decision: {task.admission_status}",
+                    f"  Adjusted Max: {task.rule_max_complexity:.2f}",
+                    f"  STAR Load Indicator: {task.task_load:.2f}",
+                    f"  Static Admission: {task.admission_status}",
                     f"  Reason: {task.admission_reason}",
+                    f"  Scheduler Feasibility: {task.scheduler_status}",
+                    f"  Scheduler Reason: {task.scheduler_reason}",
                     "  Complexity Breakdown:",
                 ]
             )

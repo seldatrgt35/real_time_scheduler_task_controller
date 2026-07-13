@@ -65,6 +65,32 @@ class HardwareLoader:
                 uart_units=int(data["uart_units"]),
                 spi_units=int(data["spi_units"]),
                 i2c_units=int(data["i2c_units"]),
+                operating_mode=HardwareLoader._optional_str(data, "operating_mode"),
+                compiler=HardwareLoader._optional_str(data, "compiler"),
+                compiler_version=HardwareLoader._optional_str(
+                    data,
+                    "compiler_version",
+                ),
+                optimization_level=HardwareLoader._optional_str(
+                    data,
+                    "optimization_level",
+                ),
+                flash_wait_states=HardwareLoader._optional_int(
+                    data,
+                    "flash_wait_states",
+                ),
+                execution_location=HardwareLoader._optional_str(
+                    data,
+                    "execution_location",
+                ),
+                freertos_tick_hz=HardwareLoader._optional_int(
+                    data,
+                    "freertos_tick_hz",
+                ),
+                calibration_profile_id=HardwareLoader._optional_str(
+                    data,
+                    "calibration_profile_id",
+                ),
             )
         except KeyError as exc:
             raise HardwareLoadError(f"Missing hardware profile field: {exc.args[0]}") from exc
@@ -84,3 +110,17 @@ class HardwareLoader:
                 return False
 
         raise ValueError(f"Invalid boolean value: {value}")
+
+    @staticmethod
+    def _optional_str(data: dict[str, Any], field_name: str) -> str | None:
+        value = data.get(field_name)
+        if value is None:
+            return None
+        return str(value)
+
+    @staticmethod
+    def _optional_int(data: dict[str, Any], field_name: str) -> int | None:
+        value = data.get(field_name)
+        if value is None:
+            return None
+        return int(value)

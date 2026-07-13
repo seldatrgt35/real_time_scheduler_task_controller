@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum, auto
 
+from task_admission_framework.admission.hardware_adjustment_mode import (
+    HardwareAdjustmentMode,
+)
+
 
 class AdmissionStatus(Enum):
     """Possible STAR admission outcomes."""
@@ -23,8 +27,14 @@ class AdmissionDecision:
     criticality: str | None
     complexity_score: float
     max_complexity: float
+    hardware_adjusted_max_complexity: float
+    hardware_scaling_factor: float
+    hardware_adjustment_mode: HardwareAdjustmentMode
+    warning: str | None
+    star_load_indicator: float
+    scheduler_status: str
+    scheduler_reason: str
     status: AdmissionStatus
     reason: str
     rule_source: str
     rule_validated: bool
-

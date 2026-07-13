@@ -21,6 +21,8 @@ class TaskSetTaskResult:
     task_load: float
     admission_status: str
     admission_reason: str
+    scheduler_status: str
+    scheduler_reason: str
     complexity_breakdown: list[str] = field(default_factory=list)
 
 
@@ -32,3 +34,5 @@ class TaskSetResult:
     total_star_load: float
     system_status: str
     system_reason: str
+    scheduler_status: str
+    scheduler_reason: str

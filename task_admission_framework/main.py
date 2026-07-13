@@ -9,6 +9,9 @@ from typing import Any
 
 from task_admission_framework.admission.admission_controller import AdmissionController
 from task_admission_framework.admission.admission_decision import AdmissionDecision
+from task_admission_framework.admission.hardware_adjustment_mode import (
+    HardwareAdjustmentMode,
+)
 from task_admission_framework.descriptor.task_descriptor import TaskDescriptor
 from task_admission_framework.hardware.hardware_profile import HardwareProfile
 from task_admission_framework.pipeline.exceptions import PipelineError
@@ -137,13 +140,31 @@ def print_admission_result(session, decision: AdmissionDecision) -> None:
     print(f"Deadline: {descriptor.deadline_ms} ms")
     print(f"Criticality: {descriptor.criticality.name}")
     print()
-    print(f"Complexity Score: {decision.complexity_score}")
-    print(f"Rule Maximum Complexity: {decision.max_complexity}")
-    print(f"Rule Source: {decision.rule_source}")
-    print(f"Rule Validated: {decision.rule_validated}")
+    print(
+        "Code Complexity Score: "
+        f"{decision.complexity_score:.1f} / "
+        f"{decision.hardware_adjusted_max_complexity:.2f}"
+    )
+    print(f"Complexity Load: {decision.star_load_indicator:.0%}")
     print()
-    print(f"Decision: {decision.status.name}")
+    print(f"Static Admission: {decision.status.name}")
     print(f"Reason: {decision.reason}")
+    print()
+    print("Hardware Details:")
+    print(f"  S32K148 Reference Limit: {decision.max_complexity:.2f}")
+    print(f"  Hardware Scaling: {decision.hardware_scaling_factor:.2f}")
+    print(
+        "  Adjusted Limit: "
+        f"{decision.hardware_adjusted_max_complexity:.2f}"
+    )
+    print(f"  Hardware Model: {decision.hardware_adjustment_mode.name}")
+    if decision.warning is not None:
+        print(f"  Note: {decision.warning}")
+    print()
+    print(
+        "Note: This is a static complexity-based result, not a WCET or "
+        "scheduler guarantee."
+    )
     print()
     print("Complexity Breakdown:")
     for item in report.breakdown:
@@ -183,6 +204,7 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Path to the rule profile JSON file.",
     )
+    add_hardware_adjustment_argument(analyze_parser)
     subparsers.add_parser("gui", help="Open the desktop file picker interface.")
 
     taskset_parser = subparsers.add_parser(
@@ -194,8 +216,37 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Path to taskset_config.json.",
     )
+    add_hardware_adjustment_argument(taskset_parser)
 
     return parser
+
+
+def add_hardware_adjustment_argument(parser: argparse.ArgumentParser) -> None:
+    """Add common hardware adjustment mode CLI option."""
+
+    parser.add_argument(
+        "--hardware-adjustment",
+        choices=("calibrated", "none", "prototype-frequency-scaling"),
+        default="calibrated",
+        help=(
+            "Hardware threshold adjustment mode. Default 'calibrated' uses "
+            "S32K148 reference thresholds with hardware metadata scaling."
+        ),
+    )
+
+
+def parse_hardware_adjustment_mode(raw_mode: str) -> HardwareAdjustmentMode:
+    """Convert CLI hardware adjustment mode text to enum."""
+
+    normalized = raw_mode.strip().lower()
+    if normalized == "none":
+        return HardwareAdjustmentMode.NONE
+    if normalized == "prototype-frequency-scaling":
+        return HardwareAdjustmentMode.PROTOTYPE_FREQUENCY_SCALING
+    if normalized == "calibrated":
+        return HardwareAdjustmentMode.CALIBRATED
+
+    raise ValueError(f"Unknown hardware adjustment mode: {raw_mode}")
 
 
 def load_rule_database(rule_path: Path) -> RuleDatabase:
@@ -272,7 +323,11 @@ def run_analyze(args: argparse.Namespace) -> None:
 
     try:
         rule_database = load_rule_database(rule_path)
-        decision = AdmissionController().evaluate(session, rule_database)
+        decision = AdmissionController(
+            hardware_adjustment_mode=parse_hardware_adjustment_mode(
+                args.hardware_adjustment,
+            ),
+        ).evaluate(session, rule_database)
     except RuleError as exc:
         print(f"STAR rule database failed: {exc}")
         return
@@ -293,7 +348,13 @@ def run_analyze_taskset(args: argparse.Namespace) -> None:
         from task_admission_framework.taskset.taskset_analyzer import TaskSetAnalyzer
 
         entries = load_taskset_entries(config_path)
-        result = TaskSetAnalyzer().analyze(entries)
+        result = TaskSetAnalyzer(
+            admission_controller=AdmissionController(
+                hardware_adjustment_mode=parse_hardware_adjustment_mode(
+                    args.hardware_adjustment,
+                ),
+            ),
+        ).analyze(entries)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         print(f"STAR task-set config failed: {exc}")
         return
@@ -364,9 +425,10 @@ def print_taskset_result(result) -> None:
         f"{'Priority':<10}"
         f"{'Criticality':<16}"
         f"{'Score':<10}"
-        f"{'Rule Max':<12}"
-        f"{'Task Load':<12}"
-        "Decision"
+        f"{'Adj Max':<12}"
+        f"{'STAR Load':<12}"
+        f"{'Static':<10}"
+        "Scheduler"
     )
     for task in result.task_results:
         print(
@@ -379,12 +441,19 @@ def print_taskset_result(result) -> None:
             f"{task.complexity_score:<10.2f}"
             f"{task.rule_max_complexity:<12.2f}"
             f"{task.task_load:<12.2f}"
-            f"{task.admission_status}"
+            f"{task.admission_status:<10}"
+            f"{task.scheduler_status}"
         )
     print("-" * 128)
-    print(f"Total STAR Load: {result.total_star_load:.2f}")
+    print(f"STAR Complexity Load Indicator: {result.total_star_load:.2f}")
     print(f"System Status: {result.system_status}")
     print(f"System Reason: {result.system_reason}")
+    print(f"Scheduler Feasibility: {result.scheduler_status}")
+    print(f"Scheduler Reason: {result.scheduler_reason}")
+    print(
+        "This is a static complexity-based risk indicator, not a WCET-based "
+        "scheduler guarantee."
+    )
 
 
 def main() -> None:

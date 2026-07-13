@@ -26,3 +26,11 @@ class HardwareProfile:
     uart_units: int
     spi_units: int
     i2c_units: int
+    operating_mode: str | None = None
+    compiler: str | None = None
+    compiler_version: str | None = None
+    optimization_level: str | None = None
+    flash_wait_states: int | None = None
+    execution_location: str | None = None
+    freertos_tick_hz: int | None = None
+    calibration_profile_id: str | None = None

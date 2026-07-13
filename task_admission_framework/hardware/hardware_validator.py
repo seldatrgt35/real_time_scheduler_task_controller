@@ -18,6 +18,11 @@ class HardwareValidator:
         self._validate_non_negative("uart_units", profile.uart_units)
         self._validate_non_negative("spi_units", profile.spi_units)
         self._validate_non_negative("i2c_units", profile.i2c_units)
+        self._validate_optional_non_negative(
+            "flash_wait_states",
+            profile.flash_wait_states,
+        )
+        self._validate_optional_positive("freertos_tick_hz", profile.freertos_tick_hz)
 
     @staticmethod
     def _validate_positive(field_name: str, value: int) -> None:
@@ -27,6 +32,18 @@ class HardwareValidator:
     @staticmethod
     def _validate_non_negative(field_name: str, value: int) -> None:
         if value < 0:
+            raise HardwareValidationError(
+                f"{field_name} must be greater than or equal to 0."
+            )
+
+    @staticmethod
+    def _validate_optional_positive(field_name: str, value: int | None) -> None:
+        if value is not None and value <= 0:
+            raise HardwareValidationError(f"{field_name} must be greater than 0.")
+
+    @staticmethod
+    def _validate_optional_non_negative(field_name: str, value: int | None) -> None:
+        if value is not None and value < 0:
             raise HardwareValidationError(
                 f"{field_name} must be greater than or equal to 0."
             )

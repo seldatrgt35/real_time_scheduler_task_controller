@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from task_admission_framework.admission.admission_controller import AdmissionController
 from task_admission_framework.admission.admission_decision import AdmissionStatus
-from task_admission_framework.pipeline.analysis_pipeline import AnalysisPipeline
 from task_admission_framework.rules.rule_database import RuleDatabase
 from task_admission_framework.rules.rule_loader import RuleLoader
+from task_admission_framework.scheduling.fixed_priority_analyzer import (
+    FixedPriorityAnalyzer,
+)
+from task_admission_framework.scheduling.scheduler_result import SchedulerTaskInput
 from task_admission_framework.taskset.exceptions import TaskSetError
 from task_admission_framework.taskset.taskset_entry import TaskSetEntry
 from task_admission_framework.taskset.taskset_result import (
@@ -17,16 +21,26 @@ from task_admission_framework.taskset.taskset_result import (
     TaskSetTaskResult,
 )
 
+if TYPE_CHECKING:
+    from task_admission_framework.pipeline.analysis_pipeline import AnalysisPipeline
+
 
 class TaskSetAnalyzer:
     """Computes static complexity-based task-set feasibility indicators."""
 
     def __init__(
         self,
-        pipeline: AnalysisPipeline | None = None,
+        pipeline: "AnalysisPipeline | None" = None,
         admission_controller: AdmissionController | None = None,
     ) -> None:
-        self._pipeline = pipeline or AnalysisPipeline()
+        if pipeline is None:
+            from task_admission_framework.pipeline.analysis_pipeline import (
+                AnalysisPipeline,
+            )
+
+            pipeline = AnalysisPipeline()
+
+        self._pipeline = pipeline
         self._admission_controller = admission_controller or AdmissionController()
 
     def analyze(self, entries: list[TaskSetEntry]) -> TaskSetResult:
@@ -49,7 +63,7 @@ class TaskSetAnalyzer:
                 decision = self._admission_controller.evaluate(session, rule_database)
                 task_load = self._calculate_task_load(
                     decision.complexity_score,
-                    decision.max_complexity,
+                    decision.hardware_adjusted_max_complexity,
                 )
                 task_results.append(
                     TaskSetTaskResult(
@@ -61,10 +75,12 @@ class TaskSetAnalyzer:
                         criticality=entry.criticality,
                         hardware=decision.hardware,
                         complexity_score=decision.complexity_score,
-                        rule_max_complexity=decision.max_complexity,
+                        rule_max_complexity=decision.hardware_adjusted_max_complexity,
                         task_load=task_load,
                         admission_status=decision.status.name,
                         admission_reason=decision.reason,
+                        scheduler_status=decision.scheduler_status,
+                        scheduler_reason=decision.scheduler_reason,
                         complexity_breakdown=[
                             (
                                 f"{item.name}: "
@@ -80,11 +96,25 @@ class TaskSetAnalyzer:
             task_results,
             total_star_load,
         )
+        scheduler_result = FixedPriorityAnalyzer().analyze(
+            [
+                SchedulerTaskInput(
+                    task_name=result.task_name,
+                    period_ms=result.period_ms,
+                    deadline_ms=result.deadline_ms,
+                    priority=result.priority,
+                    execution_budget_us=None,
+                )
+                for result in task_results
+            ]
+        )
         return TaskSetResult(
             task_results=task_results,
             total_star_load=total_star_load,
             system_status=system_status,
             system_reason=system_reason,
+            scheduler_status=scheduler_result.overall_status.name,
+            scheduler_reason=scheduler_result.reason,
         )
 
     @staticmethod
@@ -117,7 +147,7 @@ class TaskSetAnalyzer:
         max_complexity: float,
     ) -> float:
         if max_complexity <= 0:
-            raise TaskSetError("Rule maximum complexity must be greater than 0.")
+            raise TaskSetError("Adjusted maximum complexity must be greater than 0.")
         return complexity_score / max_complexity
 
     @staticmethod

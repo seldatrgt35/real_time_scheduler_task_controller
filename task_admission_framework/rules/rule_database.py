@@ -56,6 +56,13 @@ class RuleDatabase:
             if fallback_match is not None:
                 return fallback_match
 
+        period_policy_match = self._find_period_policy(
+            period_ms,
+            normalized_criticality,
+        )
+        if period_policy_match is not None:
+            return period_policy_match
+
         raise RuleNotFoundError(
             "No admission rule found for "
             f"hardware={hardware}, period_ms={period_ms}, criticality={criticality}."
@@ -76,9 +83,26 @@ class RuleDatabase:
                 return rule
         return None
 
+    def _find_period_policy(
+        self,
+        period_ms: int,
+        criticality: str | None,
+    ) -> AdmissionRule | None:
+        for rule in self._rules:
+            if rule.period_ms == period_ms and rule.criticality == criticality:
+                return rule
+
+        if criticality is None:
+            return None
+
+        for rule in self._rules:
+            if rule.period_ms == period_ms and rule.criticality is None:
+                return rule
+
+        return None
+
     @staticmethod
     def _normalize_criticality(criticality: str | None) -> str | None:
         if criticality is None:
             return None
         return criticality.strip().upper()
-
