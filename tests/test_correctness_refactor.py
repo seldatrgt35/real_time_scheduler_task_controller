@@ -43,8 +43,8 @@ class CorrectnessRefactorTests(unittest.TestCase):
         self.assertEqual(slow_decision.complexity_score, 50.0)
         self.assertEqual(fast_decision.complexity_score, 50.0)
         self.assertNotEqual(
-            slow_decision.hardware_adjusted_max_complexity,
-            fast_decision.hardware_adjusted_max_complexity,
+            slow_decision.hardware_adjusted_score,
+            fast_decision.hardware_adjusted_score,
         )
 
     def test_none_adjustment_mode_uses_rule_maximum(self) -> None:
@@ -78,9 +78,51 @@ class CorrectnessRefactorTests(unittest.TestCase):
         )
 
         self.assertEqual(decision.hardware_adjustment_mode, HardwareAdjustmentMode.CALIBRATED)
-        self.assertAlmostEqual(decision.hardware_scaling_factor, 80 / 112)
-        self.assertAlmostEqual(decision.hardware_adjusted_max_complexity, 60 * 80 / 112)
+        self.assertAlmostEqual(decision.hardware_scaling_factor, 112 / 80)
+        self.assertAlmostEqual(decision.hardware_adjusted_score, 50 * 112 / 80)
+        self.assertAlmostEqual(decision.hardware_adjusted_max_complexity, 60.0)
         self.assertIn("reference rule thresholds are not validated", decision.warning or "")
+
+    def test_peripheral_api_rejected_when_hardware_unit_is_missing(self) -> None:
+        decision = AdmissionController().evaluate(
+            self._session(
+                cpu_frequency_mhz=112,
+                score=5,
+                api_call_counts={"CAN_Send": 1},
+                can_units=0,
+            ),
+            self._rule_database(),
+        )
+
+        self.assertEqual(decision.status.name, "REJECT")
+        self.assertIn("no CAN unit", decision.reason)
+
+    def test_peripheral_score_does_not_scale_with_cpu_frequency(self) -> None:
+        decision = AdmissionController().evaluate(
+            self._session(
+                cpu_frequency_mhz=170,
+                score=20,
+                category_scores={"peripheral_cost": 20},
+            ),
+            self._rule_database(),
+        )
+
+        self.assertAlmostEqual(decision.hardware_adjusted_score, 20.0)
+
+    def test_fpu_does_not_affect_task_without_floating_point_score(self) -> None:
+        with_fpu = AdmissionController().evaluate(
+            self._session(cpu_frequency_mhz=170, score=20, fpu=True),
+            self._rule_database(),
+        )
+        without_fpu = AdmissionController().evaluate(
+            self._session(cpu_frequency_mhz=170, score=20, fpu=False),
+            self._rule_database(),
+        )
+
+        self.assertAlmostEqual(
+            with_fpu.hardware_adjusted_score,
+            without_fpu.hardware_adjusted_score,
+        )
 
     def test_priority_ordering_uses_higher_numeric_freertos_priority(self) -> None:
         result = FixedPriorityAnalyzer().analyze(
@@ -201,7 +243,16 @@ class CorrectnessRefactorTests(unittest.TestCase):
         )
 
     @staticmethod
-    def _session(cpu_frequency_mhz: int, score: int):
+    def _session(
+        cpu_frequency_mhz: int,
+        score: int,
+        api_call_counts: dict[str, int] | None = None,
+        can_units: int = 0,
+        fpu: bool = False,
+        category_scores: dict[str, int] | None = None,
+    ):
+        api_call_counts = api_call_counts or {}
+        category_scores = category_scores or {"computation_cost": score}
         return SimpleNamespace(
             hardware_profile=HardwareProfile(
                 name="SYNTHETIC",
@@ -212,12 +263,12 @@ class CorrectnessRefactorTests(unittest.TestCase):
                 cpu_frequency_mhz=cpu_frequency_mhz,
                 flash_kb=1,
                 ram_kb=1,
-                fpu=False,
+                fpu=fpu,
                 dma=False,
                 mpu=False,
                 cache=False,
                 adc_units=0,
-                can_units=0,
+                can_units=can_units,
                 uart_units=0,
                 spi_units=0,
                 i2c_units=0,
@@ -230,7 +281,7 @@ class CorrectnessRefactorTests(unittest.TestCase):
             complexity_result=ComplexityResult(total_score=score),
             feature_vector=FeatureVector(
                 total_function_calls=0,
-                total_api_calls=0,
+                total_api_calls=sum(api_call_counts.values()),
                 total_loops=0,
                 total_branches=0,
                 total_switches=0,
@@ -240,6 +291,17 @@ class CorrectnessRefactorTests(unittest.TestCase):
                 blocking_calls=0,
                 dynamic_memory_calls=0,
                 recursion_detected=False,
+                api_call_counts=api_call_counts,
+            ),
+            complexity_report=SimpleNamespace(
+                computation_cost=category_scores.get("computation_cost", 0),
+                control_flow_cost=category_scores.get("control_flow_cost", 0),
+                floating_point_cost=category_scores.get("floating_point_cost", 0),
+                memory_cost=category_scores.get("memory_cost", 0),
+                rtos_cost=category_scores.get("rtos_cost", 0),
+                peripheral_cost=category_scores.get("peripheral_cost", 0),
+                other_cost=category_scores.get("other_cost", 0),
+                breakdown=[],
             ),
         )
 
@@ -248,7 +310,6 @@ class _FakePipeline:
     def analyze(self, source_file, descriptor_file, hardware_profile_file):
         del source_file, descriptor_file, hardware_profile_file
         session = CorrectnessRefactorTests._session(cpu_frequency_mhz=112, score=10)
-        session.complexity_report = SimpleNamespace(breakdown=[])
         return session
 
 

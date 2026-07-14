@@ -249,33 +249,112 @@ compiler settings, and RTOS behavior do not necessarily scale linearly with CPU
 frequency.
 
 `CALIBRATED` uses S32K148 reference thresholds as the reference data set and
-scales the static threshold for another target using documented hardware
-metadata. The current calibrated scaling factor is:
+converts the task score into an S32K148-equivalent score for the selected
+hardware.
 
 ```text
-HardwareScalingFactor = selected_cpu_frequency_mhz / 112
-AdjustedMaximum = ReferenceRuleMaximum * HardwareScalingFactor
+HardwareAdjustedScore =
+  ComputationScore    * ComputationFactor
++ ControlFlowScore   * ControlFlowFactor
++ FloatingPointScore * FloatingPointFactor
++ MemoryScore        * MemoryFactor
++ RTOSScore          * RTOSFactor
++ PeripheralScore    * PeripheralFactor
++ OtherScore         * OtherFactor
 ```
 
-The following hardware fields are recorded and checked as metadata:
+The static admission decision then compares:
+
+```text
+HardwareAdjustedScore <= S32K148ReferenceMaximum
+```
+
+The reference maximum stays anchored to the S32K148 rule database. The selected
+hardware changes the adjusted task score, not the raw complexity score.
+
+The current calibrated category factors are intentionally conservative:
+
+```text
+ComputationFactor    = 112 / selected_cpu_frequency_mhz
+ControlFlowFactor   = 112 / selected_cpu_frequency_mhz
+FloatingPointFactor = 112 / selected_cpu_frequency_mhz, only when the task uses
+                      floating point and the target has an FPU
+FloatingPointFactor = max(112 / selected_cpu_frequency_mhz, 1.0), when the task
+                      uses floating point and the target has no FPU
+MemoryFactor        = 1.0
+RTOSFactor          = 1.0
+PeripheralFactor    = 1.0
+OtherFactor         = 1.0
+```
+
+This means CPU-bound code benefits from a faster CPU, but RTOS and peripheral
+operations are not automatically treated as faster only because the CPU clock is
+higher.
+
+The following hardware fields are used or recorded:
 
 - `cpu_frequency_mhz`
 - `fpu`
 - `cache`
 - `flash_wait_states`
+- `adc_units`
+- `can_units`
+- `spi_units`
+- `uart_units`
+- `i2c_units`
+- `dma`
 - `compiler`
 - `optimization_level`
 - `execution_location`
 
-Only CPU frequency changes the threshold in the current conservative model.
-FPU/cache/flash/compiler metadata may produce warnings because those effects are
-configuration-dependent and do not necessarily scale linearly. If a task uses
-floating-point operations and the selected hardware has no FPU, STAR reports a
-warning that the adjusted threshold may be optimistic.
+`cpu_frequency_mhz` changes computation and control-flow score factors.
+
+`fpu` is applied only when the task has floating-point score. If the task does
+not use floating point, FPU does not affect the adjusted score. If the task uses
+floating point but the selected hardware has no FPU, STAR does not give the task
+a faster-CPU benefit for the floating-point category and reports a warning.
+
+`cache`, `flash_wait_states`, `compiler`, `optimization_level`, and
+`execution_location` are currently metadata and warning context. They do not
+directly change the score in this conservative model.
+
+Peripheral unit fields are used for availability checks. For example, if a task
+uses `CAN_Send` but the selected hardware has `can_units: 0`, static admission
+is rejected with a hardware compatibility reason.
 
 If the S32K148 reference rule is not marked `validated: true`, STAR still runs
 but reports that hardware-adjusted admission remains a reference-scaling
 estimate. STAR must not fabricate execution-time values.
+
+Example:
+
+```text
+Task category scores:
+Computation      = 30
+Control Flow     = 10
+Floating Point   = 20
+Memory           = 15
+RTOS             = 5
+Peripheral       = 20
+
+Selected hardware:
+170 MHz Cortex-M target with FPU
+
+Factors:
+Computation      = 112 / 170 = 0.66
+Control Flow     = 112 / 170 = 0.66
+Floating Point   = 112 / 170 = 0.66
+Memory           = 1.00
+RTOS             = 1.00
+Peripheral       = 1.00
+
+HardwareAdjustedScore =
+30*0.66 + 10*0.66 + 20*0.66 + 15*1.00 + 5*1.00 + 20*1.00
+= 79.6
+
+If the S32K148 5 ms reference maximum is 70:
+79.6 <= 70 -> REJECT
+```
 
 ## Task-Set Analysis
 
@@ -285,7 +364,7 @@ WCET-based schedulability analysis.
 For each task:
 
 ```text
-TaskLoad = ComplexityScore / AdjustedMaximumComplexity
+TaskLoad = HardwareAdjustedScore / S32K148ReferenceMaximum
 ```
 
 The displayed name is:
@@ -294,20 +373,18 @@ The displayed name is:
 STAR Complexity Load Indicator
 ```
 
-When the hardware adjustment mode is `PROTOTYPE_FREQUENCY_SCALING`,
-`AdjustedMaximumComplexity` is derived from the reference rule threshold and the
-selected hardware CPU frequency:
+When the hardware adjustment mode is `CALIBRATED`, the task-set load indicator
+uses the same category-adjusted score as single-task admission:
 
 ```text
-HardwareScalingFactor = selected_cpu_frequency_mhz / 112
-AdjustedMaximumComplexity = ReferenceRuleComplexity * HardwareScalingFactor
+TaskLoad = HardwareAdjustedScore / S32K148ReferenceMaximum
 ```
 
-S32K148 is the reference hardware. For S32K148, the scaling factor is `1.0`.
-For an 80 MHz target, a 5 ms reference threshold of `60` becomes:
+When the hardware adjustment mode is `PROTOTYPE_FREQUENCY_SCALING`, STAR keeps
+the older prototype threshold-scaling behavior:
 
 ```text
-60 * (80 / 112) = 42.86
+AdjustedMaximumComplexity = ReferenceRuleComplexity * (selected_cpu_frequency_mhz / 112)
 ```
 
 For the full task set:

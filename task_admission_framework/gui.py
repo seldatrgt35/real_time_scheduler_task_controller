@@ -453,10 +453,11 @@ class StarGui:
             f"Criticality: {descriptor.criticality.name}",
             "",
             (
-                "Code Complexity Score: "
-                f"{decision.complexity_score:.1f} / "
+                "Hardware-Adjusted Score: "
+                f"{decision.hardware_adjusted_score:.1f} / "
                 f"{decision.hardware_adjusted_max_complexity:.2f}"
             ),
+            f"Raw Complexity Score: {decision.complexity_score:.1f}",
             f"Complexity Load: {decision.star_load_indicator:.0%}",
             "",
             f"Static Admission: {decision.status.name}",
@@ -464,13 +465,19 @@ class StarGui:
             "",
             "Hardware Details:",
             f"  S32K148 Reference Limit: {decision.max_complexity:.2f}",
-            f"  Hardware Scaling: {decision.hardware_scaling_factor:.2f}",
-            (
-                "  Adjusted Limit: "
-                f"{decision.hardware_adjusted_max_complexity:.2f}"
-            ),
+            f"  CPU Score Factor: {decision.hardware_scaling_factor:.2f}",
+            f"  Reference Limit Used: {decision.hardware_adjusted_max_complexity:.2f}",
             f"  Hardware Model: {decision.hardware_adjustment_mode.name}",
             *([f"  Note: {decision.warning}"] if decision.warning is not None else []),
+            "  Category Adjustment:",
+            *[
+                (
+                    f"    {item.category}: "
+                    f"{item.raw_score:.2f} x {item.factor:.2f} = "
+                    f"{item.adjusted_score:.2f}"
+                )
+                for item in decision.hardware_adjustment_breakdown
+            ],
             "",
             (
                 "Note: This is a static complexity-based result, not a WCET or "
@@ -497,7 +504,8 @@ class StarGui:
                 f"{'Deadline':<10}"
                 f"{'Priority':<10}"
                 f"{'Criticality':<16}"
-                f"{'Score':<10}"
+                f"{'Raw':<10}"
+                f"{'Adj':<10}"
                 f"{'Adj Max':<12}"
                 f"{'STAR Load':<12}"
                 f"{'Static':<10}"
@@ -513,6 +521,7 @@ class StarGui:
                 f"{task.priority:<10}"
                 f"{task.criticality:<16}"
                 f"{task.complexity_score:<10.2f}"
+                f"{task.hardware_adjusted_score:<10.2f}"
                 f"{task.rule_max_complexity:<12.2f}"
                 f"{task.task_load:<12.2f}"
                 f"{task.admission_status:<10}"
@@ -543,7 +552,8 @@ class StarGui:
                     f"{task.task_name}",
                     f"  Function: {task.entry_function}",
                     f"  Period: {task.period_ms} ms",
-                    f"  Score: {task.complexity_score:.2f}",
+                    f"  Raw Score: {task.complexity_score:.2f}",
+                    f"  Hardware-Adjusted Score: {task.hardware_adjusted_score:.2f}",
                     f"  Adjusted Max: {task.rule_max_complexity:.2f}",
                     f"  STAR Load Indicator: {task.task_load:.2f}",
                     f"  Static Admission: {task.admission_status}",

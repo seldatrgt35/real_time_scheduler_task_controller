@@ -61,10 +61,7 @@ class TaskSetAnalyzer:
                 rules = RuleLoader().load(entry.rules_file)
                 rule_database = RuleDatabase(rules)
                 decision = self._admission_controller.evaluate(session, rule_database)
-                task_load = self._calculate_task_load(
-                    decision.complexity_score,
-                    decision.hardware_adjusted_max_complexity,
-                )
+                task_load = decision.star_load_indicator
                 task_results.append(
                     TaskSetTaskResult(
                         task_name=entry.name,
@@ -75,6 +72,7 @@ class TaskSetAnalyzer:
                         criticality=entry.criticality,
                         hardware=decision.hardware,
                         complexity_score=decision.complexity_score,
+                        hardware_adjusted_score=decision.hardware_adjusted_score,
                         rule_max_complexity=decision.hardware_adjusted_max_complexity,
                         task_load=task_load,
                         admission_status=decision.status.name,

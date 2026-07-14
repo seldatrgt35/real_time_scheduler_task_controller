@@ -18,6 +18,16 @@ class AdmissionStatus(Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class HardwareAdjustmentBreakdown:
+    """One category contribution after target-hardware adjustment."""
+
+    category: str
+    raw_score: float
+    factor: float
+    adjusted_score: float
+
+
+@dataclass(frozen=True, slots=True)
 class AdmissionDecision:
     """Result produced by the Admission Controller."""
 
@@ -26,9 +36,11 @@ class AdmissionDecision:
     period_ms: int
     criticality: str | None
     complexity_score: float
+    hardware_adjusted_score: float
     max_complexity: float
     hardware_adjusted_max_complexity: float
     hardware_scaling_factor: float
+    hardware_adjustment_breakdown: list[HardwareAdjustmentBreakdown]
     hardware_adjustment_mode: HardwareAdjustmentMode
     warning: str | None
     star_load_indicator: float

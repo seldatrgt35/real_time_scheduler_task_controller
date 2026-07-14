@@ -17,6 +17,7 @@ class TaskSetTaskResult:
     criticality: str
     hardware: str
     complexity_score: float
+    hardware_adjusted_score: float
     rule_max_complexity: float
     task_load: float
     admission_status: str
