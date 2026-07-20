@@ -35,6 +35,58 @@ FreeRTOS integration, real board calibration, and validated execution budgets
 are not implemented yet. Scheduler feasibility is therefore `UNVERIFIED` unless
 synthetic test budgets are supplied directly to the scheduler analyzer.
 
+## Quick Start
+
+Always run STAR commands from the repository root:
+
+```powershell
+cd "C:\Users\nxg19748\OneDrive - NXP\Desktop\real_time_scheduler_task_controller"
+```
+
+Do not run module commands from inside `task_admission_framework/`. Python needs
+the repository root on `PYTHONPATH` so it can resolve the package name.
+
+Install dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+Open the GUI:
+
+```powershell
+python -m task_admission_framework.main gui
+```
+
+Run the built-in demo:
+
+```powershell
+python -m task_admission_framework.main
+```
+
+Analyze the bundled example from the CLI:
+
+```powershell
+python -m task_admission_framework.main analyze `
+  --source task_admission_framework/examples/sensor_task.c `
+  --descriptor task_admission_framework/examples/sensor_task.yaml `
+  --hardware task_admission_framework/hardware/profiles/S32K148.json `
+  --rules task_admission_framework/rules/profiles/S32K148_rules.json `
+  --hardware-adjustment calibrated
+```
+
+Analyze a task set from the CLI:
+
+```powershell
+python -m task_admission_framework.main analyze-taskset `
+  --config task_admission_framework/examples/taskset_config.json `
+  --hardware-adjustment calibrated
+```
+
+Common Windows note: if `clang` is installed but STAR reports
+`libclang.dll not found`, install/configure a compatible LLVM/libclang runtime
+and make sure `libclang.dll` is visible to Python.
+
 ## Package Structure
 
 The project is a real Python package:
