@@ -11,6 +11,15 @@ from task_admission_framework.admission.admission_controller import (
 from task_admission_framework.admission.hardware_adjustment_mode import (
     HardwareAdjustmentMode,
 )
+from task_admission_framework.calibration.complexity_time_point import (
+    ComplexityTimePoint,
+)
+from task_admission_framework.calibration.complexity_time_profile import (
+    ComplexityTimeProfile,
+)
+from task_admission_framework.calibration.execution_time_estimator import (
+    ExecutionTimeEstimator,
+)
 from task_admission_framework.complexity.complexity_result import ComplexityResult
 from task_admission_framework.feature.feature_vector import FeatureVector
 from task_admission_framework.hardware.hardware_profile import HardwareProfile
@@ -20,6 +29,7 @@ from task_admission_framework.scheduling.fixed_priority_analyzer import (
     FixedPriorityAnalyzer,
 )
 from task_admission_framework.scheduling.scheduler_result import SchedulerTaskInput
+from task_admission_framework.scheduling.scheduler_simulator import SchedulerSimulator
 from task_admission_framework.scheduling.scheduler_status import SchedulerStatus
 from task_admission_framework.taskset import taskset_analyzer as taskset_analyzer_module
 from task_admission_framework.taskset.taskset_analyzer import TaskSetAnalyzer
@@ -195,6 +205,39 @@ class CorrectnessRefactorTests(unittest.TestCase):
         by_name = {task.task_name: task for task in result.task_results}
         self.assertEqual(by_name["slow"].response_time_us, 3500.0)
 
+    def test_execution_time_estimator_interpolates_synthetic_profile(self) -> None:
+        estimate_us, note = ExecutionTimeEstimator().estimate_us(
+            90.0,
+            self._calibration_profile(),
+        )
+
+        self.assertEqual(estimate_us, 4500.0)
+        self.assertIsNone(note)
+
+    def test_scheduler_simulator_runs_highest_ready_priority(self) -> None:
+        result = SchedulerSimulator().simulate(
+            [
+                SchedulerTaskInput(
+                    task_name="low",
+                    period_ms=10,
+                    deadline_ms=10,
+                    priority=1,
+                    execution_budget_us=3000.0,
+                ),
+                SchedulerTaskInput(
+                    task_name="high",
+                    period_ms=5,
+                    deadline_ms=5,
+                    priority=3,
+                    execution_budget_us=1000.0,
+                ),
+            ],
+            simulation_window_ms=12,
+        )
+
+        self.assertEqual(result.events[0].task_name, "high")
+        self.assertTrue(any(event.task_name == "low" for event in result.events))
+
     def test_taskset_flow_remains_functional_with_unverified_scheduler(self) -> None:
         original_temp_directory = taskset_analyzer_module.tempfile.TemporaryDirectory
         taskset_analyzer_module.tempfile.TemporaryDirectory = _FakeTemporaryDirectory
@@ -303,6 +346,19 @@ class CorrectnessRefactorTests(unittest.TestCase):
                 other_cost=category_scores.get("other_cost", 0),
                 breakdown=[],
             ),
+        )
+
+    @staticmethod
+    def _calibration_profile() -> ComplexityTimeProfile:
+        return ComplexityTimeProfile(
+            profile_id="synthetic",
+            reference_hardware="S32K148",
+            source="synthetic test",
+            validated=False,
+            points=[
+                ComplexityTimePoint(complexity=60.0, execution_time_ms=3.0),
+                ComplexityTimePoint(complexity=120.0, execution_time_ms=6.0),
+            ],
         )
 
 

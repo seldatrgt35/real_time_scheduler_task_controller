@@ -8,12 +8,19 @@ from typing import TYPE_CHECKING
 
 from task_admission_framework.admission.admission_controller import AdmissionController
 from task_admission_framework.admission.admission_decision import AdmissionStatus
+from task_admission_framework.calibration.complexity_time_profile import (
+    ComplexityTimeProfile,
+)
+from task_admission_framework.calibration.execution_time_estimator import (
+    ExecutionTimeEstimator,
+)
 from task_admission_framework.rules.rule_database import RuleDatabase
 from task_admission_framework.rules.rule_loader import RuleLoader
 from task_admission_framework.scheduling.fixed_priority_analyzer import (
     FixedPriorityAnalyzer,
 )
 from task_admission_framework.scheduling.scheduler_result import SchedulerTaskInput
+from task_admission_framework.scheduling.scheduler_simulator import SchedulerSimulator
 from task_admission_framework.taskset.exceptions import TaskSetError
 from task_admission_framework.taskset.taskset_entry import TaskSetEntry
 from task_admission_framework.taskset.taskset_result import (
@@ -32,6 +39,8 @@ class TaskSetAnalyzer:
         self,
         pipeline: "AnalysisPipeline | None" = None,
         admission_controller: AdmissionController | None = None,
+        calibration_profile: ComplexityTimeProfile | None = None,
+        simulation_window_ms: int = 100,
     ) -> None:
         if pipeline is None:
             from task_admission_framework.pipeline.analysis_pipeline import (
@@ -42,6 +51,9 @@ class TaskSetAnalyzer:
 
         self._pipeline = pipeline
         self._admission_controller = admission_controller or AdmissionController()
+        self._calibration_profile = calibration_profile
+        self._execution_time_estimator = ExecutionTimeEstimator()
+        self._simulation_window_ms = simulation_window_ms
 
     def analyze(self, entries: list[TaskSetEntry]) -> TaskSetResult:
         if not entries:
@@ -62,6 +74,9 @@ class TaskSetAnalyzer:
                 rule_database = RuleDatabase(rules)
                 decision = self._admission_controller.evaluate(session, rule_database)
                 task_load = decision.star_load_indicator
+                estimated_execution_time_us, estimate_note = (
+                    self._estimate_execution_time(decision.hardware_adjusted_score)
+                )
                 task_results.append(
                     TaskSetTaskResult(
                         task_name=entry.name,
@@ -73,10 +88,14 @@ class TaskSetAnalyzer:
                         hardware=decision.hardware,
                         complexity_score=decision.complexity_score,
                         hardware_adjusted_score=decision.hardware_adjusted_score,
+                        estimated_execution_time_us=estimated_execution_time_us,
                         rule_max_complexity=decision.hardware_adjusted_max_complexity,
                         task_load=task_load,
                         admission_status=decision.status.name,
-                        admission_reason=decision.reason,
+                        admission_reason=self._append_estimate_note(
+                            decision.reason,
+                            estimate_note,
+                        ),
                         scheduler_status=decision.scheduler_status,
                         scheduler_reason=decision.scheduler_reason,
                         complexity_breakdown=[
@@ -94,17 +113,20 @@ class TaskSetAnalyzer:
             task_results,
             total_star_load,
         )
-        scheduler_result = FixedPriorityAnalyzer().analyze(
-            [
-                SchedulerTaskInput(
-                    task_name=result.task_name,
-                    period_ms=result.period_ms,
-                    deadline_ms=result.deadline_ms,
-                    priority=result.priority,
-                    execution_budget_us=None,
-                )
-                for result in task_results
-            ]
+        scheduler_inputs = [
+            SchedulerTaskInput(
+                task_name=result.task_name,
+                period_ms=result.period_ms,
+                deadline_ms=result.deadline_ms,
+                priority=result.priority,
+                execution_budget_us=result.estimated_execution_time_us,
+            )
+            for result in task_results
+        ]
+        scheduler_result = FixedPriorityAnalyzer().analyze(scheduler_inputs)
+        simulation_result = SchedulerSimulator().simulate(
+            scheduler_inputs,
+            self._simulation_window_ms,
         )
         return TaskSetResult(
             task_results=task_results,
@@ -113,7 +135,32 @@ class TaskSetAnalyzer:
             system_reason=system_reason,
             scheduler_status=scheduler_result.overall_status.name,
             scheduler_reason=scheduler_result.reason,
+            scheduler_timeline=[
+                (
+                    f"{event.start_us / 1000.0:.3f}-"
+                    f"{event.end_us / 1000.0:.3f} ms "
+                    f"{event.task_name} ({event.note})"
+                )
+                for event in simulation_result.events[:40]
+            ],
         )
+
+    def _estimate_execution_time(
+        self,
+        hardware_adjusted_score: float,
+    ) -> tuple[float | None, str | None]:
+        if self._calibration_profile is None:
+            return None, None
+        return self._execution_time_estimator.estimate_us(
+            hardware_adjusted_score,
+            self._calibration_profile,
+        )
+
+    @staticmethod
+    def _append_estimate_note(reason: str, estimate_note: str | None) -> str:
+        if estimate_note is None:
+            return reason
+        return f"{reason} {estimate_note}"
 
     @staticmethod
     def _write_descriptor(

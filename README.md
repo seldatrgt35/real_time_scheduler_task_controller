@@ -83,6 +83,13 @@ python -m task_admission_framework.main analyze-taskset `
   --hardware-adjustment calibrated
 ```
 
+The bundled task-set config already points to the example complexity-time
+calibration profile:
+
+```text
+task_admission_framework/calibration/profiles/S32K148_complexity_time.json
+```
+
 Common Windows note: if `clang` is installed but STAR reports
 `libclang.dll not found`, install/configure a compatible LLVM/libclang runtime
 and make sure `libclang.dll` is visible to Python.
@@ -95,6 +102,7 @@ The project is a real Python package:
 task_admission_framework/
   admission/
   analyzer/
+  calibration/
   complexity/
   cost/
   database/
@@ -457,6 +465,59 @@ Else -> NOT_FEASIBLE
 These statuses are kept for backward compatibility as static risk indicators.
 They are not scheduler guarantees.
 
+## Complexity-Time Calibration
+
+STAR does not require users to enter execution time for every task. Instead,
+users can provide one task-independent calibration profile that maps complexity
+scores to execution time for the reference hardware class.
+
+Example profile:
+
+```json
+{
+  "profile_id": "s32k148_reference_v1",
+  "reference_hardware": "S32K148",
+  "source": "Initial example calibration data; replace with project measurements",
+  "validated": false,
+  "points": [
+    {
+      "complexity": 60,
+      "execution_time_ms": 3.0
+    },
+    {
+      "complexity": 120,
+      "execution_time_ms": 6.0
+    }
+  ]
+}
+```
+
+This means:
+
+```text
+60 STAR complexity points  -> approximately 3.0 ms
+120 STAR complexity points -> approximately 6.0 ms
+```
+
+For each task, STAR uses:
+
+```text
+HardwareAdjustedScore -> ComplexityTimeProfile -> EstimatedExecutionTime
+```
+
+If the score is between two calibration points, STAR linearly interpolates. For
+example:
+
+```text
+60 -> 3.0 ms
+120 -> 6.0 ms
+90 -> 4.5 ms
+```
+
+If the score is outside the calibrated range, STAR extrapolates and reports a
+note. These estimates are engineering estimates for scheduler simulation, not
+WCET guarantees.
+
 ## Scheduler Feasibility
 
 Scheduler feasibility is separate from static admission. Priority is used only
@@ -493,6 +554,53 @@ UNVERIFIED
 
 Current S32K148 execution-budget calibration does not exist yet, so normal STAR
 CLI and GUI task-set output reports scheduler feasibility as `UNVERIFIED`.
+
+When a complexity-time calibration profile is present, STAR estimates execution
+budgets for the task set and runs fixed-priority response-time analysis.
+
+## Scheduler Simulation
+
+STAR also includes a simple fixed-priority scheduler simulator for task-set
+analysis when estimated execution budgets are available.
+
+The simulator models this FreeRTOS-style policy:
+
+```text
+READY tasks with the highest numeric priority run first.
+A higher-priority READY task preempts a lower-priority running task.
+Same-priority READY tasks are selected by FIFO order in the current simulator.
+If no application task is READY, IDLE runs.
+```
+
+The simulator uses periodic releases:
+
+```text
+Task release times = 0, period, 2*period, ...
+Absolute deadline = release time + deadline
+```
+
+The task-set config can define:
+
+```json
+{
+  "calibration_profile_file": "task_admission_framework/calibration/profiles/S32K148_complexity_time.json",
+  "simulation_window_ms": 50,
+  "tasks": []
+}
+```
+
+Simulation output includes a compact timeline such as:
+
+```text
+0.000-1.500 ms SensorTaskFast (run)
+1.500-3.000 ms SensorTaskNominal (run)
+3.000-5.000 ms IDLE (idle)
+```
+
+Delay, semaphore, queue, and event behavior are not exactly simulated yet
+because static source analysis does not know the exact runtime block point or
+external event timing. STAR reports blocking API usage separately and keeps
+those limitations explicit.
 
 Run task-set analysis from the CLI:
 

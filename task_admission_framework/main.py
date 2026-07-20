@@ -12,6 +12,9 @@ from task_admission_framework.admission.admission_decision import AdmissionDecis
 from task_admission_framework.admission.hardware_adjustment_mode import (
     HardwareAdjustmentMode,
 )
+from task_admission_framework.calibration.complexity_time_loader import (
+    ComplexityTimeLoader,
+)
 from task_admission_framework.descriptor.task_descriptor import TaskDescriptor
 from task_admission_framework.hardware.hardware_profile import HardwareProfile
 from task_admission_framework.pipeline.exceptions import PipelineError
@@ -352,12 +355,16 @@ def run_analyze_taskset(args: argparse.Namespace) -> None:
         from task_admission_framework.taskset.taskset_analyzer import TaskSetAnalyzer
 
         entries = load_taskset_entries(config_path)
+        calibration_profile = load_taskset_calibration_profile(config_path)
+        simulation_window_ms = load_taskset_simulation_window_ms(config_path)
         result = TaskSetAnalyzer(
             admission_controller=AdmissionController(
                 hardware_adjustment_mode=parse_hardware_adjustment_mode(
                     args.hardware_adjustment,
                 ),
             ),
+            calibration_profile=calibration_profile,
+            simulation_window_ms=simulation_window_ms,
         ).analyze(entries)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         print(f"STAR task-set config failed: {exc}")
@@ -374,10 +381,7 @@ def load_taskset_entries(config_path: Path):
 
     from task_admission_framework.taskset.taskset_entry import TaskSetEntry
 
-    try:
-        data = json.loads(config_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"invalid JSON config: {config_path}") from exc
+    data = _load_taskset_config_json(config_path)
 
     tasks = data.get("tasks")
     if not isinstance(tasks, list) or not tasks:
@@ -400,6 +404,33 @@ def load_taskset_entries(config_path: Path):
         )
         for item in tasks
     ]
+
+
+def load_taskset_calibration_profile(config_path: Path):
+    """Load optional task-independent complexity-time calibration profile."""
+
+    data = _load_taskset_config_json(config_path)
+    raw_path = data.get("calibration_profile_file")
+    if raw_path is None:
+        return None
+    return ComplexityTimeLoader().load(resolve_taskset_path(config_path, raw_path))
+
+
+def load_taskset_simulation_window_ms(config_path: Path) -> int:
+    """Load optional scheduler simulation window from task-set config."""
+
+    data = _load_taskset_config_json(config_path)
+    return int(data.get("simulation_window_ms", 100))
+
+
+def _load_taskset_config_json(config_path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON config: {config_path}") from exc
+    if not isinstance(data, dict):
+        raise ValueError("taskset config must contain a JSON object.")
+    return data
 
 
 def resolve_taskset_path(config_path: Path, raw_path: Any) -> Path:
@@ -450,12 +481,21 @@ def print_taskset_result(result) -> None:
             f"{task.admission_status:<10}"
             f"{task.scheduler_status}"
         )
+        if task.estimated_execution_time_us is not None:
+            print(
+                f"  Estimated Execution: "
+                f"{task.estimated_execution_time_us / 1000.0:.3f} ms"
+            )
     print("-" * 128)
     print(f"STAR Complexity Load Indicator: {result.total_star_load:.2f}")
     print(f"System Status: {result.system_status}")
     print(f"System Reason: {result.system_reason}")
     print(f"Scheduler Feasibility: {result.scheduler_status}")
     print(f"Scheduler Reason: {result.scheduler_reason}")
+    if result.scheduler_timeline:
+        print("Scheduler Timeline:")
+        for line in result.scheduler_timeline:
+            print(f"  {line}")
     print(
         "This is a static complexity-based risk indicator, not a WCET-based "
         "scheduler guarantee."

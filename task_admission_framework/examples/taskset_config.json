@@ -1,4 +1,6 @@
 {
+  "calibration_profile_file": "task_admission_framework/calibration/profiles/S32K148_complexity_time.json",
+  "simulation_window_ms": 50,
   "tasks": [
     {
       "name": "SensorTaskFast",

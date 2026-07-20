@@ -1,0 +1,16 @@
+{
+  "profile_id": "s32k148_reference_v1",
+  "reference_hardware": "S32K148",
+  "source": "Initial example calibration data; replace with project measurements",
+  "validated": false,
+  "points": [
+    {
+      "complexity": 60,
+      "execution_time_ms": 3.0
+    },
+    {
+      "complexity": 120,
+      "execution_time_ms": 6.0
+    }
+  ]
+}

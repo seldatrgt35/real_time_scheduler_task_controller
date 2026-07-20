@@ -18,6 +18,7 @@ class TaskSetTaskResult:
     hardware: str
     complexity_score: float
     hardware_adjusted_score: float
+    estimated_execution_time_us: float | None
     rule_max_complexity: float
     task_load: float
     admission_status: str
@@ -37,3 +38,4 @@ class TaskSetResult:
     system_reason: str
     scheduler_status: str
     scheduler_reason: str
+    scheduler_timeline: list[str] = field(default_factory=list)
