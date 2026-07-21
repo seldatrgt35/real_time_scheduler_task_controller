@@ -225,6 +225,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_hardware_adjustment_argument(taskset_parser)
 
+    complexity_parser = subparsers.add_parser(
+        "analyze-complexity",
+        help="Analyze only raw source complexity, without hardware or admission.",
+    )
+    complexity_parser.add_argument(
+        "--source",
+        required=True,
+        help="Path to the C/C++ source file.",
+    )
+    complexity_parser.add_argument(
+        "--entry",
+        required=True,
+        help="Entry function name to analyze.",
+    )
+
+    complexity_taskset_parser = subparsers.add_parser(
+        "analyze-complexity-taskset",
+        help="Analyze raw complexity for each task in a task-set config.",
+    )
+    complexity_taskset_parser.add_argument(
+        "--config",
+        required=True,
+        help="Path to taskset config JSON. Hardware and rule fields are ignored.",
+    )
+
     return parser
 
 
@@ -376,6 +401,91 @@ def run_analyze_taskset(args: argparse.Namespace) -> None:
     print_taskset_result(result)
 
 
+def run_analyze_complexity(args: argparse.Namespace) -> None:
+    """Run source-only complexity analysis without hardware or admission."""
+
+    source_path = Path(args.source)
+    if not source_path.exists():
+        print(f"STAR complexity error: file not found: {source_path}")
+        return
+
+    try:
+        report = analyze_source_complexity(source_path, str(args.entry))
+    except PipelineError as exc:
+        print(f"STAR complexity analysis failed: {exc}")
+        return
+
+    print_complexity_only_report(report)
+
+
+def run_analyze_complexity_taskset(args: argparse.Namespace) -> None:
+    """Run source-only complexity analysis for a task-set config."""
+
+    config_path = Path(args.config)
+    if not config_path.exists():
+        print(f"STAR complexity task-set error: file not found: {config_path}")
+        return
+
+    try:
+        items = load_complexity_taskset_items(config_path)
+        reports = [
+            (
+                item,
+                analyze_source_complexity(
+                    Path(item["source_file"]),
+                    str(item["entry_function"]),
+                ),
+            )
+            for item in items
+        ]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"STAR complexity task-set config failed: {exc}")
+        return
+    except PipelineError as exc:
+        print(f"STAR complexity task-set analysis failed: {exc}")
+        return
+
+    print_complexity_taskset_result(reports)
+
+
+def analyze_source_complexity(source_path: Path, entry_function: str) -> ComplexityReport:
+    """Analyze raw STAR complexity without descriptor, hardware, rules, or admission."""
+
+    from task_admission_framework.analyzer.analyzer import StaticAnalyzer
+    from task_admission_framework.complexity.complexity_calculator import (
+        ComplexityCalculator,
+    )
+    from task_admission_framework.cost.cost_database import CostDatabase
+    from task_admission_framework.feature.feature_extractor import FeatureExtractor
+    from task_admission_framework.report.report_generator import ReportGenerator
+
+    try:
+        profiles = StaticAnalyzer().analyze_file(source_path)
+    except Exception as exc:
+        raise PipelineError(f"Source analysis failed: {exc}") from exc
+
+    task_profile = next(
+        (profile for profile in profiles if profile.task_name == entry_function),
+        None,
+    )
+    if task_profile is None:
+        available = ", ".join(sorted(profile.task_name for profile in profiles))
+        raise PipelineError(
+            f"No function named '{entry_function}' found. Available: {available}"
+        )
+
+    feature_vector = FeatureExtractor().extract(task_profile)
+    complexity_result = ComplexityCalculator().calculate(
+        feature_vector,
+        CostDatabase(),
+    )
+    return ReportGenerator().generate(
+        complexity_result,
+        feature_vector,
+        task_name=task_profile.task_name,
+    )
+
+
 def load_taskset_entries(config_path: Path):
     """Load TaskSetEntry objects from a JSON task-set config."""
 
@@ -404,6 +514,29 @@ def load_taskset_entries(config_path: Path):
         )
         for item in tasks
     ]
+
+
+def load_complexity_taskset_items(config_path: Path) -> list[dict[str, Any]]:
+    """Load source/function/period metadata for complexity-only task-set analysis."""
+
+    data = _load_taskset_config_json(config_path)
+    tasks = data.get("tasks")
+    if not isinstance(tasks, list) or not tasks:
+        raise ValueError("taskset config must contain a non-empty 'tasks' list.")
+
+    items: list[dict[str, Any]] = []
+    for task in tasks:
+        items.append(
+            {
+                "name": str(task["name"]),
+                "source_file": resolve_taskset_path(config_path, task["source_file"]),
+                "entry_function": str(task["entry_function"]),
+                "period_ms": int(task.get("period_ms", 0)),
+                "deadline_ms": int(task.get("deadline_ms", task.get("period_ms", 0))),
+                "priority": int(task.get("priority", 0)),
+            }
+        )
+    return items
 
 
 def load_taskset_calibration_profile(config_path: Path):
@@ -453,8 +586,8 @@ def print_taskset_result(result) -> None:
     print("-" * 128)
     print("Task Set Result")
     print(
-        f"{'Task':<18}"
-        f"{'Function':<24}"
+        f"{'Task':<24}"
+        f"{'Function':<34}"
         f"{'Period':<10}"
         f"{'Deadline':<10}"
         f"{'Priority':<10}"
@@ -468,8 +601,8 @@ def print_taskset_result(result) -> None:
     )
     for task in result.task_results:
         print(
-            f"{task.task_name:<18}"
-            f"{task.entry_function:<24}"
+            f"{task.task_name:<24}"
+            f"{task.entry_function:<34}"
             f"{task.period_ms:<10}"
             f"{task.deadline_ms:<10}"
             f"{task.priority:<10}"
@@ -492,6 +625,14 @@ def print_taskset_result(result) -> None:
     print(f"System Reason: {result.system_reason}")
     print(f"Scheduler Feasibility: {result.scheduler_status}")
     print(f"Scheduler Reason: {result.scheduler_reason}")
+    if result.scheduler_deadline_misses:
+        print("Scheduler Deadline Misses:")
+        for line in result.scheduler_deadline_misses:
+            print(f"  {line}")
+    if result.scheduler_preemptions:
+        print("Scheduler Preemptions:")
+        for line in result.scheduler_preemptions:
+            print(f"  {line}")
     if result.scheduler_timeline:
         print("Scheduler Timeline:")
         for line in result.scheduler_timeline:
@@ -500,6 +641,74 @@ def print_taskset_result(result) -> None:
         "This is a static complexity-based risk indicator, not a WCET-based "
         "scheduler guarantee."
     )
+
+
+def print_complexity_only_report(report: ComplexityReport) -> None:
+    """Print raw complexity output without hardware/admission wording."""
+
+    print("-" * 72)
+    print("STAR Raw Complexity Result")
+    print(f"Task: {report.task_name}")
+    print(f"Raw Complexity Score: {report.total_score}")
+    print(f"Total Features: {report.total_features}")
+    print()
+    print("Category Breakdown:")
+    print(f"  Computation: {report.computation_cost}")
+    print(f"  Control Flow: {report.control_flow_cost}")
+    print(f"  Memory: {report.memory_cost}")
+    print(f"  RTOS: {report.rtos_cost}")
+    print(f"  Peripheral: {report.peripheral_cost}")
+    print(f"  Floating Point: {report.floating_point_cost}")
+    print(f"  API: {report.api_cost}")
+    print(f"  Other: {report.other_cost}")
+    print()
+    print("Detailed Breakdown:")
+    for item in report.breakdown:
+        print(
+            f"  {item.name}: "
+            f"{item.occurrences} x {item.base_cost} = {item.subtotal}"
+        )
+    print("-" * 72)
+
+
+def print_complexity_taskset_result(
+    reports: list[tuple[dict[str, Any], ComplexityReport]],
+) -> None:
+    """Print raw complexity for a group of tasks."""
+
+    print("-" * 112)
+    print("STAR Raw Complexity Task Set")
+    print(
+        f"{'Task':<24}"
+        f"{'Function':<34}"
+        f"{'Period':<10}"
+        f"{'Deadline':<10}"
+        f"{'Priority':<10}"
+        f"{'Raw Score':<12}"
+        "Features"
+    )
+    for item, report in reports:
+        print(
+            f"{item['name']:<24}"
+            f"{item['entry_function']:<34}"
+            f"{item['period_ms']:<10}"
+            f"{item['deadline_ms']:<10}"
+            f"{item['priority']:<10}"
+            f"{report.total_score:<12}"
+            f"{report.total_features}"
+        )
+    print("-" * 112)
+    print("Per-task breakdown:")
+    for item, report in reports:
+        print(f"{item['name']} ({item['entry_function']}):")
+        for breakdown in report.breakdown:
+            print(
+                f"  {breakdown.name}: "
+                f"{breakdown.occurrences} x {breakdown.base_cost} = "
+                f"{breakdown.subtotal}"
+            )
+    print("-" * 112)
+    print("Hardware, rules, admission, and scheduler analysis are not used here.")
 
 
 def main() -> None:
@@ -518,6 +727,14 @@ def main() -> None:
 
     if args.command == "analyze-taskset":
         run_analyze_taskset(args)
+        return
+
+    if args.command == "analyze-complexity":
+        run_analyze_complexity(args)
+        return
+
+    if args.command == "analyze-complexity-taskset":
+        run_analyze_complexity_taskset(args)
         return
 
     run_demo()

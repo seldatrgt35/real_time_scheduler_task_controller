@@ -39,3 +39,5 @@ class TaskSetResult:
     scheduler_status: str
     scheduler_reason: str
     scheduler_timeline: list[str] = field(default_factory=list)
+    scheduler_deadline_misses: list[str] = field(default_factory=list)
+    scheduler_preemptions: list[str] = field(default_factory=list)

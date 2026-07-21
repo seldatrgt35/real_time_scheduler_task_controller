@@ -143,6 +143,8 @@ class TaskSetAnalyzer:
                 )
                 for event in simulation_result.events[:40]
             ],
+            scheduler_deadline_misses=simulation_result.deadline_misses[:40],
+            scheduler_preemptions=simulation_result.preemptions[:40],
         )
 
     def _estimate_execution_time(

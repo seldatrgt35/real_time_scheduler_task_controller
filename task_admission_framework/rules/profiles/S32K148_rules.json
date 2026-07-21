@@ -28,6 +28,15 @@
   },
   {
     "hardware": "S32K148",
+    "period_ms": 25,
+    "criticality": "HIGH",
+    "max_complexity": 300,
+    "description": "Initial engineering estimate for 25 ms task on S32K148",
+    "source": "STAR default rules v0.2",
+    "validated": false
+  },
+  {
+    "hardware": "S32K148",
     "period_ms": 50,
     "criticality": "HIGH",
     "max_complexity": 600,
@@ -41,6 +50,15 @@
     "criticality": "HIGH",
     "max_complexity": 1200,
     "description": "Initial engineering estimate for 100 ms task on S32K148",
+    "source": "STAR default rules v0.2",
+    "validated": false
+  },
+  {
+    "hardware": "S32K148",
+    "period_ms": 200,
+    "criticality": "HIGH",
+    "max_complexity": 2400,
+    "description": "Initial engineering estimate for 200 ms task on S32K148",
     "source": "STAR default rules v0.2",
     "validated": false
   },

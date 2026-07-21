@@ -8,7 +8,10 @@ The current target platform is:
 - Arm Cortex-M4F
 - FreeRTOS-style automotive embedded systems
 
-STAR is not a WCET tool. It does not estimate execution time and it does not prove real-time schedulability. It provides a static complexity-based admission and task-set risk indicator.
+STAR is not a WCET tool and it does not prove real-time schedulability. With
+an optional calibration profile, it can estimate execution time from STAR
+complexity points for scheduler simulation. Those estimates are engineering
+calibration estimates, not WCET guarantees.
 
 Raw complexity is hardware independent. Hardware metadata may adjust the rule
 threshold used by static admission, but it must not modify the raw complexity
@@ -27,13 +30,16 @@ The project currently supports:
 - JSON rule database loading
 - Single-task `ACCEPT` / `REJECT` admission decisions
 - Multi-task STAR load analysis
+- Complexity-time calibration profiles
+- Estimated execution-time generation from complexity score
+- Fixed-priority scheduler simulation for calibrated task sets
 - Fixed-priority scheduler result models
 - CLI usage
 - Tkinter GUI usage
 
-FreeRTOS integration, real board calibration, and validated execution budgets
-are not implemented yet. Scheduler feasibility is therefore `UNVERIFIED` unless
-synthetic test budgets are supplied directly to the scheduler analyzer.
+FreeRTOS integration and validated WCET budgets are not implemented yet.
+Scheduler output that uses complexity-time calibration must be treated as a
+calibration-based estimate.
 
 ## Quick Start
 
@@ -80,6 +86,27 @@ Analyze a task set from the CLI:
 ```powershell
 python -m task_admission_framework.main analyze-taskset `
   --config task_admission_framework/examples/taskset_config.json `
+  --hardware-adjustment calibrated
+```
+
+Analyze the automotive calibration benchmark task set:
+
+```powershell
+python -m task_admission_framework.main analyze-complexity-taskset `
+  --config task_admission_framework/examples/automotive_taskset_config.json
+```
+
+This command is the recommended first step for S32K148 calibration work. It
+does not use hardware adjustment, rules, admission, execution-time estimation,
+or scheduler simulation. It only prints raw STAR complexity scores and
+breakdowns for each benchmark task.
+
+Run the full calibrated task-set path only after raw complexity collection is
+understood:
+
+```powershell
+python -m task_admission_framework.main analyze-taskset `
+  --config task_admission_framework/examples/automotive_taskset_config.json `
   --hardware-adjustment calibrated
 ```
 
@@ -255,7 +282,7 @@ task_admission_framework/rules/profiles/S32K148_rules.json
 It currently supports these placeholder periods:
 
 ```text
-5 ms, 10 ms, 20 ms, 50 ms, 100 ms, 250 ms, 500 ms, 1000 ms
+5 ms, 10 ms, 20 ms, 25 ms, 50 ms, 100 ms, 200 ms, 250 ms, 500 ms, 1000 ms
 ```
 
 Initial thresholds:
@@ -264,8 +291,10 @@ Initial thresholds:
 5 ms     -> max complexity 60
 10 ms    -> max complexity 120
 20 ms    -> max complexity 250
+25 ms    -> max complexity 300
 50 ms    -> max complexity 600
 100 ms   -> max complexity 1200
+200 ms   -> max complexity 2400
 250 ms   -> max complexity 3000
 500 ms   -> max complexity 6000
 1000 ms  -> max complexity 12000
@@ -517,6 +546,81 @@ example:
 If the score is outside the calibrated range, STAR extrapolates and reports a
 note. These estimates are engineering estimates for scheduler simulation, not
 WCET guarantees.
+
+## Automotive Calibration Benchmark
+
+The repository includes a larger C benchmark intended for S32K148 calibration
+work:
+
+```text
+task_admission_framework/examples/automotive_complex_taskset.c
+task_admission_framework/examples/automotive_taskset_config.json
+```
+
+It defines eight automotive-style periodic tasks:
+
+```text
+5 ms     StarTask_5ms_BrakeControl
+10 ms    StarTask_10ms_SteeringAssist
+25 ms    StarTask_25ms_CrashSafety
+50 ms    StarTask_50ms_BatteryThermal
+100 ms   StarTask_100ms_PowertrainManager
+200 ms   StarTask_200ms_Diagnostics
+500 ms   StarTask_500ms_NetworkGateway
+1000 ms  StarTask_1000ms_VehicleHealth
+```
+
+Each task calls three internal helper functions and uses automotive embedded
+patterns such as ADC reads, CAN sends, GPIO writes, queue/semaphore calls,
+loops, branches, switches, and floating-point calculations. The goal is to
+produce meaningful STAR complexity scores across several task periods.
+
+Run STAR analysis:
+
+```bash
+python -m task_admission_framework.main analyze-complexity-taskset \
+  --config task_admission_framework/examples/automotive_taskset_config.json
+```
+
+This raw-complexity command ignores hardware, rules, admission, and scheduler
+analysis. Use it first when collecting benchmark complexity values.
+
+Run the later hardware/calibration path with:
+
+```bash
+python -m task_admission_framework.main analyze-taskset \
+  --config task_admission_framework/examples/automotive_taskset_config.json \
+  --hardware-adjustment calibrated
+```
+
+Use the same C functions on the S32K148 board to measure real execution time.
+Then compare:
+
+```text
+STAR HardwareAdjustedScore  <->  measured execution time on S32K148
+```
+
+From those measurements, update:
+
+```text
+task_admission_framework/calibration/profiles/S32K148_complexity_time.json
+```
+
+Example calibration outcome:
+
+```json
+{
+  "points": [
+    { "complexity": 60, "execution_time_ms": 3.0 },
+    { "complexity": 120, "execution_time_ms": 6.0 },
+    { "complexity": 300, "execution_time_ms": 14.0 }
+  ]
+}
+```
+
+This is how STAR learns the approximate S32K148 relationship between static
+complexity and measured execution time without asking users to enter execution
+time for every new task.
 
 ## Scheduler Feasibility
 
