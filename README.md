@@ -553,7 +553,7 @@ The repository includes a larger C benchmark intended for S32K148 calibration
 work:
 
 ```text
-task_admission_framework/examples/automotive_complex_taskset.c
+task_admission_framework/examples/automotive_scheduler_smoke_model.c
 task_admission_framework/examples/automotive_taskset_config.json
 ```
 
@@ -570,10 +570,37 @@ It defines eight automotive-style periodic tasks:
 1000 ms  StarTask_1000ms_VehicleHealth
 ```
 
-Each task calls three internal helper functions and uses automotive embedded
-patterns such as ADC reads, CAN sends, GPIO writes, queue/semaphore calls,
-loops, branches, switches, and floating-point calculations. The goal is to
-produce meaningful STAR complexity scores across several task periods.
+The active benchmark source mirrors the portable application-work functions
+used by the scheduler smoke test. This is intentional: STAR must analyze the
+same function body that the S32K148 scheduler measures. That keeps the
+complexity-to-execution-time comparison meaningful.
+
+The older high-complexity stress source remains available as:
+
+```text
+task_admission_framework/examples/automotive_complex_taskset.c
+```
+
+Use it only when you want a synthetic complexity stress test. Use
+`automotive_scheduler_smoke_model.c` when comparing STAR complexity with board
+execution-time measurements.
+
+Current raw-complexity spread for the scheduler smoke model:
+
+```text
+5 ms     BrakeControl5ms          138
+10 ms    SteeringAssist10ms       101
+25 ms    CrashSafety25ms          341
+50 ms    BatteryThermal50ms       384
+100 ms   Powertrain100ms          428
+200 ms   Diagnostics200ms         334
+500 ms   NetworkGateway500ms       94
+1000 ms  VehicleHealth1000ms      516
+```
+
+The values are intentionally spaced apart. Lower-period tasks are not always
+the most complex; the benchmark includes several cases so measured execution
+time can be compared against different complexity levels and different periods.
 
 Run STAR analysis:
 

@@ -4,7 +4,7 @@
   "tasks": [
     {
       "name": "BrakeControl5ms",
-      "source_file": "task_admission_framework/examples/automotive_complex_taskset.c",
+      "source_file": "task_admission_framework/examples/automotive_scheduler_smoke_model.c",
       "entry_function": "StarTask_5ms_BrakeControl",
       "period_ms": 5,
       "deadline_ms": 5,
@@ -15,7 +15,7 @@
     },
     {
       "name": "SteeringAssist10ms",
-      "source_file": "task_admission_framework/examples/automotive_complex_taskset.c",
+      "source_file": "task_admission_framework/examples/automotive_scheduler_smoke_model.c",
       "entry_function": "StarTask_10ms_SteeringAssist",
       "period_ms": 10,
       "deadline_ms": 10,
@@ -26,7 +26,7 @@
     },
     {
       "name": "CrashSafety25ms",
-      "source_file": "task_admission_framework/examples/automotive_complex_taskset.c",
+      "source_file": "task_admission_framework/examples/automotive_scheduler_smoke_model.c",
       "entry_function": "StarTask_25ms_CrashSafety",
       "period_ms": 25,
       "deadline_ms": 25,
@@ -37,7 +37,7 @@
     },
     {
       "name": "BatteryThermal50ms",
-      "source_file": "task_admission_framework/examples/automotive_complex_taskset.c",
+      "source_file": "task_admission_framework/examples/automotive_scheduler_smoke_model.c",
       "entry_function": "StarTask_50ms_BatteryThermal",
       "period_ms": 50,
       "deadline_ms": 50,
@@ -48,7 +48,7 @@
     },
     {
       "name": "Powertrain100ms",
-      "source_file": "task_admission_framework/examples/automotive_complex_taskset.c",
+      "source_file": "task_admission_framework/examples/automotive_scheduler_smoke_model.c",
       "entry_function": "StarTask_100ms_PowertrainManager",
       "period_ms": 100,
       "deadline_ms": 100,
@@ -59,7 +59,7 @@
     },
     {
       "name": "Diagnostics200ms",
-      "source_file": "task_admission_framework/examples/automotive_complex_taskset.c",
+      "source_file": "task_admission_framework/examples/automotive_scheduler_smoke_model.c",
       "entry_function": "StarTask_200ms_Diagnostics",
       "period_ms": 200,
       "deadline_ms": 200,
@@ -70,7 +70,7 @@
     },
     {
       "name": "NetworkGateway500ms",
-      "source_file": "task_admission_framework/examples/automotive_complex_taskset.c",
+      "source_file": "task_admission_framework/examples/automotive_scheduler_smoke_model.c",
       "entry_function": "StarTask_500ms_NetworkGateway",
       "period_ms": 500,
       "deadline_ms": 500,
@@ -81,7 +81,7 @@
     },
     {
       "name": "VehicleHealth1000ms",
-      "source_file": "task_admission_framework/examples/automotive_complex_taskset.c",
+      "source_file": "task_admission_framework/examples/automotive_scheduler_smoke_model.c",
       "entry_function": "StarTask_1000ms_VehicleHealth",
       "period_ms": 1000,
       "deadline_ms": 1000,
