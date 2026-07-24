@@ -15,6 +15,9 @@ from task_admission_framework.admission.hardware_adjustment_mode import (
 from task_admission_framework.calibration.complexity_time_loader import (
     ComplexityTimeLoader,
 )
+from task_admission_framework.calibration.workload_cost_loader import (
+    WorkloadCostLoader,
+)
 from task_admission_framework.descriptor.task_descriptor import TaskDescriptor
 from task_admission_framework.hardware.hardware_profile import HardwareProfile
 from task_admission_framework.pipeline.exceptions import PipelineError
@@ -381,6 +384,7 @@ def run_analyze_taskset(args: argparse.Namespace) -> None:
 
         entries = load_taskset_entries(config_path)
         calibration_profile = load_taskset_calibration_profile(config_path)
+        workload_cost_profile = load_taskset_workload_cost_profile(config_path)
         simulation_window_ms = load_taskset_simulation_window_ms(config_path)
         result = TaskSetAnalyzer(
             admission_controller=AdmissionController(
@@ -389,6 +393,7 @@ def run_analyze_taskset(args: argparse.Namespace) -> None:
                 ),
             ),
             calibration_profile=calibration_profile,
+            workload_cost_profile=workload_cost_profile,
             simulation_window_ms=simulation_window_ms,
         ).analyze(entries)
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -511,6 +516,10 @@ def load_taskset_entries(config_path: Path):
                 item["hardware_profile_file"],
             ),
             rules_file=resolve_taskset_path(config_path, item["rules_file"]),
+            workload_class=(
+                str(item["workload_class"]) if "workload_class" in item else None
+            ),
+            work_units=(int(item["work_units"]) if "work_units" in item else None),
         )
         for item in tasks
     ]
@@ -547,6 +556,16 @@ def load_taskset_calibration_profile(config_path: Path):
     if raw_path is None:
         return None
     return ComplexityTimeLoader().load(resolve_taskset_path(config_path, raw_path))
+
+
+def load_taskset_workload_cost_profile(config_path: Path):
+    """Load optional workload-class/dynamic-work calibration profile."""
+
+    data = _load_taskset_config_json(config_path)
+    raw_path = data.get("workload_cost_profile_file")
+    if raw_path is None:
+        return None
+    return WorkloadCostLoader().load(resolve_taskset_path(config_path, raw_path))
 
 
 def load_taskset_simulation_window_ms(config_path: Path) -> int:
@@ -619,6 +638,19 @@ def print_taskset_result(result) -> None:
                 f"  Estimated Execution: "
                 f"{task.estimated_execution_time_us / 1000.0:.3f} ms"
             )
+            if task.estimated_execution_cycles is not None:
+                print(f"  Estimated Cycles: {task.estimated_execution_cycles:.0f}")
+            if task.workload_class is not None and task.work_units is not None:
+                print(
+                    f"  Dynamic Work: {task.work_units} x "
+                    f"{task.workload_class}"
+                )
+            if task.safety_budget_used is not None:
+                print(
+                    f"  80% Safety Budget Used: "
+                    f"{task.safety_budget_used * 100.0:.2f}% "
+                    f"({task.execution_safety_status})"
+                )
     print("-" * 128)
     print(f"STAR Complexity Load Indicator: {result.total_star_load:.2f}")
     print(f"System Status: {result.system_status}")

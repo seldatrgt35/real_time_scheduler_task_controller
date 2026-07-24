@@ -1,0 +1,14 @@
+{
+  "profile_id": "s32k148_workload_cost_v1",
+  "reference_hardware": "S32K148",
+  "clock_frequency_mhz": 48.0,
+  "safety_limit_ratio": 0.8,
+  "validated": true,
+  "source": "S32K148 board calibration Tasks A-H, STAR benchmark project, 2026-07",
+  "cycles_per_work_unit": {
+    "integer_control": 155.0,
+    "fixed_point_filter": 160.0,
+    "can_checksum": 160.0,
+    "floating_point_iir": 600.0
+  }
+}

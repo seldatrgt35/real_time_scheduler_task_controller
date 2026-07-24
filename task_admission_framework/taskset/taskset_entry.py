@@ -19,4 +19,5 @@ class TaskSetEntry:
     criticality: str
     hardware_profile_file: Path
     rules_file: Path
-
+    workload_class: str | None = None
+    work_units: int | None = None

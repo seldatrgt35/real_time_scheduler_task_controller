@@ -2,6 +2,12 @@
 
 STAR (Static Task Admission for Real-time Systems) is a static analysis and admission-control framework for real-time embedded tasks. It analyzes C/C++ task code before scheduler admission and produces a static, explainable complexity-based decision.
 
+> **S32K148 calibration update:** raw structural complexity is no longer treated
+> as a universal execution-time proxy. For target-specific timing, use the
+> workload cost profile with an explicit `workload_class` and bounded
+> `work_units`. See
+> [`docs/S32K148_WORKLOAD_CALIBRATION_REPORT.md`](docs/S32K148_WORKLOAD_CALIBRATION_REPORT.md).
+
 The current target platform is:
 
 - NXP S32K148

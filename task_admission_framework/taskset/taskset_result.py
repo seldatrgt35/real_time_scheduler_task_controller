@@ -25,6 +25,12 @@ class TaskSetTaskResult:
     admission_reason: str
     scheduler_status: str
     scheduler_reason: str
+    workload_class: str | None = None
+    work_units: int | None = None
+    estimated_execution_cycles: float | None = None
+    execution_estimate_source: str | None = None
+    safety_budget_used: float | None = None
+    execution_safety_status: str = "UNVERIFIED"
     complexity_breakdown: list[str] = field(default_factory=list)
 
 

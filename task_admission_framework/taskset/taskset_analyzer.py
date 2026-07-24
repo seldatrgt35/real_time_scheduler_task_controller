@@ -14,6 +14,12 @@ from task_admission_framework.calibration.complexity_time_profile import (
 from task_admission_framework.calibration.execution_time_estimator import (
     ExecutionTimeEstimator,
 )
+from task_admission_framework.calibration.workload_cost_profile import (
+    WorkloadCostProfile,
+)
+from task_admission_framework.calibration.workload_execution_estimator import (
+    WorkloadExecutionEstimator,
+)
 from task_admission_framework.rules.rule_database import RuleDatabase
 from task_admission_framework.rules.rule_loader import RuleLoader
 from task_admission_framework.scheduling.fixed_priority_analyzer import (
@@ -40,6 +46,7 @@ class TaskSetAnalyzer:
         pipeline: "AnalysisPipeline | None" = None,
         admission_controller: AdmissionController | None = None,
         calibration_profile: ComplexityTimeProfile | None = None,
+        workload_cost_profile: WorkloadCostProfile | None = None,
         simulation_window_ms: int = 100,
     ) -> None:
         if pipeline is None:
@@ -53,6 +60,8 @@ class TaskSetAnalyzer:
         self._admission_controller = admission_controller or AdmissionController()
         self._calibration_profile = calibration_profile
         self._execution_time_estimator = ExecutionTimeEstimator()
+        self._workload_cost_profile = workload_cost_profile
+        self._workload_execution_estimator = WorkloadExecutionEstimator()
         self._simulation_window_ms = simulation_window_ms
 
     def analyze(self, entries: list[TaskSetEntry]) -> TaskSetResult:
@@ -74,8 +83,16 @@ class TaskSetAnalyzer:
                 rule_database = RuleDatabase(rules)
                 decision = self._admission_controller.evaluate(session, rule_database)
                 task_load = decision.star_load_indicator
-                estimated_execution_time_us, estimate_note = (
-                    self._estimate_execution_time(decision.hardware_adjusted_score)
+                (
+                    estimated_execution_time_us,
+                    estimated_execution_cycles,
+                    safety_budget_used,
+                    execution_safety_status,
+                    estimate_source,
+                    estimate_note,
+                ) = self._estimate_execution_time(
+                    entry,
+                    decision.hardware_adjusted_score,
                 )
                 task_results.append(
                     TaskSetTaskResult(
@@ -98,6 +115,12 @@ class TaskSetAnalyzer:
                         ),
                         scheduler_status=decision.scheduler_status,
                         scheduler_reason=decision.scheduler_reason,
+                        workload_class=entry.workload_class,
+                        work_units=entry.work_units,
+                        estimated_execution_cycles=estimated_execution_cycles,
+                        execution_estimate_source=estimate_source,
+                        safety_budget_used=safety_budget_used,
+                        execution_safety_status=execution_safety_status,
                         complexity_breakdown=[
                             (
                                 f"{item.name}: "
@@ -149,13 +172,60 @@ class TaskSetAnalyzer:
 
     def _estimate_execution_time(
         self,
+        entry: TaskSetEntry,
         hardware_adjusted_score: float,
-    ) -> tuple[float | None, str | None]:
+    ) -> tuple[
+        float | None,
+        float | None,
+        float | None,
+        str,
+        str | None,
+        str | None,
+    ]:
+        if self._workload_cost_profile is not None:
+            if entry.workload_class is None or entry.work_units is None:
+                return (
+                    None,
+                    None,
+                    None,
+                    "UNVERIFIED",
+                    None,
+                    "Dynamic execution estimate unavailable: workload_class and "
+                    "bounded work_units are required.",
+                )
+            estimate = self._workload_execution_estimator.estimate(
+                workload_class=entry.workload_class,
+                work_units=entry.work_units,
+                period_ms=entry.period_ms,
+                profile=self._workload_cost_profile,
+            )
+            return (
+                estimate.estimated_execution_us,
+                estimate.estimated_cycles,
+                estimate.safety_budget_used,
+                "PASS" if estimate.passes_safety_limit else "FAIL",
+                "workload_cost_profile",
+                estimate.note,
+            )
+
         if self._calibration_profile is None:
-            return None, None
-        return self._execution_time_estimator.estimate_us(
+            return None, None, None, "UNVERIFIED", None, None
+        estimate_us, note = self._execution_time_estimator.estimate_us(
             hardware_adjusted_score,
             self._calibration_profile,
+        )
+        legacy_note = (
+            "Legacy structural-complexity interpolation was used. "
+            "Prefer workload_class/work_units calibration. "
+            + (note or "")
+        ).strip()
+        return (
+            estimate_us,
+            None,
+            None,
+            "UNVERIFIED",
+            "legacy_complexity_profile",
+            legacy_note,
         )
 
     @staticmethod
@@ -202,6 +272,16 @@ class TaskSetAnalyzer:
         task_results: list[TaskSetTaskResult],
         total_star_load: float,
     ) -> tuple[str, str]:
+        if any(
+            result.execution_safety_status == "FAIL"
+            for result in task_results
+        ):
+            return (
+                "SYSTEM_REJECT",
+                "At least one calibrated dynamic workload exceeds the configured "
+                "execution safety budget.",
+            )
+
         if any(
             result.admission_status == AdmissionStatus.REJECT.name
             for result in task_results
