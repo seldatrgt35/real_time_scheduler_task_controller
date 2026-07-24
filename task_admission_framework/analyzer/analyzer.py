@@ -34,10 +34,11 @@ def _cursor_kind_name(cursor: Cursor) -> str:
 class StaticAnalyzer:
     """Coordinates parsing, call graph construction, and AST traversal.
 
-    Reachable helper functions are traversed for every static call site. This
-    intentionally lets repeated helper calls contribute multiple times to the
-    extracted metrics. Only recursion cycles are cut off to avoid infinite
-    traversal.
+    Each reachable function body is traversed once per root analysis. Static
+    call sites are still counted per occurrence, but a repeatedly called
+    helper's branches, loops, and data operations are not duplicated. This
+    keeps structural complexity separate from dynamic execution frequency.
+    Recursion cycles are cut off to avoid infinite traversal.
     """
 
     _CALL_KIND_NAMES = {
@@ -101,7 +102,13 @@ class StaticAnalyzer:
             task_name=root_function.spelling,
             api_usage=self._api_database.empty_usage(),
         )
-        self._traverse_function(root_function, profile, function_definitions, [])
+        self._traverse_function(
+            root_function,
+            profile,
+            function_definitions,
+            [],
+            set(),
+        )
         self._augment_function_calls_from_tokens(root_function, profile)
         return profile
 
@@ -111,18 +118,29 @@ class StaticAnalyzer:
         profile: TaskProfile,
         function_definitions: dict[str, Cursor],
         call_stack: list[str],
+        traversed_functions: set[str],
     ) -> None:
         function_name = function_cursor.spelling
         if function_name in call_stack:
             profile.recursion_detected = True
             return
 
+        if function_name in traversed_functions:
+            return
+        traversed_functions.add(function_name)
+
         if function_name not in profile.reachable_functions:
             profile.reachable_functions.append(function_name)
 
         next_stack = [*call_stack, function_name]
         for child in function_cursor.get_children():
-            self._traverse_cursor(child, profile, function_definitions, next_stack)
+            self._traverse_cursor(
+                child,
+                profile,
+                function_definitions,
+                next_stack,
+                traversed_functions,
+            )
 
     def _traverse_cursor(
         self,
@@ -130,6 +148,7 @@ class StaticAnalyzer:
         profile: TaskProfile,
         function_definitions: dict[str, Cursor],
         call_stack: list[str],
+        traversed_functions: set[str],
     ) -> None:
         self._visitor.visit(cursor, profile)
 
@@ -145,10 +164,17 @@ class StaticAnalyzer:
                     profile,
                     function_definitions,
                     call_stack,
+                    traversed_functions,
                 )
 
         for child in cursor.get_children():
-            self._traverse_cursor(child, profile, function_definitions, call_stack)
+            self._traverse_cursor(
+                child,
+                profile,
+                function_definitions,
+                call_stack,
+                traversed_functions,
+            )
 
     @staticmethod
     def _is_function_definition(cursor: Cursor) -> bool:

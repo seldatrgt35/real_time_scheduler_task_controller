@@ -113,27 +113,45 @@ class FunctionCallVisitor(AstVisitor):
 
 
 class DataUsageVisitor(AstVisitor):
-    """Detects pointer and floating-point usage."""
+    """Counts explicit pointer and floating-point operations."""
 
     _FLOAT_TYPES = {
         TypeKind.FLOAT,
         TypeKind.DOUBLE,
         TypeKind.LONGDOUBLE,
     }
-    _POINTER_KINDS = {
+    _ARITHMETIC_KINDS = {
+        CursorKind.BINARY_OPERATOR,
+        CursorKind.COMPOUND_ASSIGNMENT_OPERATOR,
         CursorKind.UNARY_OPERATOR,
-        CursorKind.ARRAY_SUBSCRIPT_EXPR,
     }
 
     def visit(self, cursor: Cursor, profile: TaskProfile) -> None:
-        if cursor.type.kind == TypeKind.POINTER:
+        if cursor.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR:
             profile.pointer_operations += 1
-
-        if cursor.kind in self._POINTER_KINDS and cursor.type.kind == TypeKind.POINTER:
+        elif cursor.kind == CursorKind.UNARY_OPERATOR and self._has_pointer_token(cursor):
+            profile.pointer_operations += 1
+        elif (
+            cursor.kind == CursorKind.BINARY_OPERATOR
+            and cursor.type.kind == TypeKind.POINTER
+        ):
+            profile.pointer_operations += 1
+        elif cursor.kind == CursorKind.MEMBER_REF_EXPR and self._uses_arrow(cursor):
             profile.pointer_operations += 1
 
         if cursor.type.kind in self._FLOAT_TYPES:
             profile.floating_point_usage = True
+            if cursor.kind in self._ARITHMETIC_KINDS:
+                profile.floating_point_operations += 1
+
+    @staticmethod
+    def _has_pointer_token(cursor: Cursor) -> bool:
+        tokens = {token.spelling for token in cursor.get_tokens()}
+        return "*" in tokens or "&" in tokens
+
+    @staticmethod
+    def _uses_arrow(cursor: Cursor) -> bool:
+        return any(token.spelling == "->" for token in cursor.get_tokens())
 
 
 class CompositeVisitor(AstVisitor):

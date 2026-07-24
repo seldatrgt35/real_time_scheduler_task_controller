@@ -588,14 +588,14 @@ execution-time measurements.
 Current raw-complexity spread for the scheduler smoke model:
 
 ```text
-5 ms     BrakeControl5ms          138
-10 ms    SteeringAssist10ms       101
-25 ms    CrashSafety25ms          341
-50 ms    BatteryThermal50ms       384
-100 ms   Powertrain100ms          428
-200 ms   Diagnostics200ms         334
-500 ms   NetworkGateway500ms       94
-1000 ms  VehicleHealth1000ms      516
+5 ms     BrakeControl5ms          108
+10 ms    SteeringAssist10ms        79
+25 ms    CrashSafety25ms          147
+50 ms    BatteryThermal50ms       155
+100 ms   Powertrain100ms          160
+200 ms   Diagnostics200ms         142
+500 ms   NetworkGateway500ms       48
+1000 ms  VehicleHealth1000ms      158
 ```
 
 The values are intentionally spaced apart. Lower-period tasks are not always

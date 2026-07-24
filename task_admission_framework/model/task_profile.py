@@ -27,6 +27,7 @@ class TaskProfile:
     pointer_operations: int = 0
     dynamic_memory: bool = False
     floating_point_usage: bool = False
+    floating_point_operations: int = 0
     # Blocking calls are stored per occurrence. Repeated calls to the same API
     # must keep contributing to structural complexity.
     blocking_calls: list[str] = field(default_factory=list)

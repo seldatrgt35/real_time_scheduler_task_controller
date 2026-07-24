@@ -39,7 +39,7 @@ class FeatureExtractor:
 
     @staticmethod
     def _count_floating_point_operations(profile: TaskProfile) -> int:
-        return 1 if profile.floating_point_usage else 0
+        return profile.floating_point_operations
 
     @staticmethod
     def _count_dynamic_memory_calls(profile: TaskProfile) -> int:
