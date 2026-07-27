@@ -457,8 +457,12 @@ class StarGui:
     def _format_result(session, decision, execution) -> str:
         descriptor = session.task_descriptor
         hardware = session.hardware_profile
+        final_decision = {
+            "PASS": "ACCEPTED",
+            "FAIL": "REJECTED",
+        }.get(execution.status, "UNVERIFIED")
         lines = [
-            "STAR Admission Result",
+            "STAR Task Result",
             "",
             f"Task: {descriptor.task_name}",
             f"Entry Function: {descriptor.entry_function}",
@@ -466,53 +470,40 @@ class StarGui:
             f"Period: {descriptor.period_ms} ms",
             f"Deadline: {descriptor.deadline_ms} ms",
             "",
-            "Measurement-Calibrated Execution Admission",
-            f"Result: {execution.status}",
-            (
-                f"Estimated Cycles: {execution.estimated_cycles:.0f}"
-                if execution.estimated_cycles is not None
-                else "Estimated Cycles: UNVERIFIED"
-            ),
-            (
-                f"Estimated Execution: {execution.estimated_execution_us:.1f} us"
-                if execution.estimated_execution_us is not None
-                else "Estimated Execution: UNVERIFIED"
-            ),
-            f"80% Period Budget: {execution.safety_budget_cycles:.0f} cycles "
-            f"({execution.safety_budget_us:.1f} us)",
-            (
-                f"Budget Used: {execution.safety_budget_used:.2%}"
-                if execution.safety_budget_used is not None
-                else "Budget Used: UNVERIFIED"
-            ),
-            "",
-            "Automatically Inferred Mixed Workload:",
+            "Measured Complexity Model:",
             *[
                 (
-                    f"  {name}: {count} units x "
+                    f"  {name}: {count} x "
                     f"{execution.cycle_breakdown[name] / count:.0f} cycles/unit "
                     f"= {execution.cycle_breakdown[name]:.0f} cycles"
                 )
                 for name, count in sorted(execution.workload_counts.items())
                 if name in execution.cycle_breakdown
             ],
-            *([f"  Note: {note}" for note in execution.notes]),
-            "",
-            "Structural Complexity (informational only):",
-            f"  Raw Score: {decision.complexity_score:.1f}",
             "",
             (
-                "Final single-task admission above uses A-H board-calibrated "
-                "mixed-workload cycle costs. No unvalidated structural threshold "
-                "is used."
+                f"Calculated Complexity: {execution.estimated_cycles:.0f} cycles"
+                if execution.estimated_cycles is not None
+                else "Calculated Complexity: UNVERIFIED"
+            ),
+            f"Period Limit: {execution.safety_budget_cycles:.0f} cycles "
+            f"({execution.safety_budget_us:.1f} us)",
+            (
+                f"Estimated Time: {execution.estimated_execution_us:.1f} us"
+                if execution.estimated_execution_us is not None
+                else "Estimated Time: UNVERIFIED"
+            ),
+            (
+                f"Limit Usage: {execution.safety_budget_used:.2%}"
+                if execution.safety_budget_used is not None
+                else "Limit Usage: UNVERIFIED"
             ),
             "",
-            "Complexity Breakdown:",
+            f"FINAL DECISION: {final_decision}",
         ]
-        lines.extend(
-            f"  {item.name}: {item.occurrences} x {item.base_cost} = {item.subtotal}"
-            for item in session.complexity_report.breakdown
-        )
+        if execution.status == "UNVERIFIED":
+            lines.append("Reason:")
+            lines.extend(f"  {note}" for note in execution.notes)
         return "\n".join(lines)
 
     @staticmethod

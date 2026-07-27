@@ -141,10 +141,13 @@ def print_admission_result(session, decision: AdmissionDecision, execution=None)
 
     descriptor = session.task_descriptor
     hardware = session.hardware_profile
-    report = session.complexity_report
+    final_decision = {
+        "PASS": "ACCEPTED",
+        "FAIL": "REJECTED",
+    }.get(execution.status if execution is not None else "", "UNVERIFIED")
 
     print("-" * 72)
-    print("STAR Admission Result")
+    print("STAR Task Result")
     print(f"Task: {descriptor.task_name}")
     print(f"Entry Function: {descriptor.entry_function}")
     print(f"Hardware: {hardware.name}")
@@ -152,44 +155,40 @@ def print_admission_result(session, decision: AdmissionDecision, execution=None)
     print(f"Deadline: {descriptor.deadline_ms} ms")
     print()
     if execution is not None:
-        print("Measurement-Calibrated Execution Admission")
-        print(f"Result: {execution.status}")
-        if execution.estimated_cycles is not None:
-            print(f"Estimated Cycles: {execution.estimated_cycles:.0f}")
-            print(f"Estimated Execution: {execution.estimated_execution_us:.1f} us")
-        else:
-            print("Estimated Execution: UNVERIFIED")
-        print(
-            f"80% Period Budget: {execution.safety_budget_cycles:.0f} cycles "
-            f"({execution.safety_budget_us:.1f} us)"
-        )
-        if execution.safety_budget_used is not None:
-            print(f"Budget Used: {execution.safety_budget_used:.2%}")
-        print("Automatically Inferred Mixed Workload:")
+        print("Measured Complexity Model:")
         for name, count in sorted(execution.workload_counts.items()):
             cycles = execution.cycle_breakdown.get(name)
             if cycles is not None:
                 print(
-                    f"  {name}: {count} units x {cycles / count:.0f} "
+                    f"  {name}: {count} x {cycles / count:.0f} "
                     f"cycles/unit = {cycles:.0f} cycles"
                 )
-        for note in execution.notes:
-            print(f"  Note: {note}")
         print()
-    print("Structural Complexity (informational only):")
-    print(f"  Raw Score: {decision.complexity_score:.1f}")
-    print()
-    print(
-        "Final single-task admission uses A-H board-calibrated mixed-workload "
-        "cycle costs. No unvalidated structural threshold is used."
-    )
-    print()
-    print("Complexity Breakdown:")
-    for item in report.breakdown:
         print(
-            f"  {item.name}: "
-            f"{item.occurrences} x {item.base_cost} = {item.subtotal}"
+            f"Calculated Complexity: {execution.estimated_cycles:.0f} cycles"
+            if execution.estimated_cycles is not None
+            else "Calculated Complexity: UNVERIFIED"
         )
+        print(
+            f"Period Limit: {execution.safety_budget_cycles:.0f} cycles "
+            f"({execution.safety_budget_us:.1f} us)"
+        )
+        print(
+            f"Estimated Time: {execution.estimated_execution_us:.1f} us"
+            if execution.estimated_execution_us is not None
+            else "Estimated Time: UNVERIFIED"
+        )
+        print(
+            f"Limit Usage: {execution.safety_budget_used:.2%}"
+            if execution.safety_budget_used is not None
+            else "Limit Usage: UNVERIFIED"
+        )
+        print()
+        print(f"FINAL DECISION: {final_decision}")
+        if execution.status == "UNVERIFIED":
+            print("Reason:")
+            for note in execution.notes:
+                print(f"  {note}")
     print("-" * 72)
 
 
