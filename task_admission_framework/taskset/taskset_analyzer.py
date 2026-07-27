@@ -50,7 +50,7 @@ class TaskSetAnalyzer:
         admission_controller: AdmissionController | None = None,
         calibration_profile: ComplexityTimeProfile | None = None,
         workload_cost_profile: WorkloadCostProfile | None = None,
-        simulation_window_ms: int = 100,
+        simulation_window_ms: int = 200,
     ) -> None:
         if pipeline is None:
             from task_admission_framework.pipeline.analysis_pipeline import (
@@ -224,6 +224,11 @@ class TaskSetAnalyzer:
             ],
             scheduler_deadline_misses=simulation_result.deadline_misses[:40],
             scheduler_preemptions=simulation_result.preemptions[:40],
+            simulation_window_ms=self._simulation_window_ms,
+            simulation_idle_time_us=simulation_result.idle_time_us,
+            simulation_task_stats=simulation_result.task_stats,
+            simulation_interference_counts=simulation_result.interference_counts,
+            simulation_interference_time_us=simulation_result.interference_time_us,
         )
 
     def _estimate_execution_time(

@@ -261,6 +261,13 @@ class CorrectnessRefactorTests(unittest.TestCase):
 
         self.assertEqual(result.events[0].task_name, "high")
         self.assertTrue(any(event.task_name == "low" for event in result.events))
+        stats = {item.task_name: item for item in result.task_stats}
+        self.assertEqual(stats["high"].releases, 3)
+        self.assertEqual(stats["high"].completions, 3)
+        self.assertEqual(stats["low"].releases, 2)
+        self.assertEqual(stats["low"].completions, 1)
+        self.assertGreater(stats["low"].max_wait_time_us, 0.0)
+        self.assertEqual(result.interference_time_us["high -> low"], 2000.0)
 
     def test_scheduler_simulator_progresses_with_fractional_microseconds(self) -> None:
         result = SchedulerSimulator().simulate(

@@ -9,6 +9,7 @@ from task_admission_framework.scheduling.scheduler_result import SchedulerTaskIn
 from task_admission_framework.scheduling.scheduler_status import SchedulerStatus
 from task_admission_framework.scheduling.simulation_result import (
     SchedulerSimulationResult,
+    SchedulerTaskSimulationStats,
 )
 
 
@@ -58,6 +59,12 @@ class SchedulerSimulator:
         preemptions: list[str] = []
         deadline_misses: list[str] = []
         idle_time_us = 0.0
+        stats = {
+            task.task_name: SchedulerTaskSimulationStats(task_name=task.task_name)
+            for task in tasks
+        }
+        interference_counts: dict[str, int] = {}
+        interference_time_us: dict[str, float] = {}
 
         while now_us < window_us:
             sequence_counter = self._release_jobs(
@@ -66,6 +73,7 @@ class SchedulerSimulator:
                 ready_jobs,
                 now_us,
                 sequence_counter,
+                stats,
             )
 
             selected_job = self._select_job(ready_jobs, running_job)
@@ -74,6 +82,10 @@ class SchedulerSimulator:
                     f"{selected_job.task_name} preempted {running_job.task_name} "
                     f"at {now_us / 1000.0:.3f} ms."
                 )
+                stats[running_job.task_name].preemptions_suffered += 1
+                stats[selected_job.task_name].preemptions_caused += 1
+                pair = f"{selected_job.task_name} -> {running_job.task_name}"
+                interference_counts[pair] = interference_counts.get(pair, 0) + 1
                 ready_jobs.append(running_job)
                 running_job = None
 
@@ -102,11 +114,34 @@ class SchedulerSimulator:
             interval_end = min(completion_us, next_release, window_us)
             ran_us = interval_end - now_us
             running_job.remaining_us -= ran_us
+            stats[running_job.task_name].cpu_time_us += ran_us
+            for waiting_job in ready_jobs:
+                pair = f"{running_job.task_name} -> {waiting_job.task_name}"
+                interference_time_us[pair] = (
+                    interference_time_us.get(pair, 0.0) + ran_us
+                )
             self._append_event(events, now_us, interval_end, running_job.task_name, "run")
             now_us = interval_end
 
             if running_job.remaining_us <= self._TIME_EPSILON_US:
+                task_stats = stats[running_job.task_name]
+                task_stats.completions += 1
+                response_time_us = now_us - running_job.release_us
+                execution_budget_us = next(
+                    float(task.execution_budget_us or 0.0)
+                    for task in tasks
+                    if task.task_name == running_job.task_name
+                )
+                task_stats.max_response_time_us = max(
+                    task_stats.max_response_time_us,
+                    response_time_us,
+                )
+                task_stats.max_wait_time_us = max(
+                    task_stats.max_wait_time_us,
+                    max(0.0, response_time_us - execution_budget_us),
+                )
                 if now_us > running_job.deadline_us:
+                    task_stats.deadline_misses += 1
                     deadline_misses.append(
                         f"{running_job.task_name} missed deadline at "
                         f"{now_us / 1000.0:.3f} ms."
@@ -124,6 +159,9 @@ class SchedulerSimulator:
             deadline_misses=deadline_misses,
             preemptions=preemptions,
             idle_time_us=idle_time_us,
+            task_stats=list(stats.values()),
+            interference_counts=interference_counts,
+            interference_time_us=interference_time_us,
             status=status,
             reason=reason,
         )
@@ -135,6 +173,7 @@ class SchedulerSimulator:
         ready_jobs: list[_Job],
         now_us: float,
         sequence_counter: int,
+        stats: dict[str, SchedulerTaskSimulationStats],
     ) -> int:
         for task in tasks:
             while (
@@ -157,6 +196,7 @@ class SchedulerSimulator:
                         sequence=sequence_counter,
                     )
                 )
+                stats[task.task_name].releases += 1
                 sequence_counter += 1
                 next_release_us[task.task_name] += task.period_ms * 1000.0
         return sequence_counter

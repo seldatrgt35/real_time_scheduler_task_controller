@@ -271,6 +271,10 @@ for each operation class, estimated execution time, 80% period budget, and
 fixed-priority response time. Priority does not multiply complexity; it affects
 the interference term in response-time analysis.
 
+The GUI also runs a 200 ms scheduler simulation and reports per task: releases,
+completions, total CPU time, maximum wait/response time, preemptions, deadline
+misses, and pairwise delay (`running task -> delayed task`).
+
 ## Legacy Structural Review Database
 
 The bundled S32K148 rule profile is:

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from task_admission_framework.scheduling.simulation_result import (
+    SchedulerTaskSimulationStats,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class TaskSetTaskResult:
@@ -52,3 +56,10 @@ class TaskSetResult:
     scheduler_timeline: list[str] = field(default_factory=list)
     scheduler_deadline_misses: list[str] = field(default_factory=list)
     scheduler_preemptions: list[str] = field(default_factory=list)
+    simulation_window_ms: int = 0
+    simulation_idle_time_us: float = 0.0
+    simulation_task_stats: list[SchedulerTaskSimulationStats] = field(
+        default_factory=list
+    )
+    simulation_interference_counts: dict[str, int] = field(default_factory=dict)
+    simulation_interference_time_us: dict[str, float] = field(default_factory=dict)

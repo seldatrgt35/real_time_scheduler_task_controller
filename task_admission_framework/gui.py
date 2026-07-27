@@ -563,6 +563,56 @@ class StarGui:
                 else "   Response Time     : UNVERIFIED"
             )
             lines.extend([f"   DECISION          : {final_decision}", ""])
+
+        window_us = result.simulation_window_ms * 1000.0
+        used_cpu_us = max(0.0, window_us - result.simulation_idle_time_us)
+        lines.extend(
+            [
+                f"SCHEDULER SIMULATION ({result.simulation_window_ms} ms)",
+                f"CPU Usage: {used_cpu_us / window_us:.2%}",
+                f"Idle Time: {result.simulation_idle_time_us / 1000.0:.3f} ms",
+                "",
+            ]
+        )
+        for stats in result.simulation_task_stats:
+            lines.extend(
+                [
+                    f"{stats.task_name}",
+                    f"   Released / Completed : "
+                    f"{stats.releases} / {stats.completions}",
+                    f"   Total CPU Time       : "
+                    f"{stats.cpu_time_us / 1000.0:.3f} ms",
+                    f"   Maximum Wait         : "
+                    f"{stats.max_wait_time_us:.1f} us",
+                    f"   Maximum Response     : "
+                    f"{stats.max_response_time_us:.1f} us",
+                    f"   Preempted            : "
+                    f"{stats.preemptions_suffered} times",
+                    f"   Deadline Misses      : {stats.deadline_misses}",
+                    "",
+                ]
+            )
+        lines.append("Task Interaction (running task -> delayed task):")
+        if result.simulation_interference_time_us:
+            lines.extend(
+                f"   {pair}: delayed {delay_us:.1f} us total"
+                for pair, delay_us in sorted(
+                    result.simulation_interference_time_us.items()
+                )
+            )
+        else:
+            lines.append("   No task delayed another task.")
+        lines.append("")
+        lines.append("Preemption Effects:")
+        if result.simulation_interference_counts:
+            lines.extend(
+                f"   {pair}: {count} times"
+                for pair, count in sorted(
+                    result.simulation_interference_counts.items()
+                )
+            )
+        else:
+            lines.append("   No preemption occurred.")
         return "\n".join(lines)
 
     def _set_output(self, text: str) -> None:

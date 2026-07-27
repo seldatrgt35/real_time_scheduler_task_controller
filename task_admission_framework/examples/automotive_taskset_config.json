@@ -1,6 +1,6 @@
 {
   "workload_cost_profile_file": "task_admission_framework/calibration/profiles/S32K148_workload_costs.json",
-  "simulation_window_ms": 1000,
+  "simulation_window_ms": 200,
   "tasks": [
     {
       "name": "BrakeControl5ms",
