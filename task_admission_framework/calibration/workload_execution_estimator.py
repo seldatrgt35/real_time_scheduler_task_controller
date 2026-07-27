@@ -23,6 +23,7 @@ class WorkloadExecutionEstimate:
     passes_safety_limit: bool
     note: str
     workload_breakdown: dict[str, int] | None = None
+    cycle_breakdown: dict[str, float] | None = None
 
 
 class WorkloadExecutionEstimator:
@@ -68,6 +69,9 @@ class WorkloadExecutionEstimator:
             workload_breakdown={
                 workload_class.strip().lower().replace("-", "_"): work_units
             },
+            cycle_breakdown={
+                workload_class.strip().lower().replace("-", "_"): estimated_cycles
+            },
         )
 
     def estimate_breakdown(
@@ -87,6 +91,7 @@ class WorkloadExecutionEstimator:
         normalized: dict[str, int] = {}
         estimated_cycles = 0.0
         details: list[str] = []
+        cycle_breakdown: dict[str, float] = {}
         for raw_class, raw_count in workload_counts.items():
             count = int(raw_count)
             if count <= 0:
@@ -96,6 +101,9 @@ class WorkloadExecutionEstimator:
             normalized[workload_class] = normalized.get(workload_class, 0) + count
             subtotal = count * coefficient
             estimated_cycles += subtotal
+            cycle_breakdown[workload_class] = (
+                cycle_breakdown.get(workload_class, 0.0) + subtotal
+            )
             details.append(f"{count} {workload_class} x {coefficient:g}")
 
         cycles_per_us = profile.clock_frequency_mhz
@@ -124,4 +132,5 @@ class WorkloadExecutionEstimator:
             passes_safety_limit=estimated_cycles <= safety_budget,
             note=note,
             workload_breakdown=normalized,
+            cycle_breakdown=cycle_breakdown,
         )

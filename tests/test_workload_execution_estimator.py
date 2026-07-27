@@ -10,6 +10,9 @@ from task_admission_framework.analyzer.workload_classifier import WorkloadClassi
 from task_admission_framework.calibration.workload_cost_loader import (
     WorkloadCostLoader,
 )
+from task_admission_framework.calibration.execution_admission import (
+    evaluate_execution_admission,
+)
 from task_admission_framework.calibration.workload_cost_profile import (
     WorkloadCostProfile,
 )
@@ -67,6 +70,32 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
             estimate.workload_breakdown,
             {"integer_control": 100, "floating_point_iir": 2},
         )
+        self.assertEqual(
+            estimate.cycle_breakdown,
+            {"integer_control": 15500.0, "floating_point_iir": 1200.0},
+        )
+
+    def test_mixed_admission_uses_measured_period_limit(self) -> None:
+        result = evaluate_execution_admission(
+            SimpleNamespace(
+                dynamic_bound_verified=True,
+                dynamic_bound_notes=[],
+                inferred_workload_counts={
+                    "integer_control": 100,
+                    "fixed_point_filter": 50,
+                    "floating_point_iir": 10,
+                    "can_checksum": 20,
+                },
+            ),
+            period_ms=5,
+            profile=self.profile,
+        )
+
+        self.assertEqual(result.status, "PASS")
+        self.assertEqual(result.estimated_cycles, 32700.0)
+        self.assertEqual(result.safety_budget_cycles, 192000.0)
+        self.assertAlmostEqual(result.estimated_execution_us or 0.0, 681.25)
+        self.assertAlmostEqual(result.safety_budget_used or 0.0, 32700 / 192000)
 
     def test_rejects_unbounded_or_unknown_work(self) -> None:
         with self.assertRaisesRegex(ValueError, "work_units"):

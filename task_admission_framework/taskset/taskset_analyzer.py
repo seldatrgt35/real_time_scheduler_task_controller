@@ -157,6 +157,12 @@ class TaskSetAnalyzer:
                         workload_breakdown=dict(
                             session.task_profile.inferred_workload_counts
                         ),
+                        cycle_breakdown=self._cycle_breakdown(
+                            session.task_profile.inferred_workload_counts
+                        ),
+                        safety_budget_cycles=self._safety_budget_cycles(
+                            entry.period_ms
+                        ),
                         dynamic_bound_notes=list(
                             session.task_profile.dynamic_bound_notes
                         ),
@@ -190,6 +196,7 @@ class TaskSetAnalyzer:
                 result,
                 scheduler_status=scheduler_by_task[result.task_name].status.name,
                 scheduler_reason=scheduler_by_task[result.task_name].reason,
+                response_time_us=scheduler_by_task[result.task_name].response_time_us,
             )
             for result in task_results
         ]
@@ -327,6 +334,24 @@ class TaskSetAnalyzer:
             raise TaskSetError("Adjusted maximum complexity must be greater than 0.")
         return complexity_score / max_complexity
 
+    def _cycle_breakdown(self, counts: dict[str, int]) -> dict[str, float]:
+        if self._workload_cost_profile is None:
+            return {}
+        return {
+            name: count * self._workload_cost_profile.coefficient_for(name)
+            for name, count in counts.items()
+        }
+
+    def _safety_budget_cycles(self, period_ms: int) -> float | None:
+        if self._workload_cost_profile is None:
+            return None
+        return (
+            period_ms
+            * 1000.0
+            * self._workload_cost_profile.clock_frequency_mhz
+            * self._workload_cost_profile.safety_limit_ratio
+        )
+
     @staticmethod
     def _evaluate_system(
         task_results: list[TaskSetTaskResult],
@@ -365,10 +390,10 @@ class TaskSetAnalyzer:
         ) or total_star_load > 1.0
         if has_static_risk:
             return (
-                "FEASIBLE_WITH_STATIC_RISK",
-                "Calibrated execution budgets are schedulable, but one or more "
-                "legacy structural-complexity indicators exceed their review "
-                "thresholds.",
+                "FEASIBLE",
+                "A-H calibrated execution budgets are schedulable. One or more "
+                "structural review indicators are HIGH, but they do not change "
+                "the timing admission decision.",
             )
 
         return (

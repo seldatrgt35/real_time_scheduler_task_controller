@@ -1,0 +1,5 @@
+task_name: BrakeControl5ms
+entry_function: StarTask_5ms_BrakeControl
+period_ms: 5
+deadline_ms: 5
+priority: 3

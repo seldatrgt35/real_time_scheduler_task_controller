@@ -15,6 +15,12 @@ from task_admission_framework.admission.hardware_adjustment_mode import (
 from task_admission_framework.calibration.complexity_time_loader import (
     ComplexityTimeLoader,
 )
+from task_admission_framework.calibration.execution_admission import (
+    evaluate_execution_admission,
+)
+from task_admission_framework.calibration.workload_cost_loader import (
+    WorkloadCostLoader,
+)
 from task_admission_framework.calibration.workload_cost_loader import (
     WorkloadCostLoader,
 )
@@ -130,7 +136,7 @@ def print_rules(rules: list[AdmissionRule]) -> None:
     print("-" * 120)
 
 
-def print_admission_result(session, decision: AdmissionDecision) -> None:
+def print_admission_result(session, decision: AdmissionDecision, execution=None) -> None:
     """Print CLI admission output."""
 
     descriptor = session.task_descriptor
@@ -146,21 +152,44 @@ def print_admission_result(session, decision: AdmissionDecision) -> None:
     print(f"Deadline: {descriptor.deadline_ms} ms")
     print(f"Criticality: {descriptor.criticality.name}")
     print()
+    if execution is not None:
+        print("Measurement-Calibrated Execution Admission")
+        print(f"Result: {execution.status}")
+        if execution.estimated_cycles is not None:
+            print(f"Estimated Cycles: {execution.estimated_cycles:.0f}")
+            print(f"Estimated Execution: {execution.estimated_execution_us:.1f} us")
+        else:
+            print("Estimated Execution: UNVERIFIED")
+        print(
+            f"80% Period Budget: {execution.safety_budget_cycles:.0f} cycles "
+            f"({execution.safety_budget_us:.1f} us)"
+        )
+        if execution.safety_budget_used is not None:
+            print(f"Budget Used: {execution.safety_budget_used:.2%}")
+        print("Automatically Inferred Mixed Workload:")
+        for name, count in sorted(execution.workload_counts.items()):
+            cycles = execution.cycle_breakdown.get(name)
+            if cycles is not None:
+                print(
+                    f"  {name}: {count} units x {cycles / count:.0f} "
+                    f"cycles/unit = {cycles:.0f} cycles"
+                )
+        for note in execution.notes:
+            print(f"  Note: {note}")
+        print()
+    print("Structural Review (not the scheduling decision):")
+    print(f"  Raw Structural Score: {decision.complexity_score:.1f}")
+    print(f"  Review Threshold: {decision.hardware_adjusted_max_complexity:.2f}")
+    print(f"  Review Ratio: {decision.star_load_indicator:.0%}")
     print(
-        "Hardware-Adjusted Score: "
-        f"{decision.hardware_adjusted_score:.1f} / "
-        f"{decision.hardware_adjusted_max_complexity:.2f}"
+        "  Review Level: "
+        + ("HIGH" if decision.star_load_indicator > 1.0 else "NORMAL")
     )
-    print(f"Raw Complexity Score: {decision.complexity_score:.1f}")
-    print(f"Complexity Load: {decision.star_load_indicator:.0%}")
-    print()
-    print(f"Static Admission: {decision.status.name}")
-    print(f"Reason: {decision.reason}")
+    print(f"  Legacy Rule Result: {decision.status.name}")
+    print(f"  Legacy Rule Note: {decision.reason}")
     print()
     print("Hardware Details:")
-    print(f"  S32K148 Reference Limit: {decision.max_complexity:.2f}")
     print(f"  CPU Score Factor: {decision.hardware_scaling_factor:.2f}")
-    print(f"  Reference Limit Used: {decision.hardware_adjusted_max_complexity:.2f}")
     print(f"  Hardware Model: {decision.hardware_adjustment_mode.name}")
     if decision.warning is not None:
         print(f"  Note: {decision.warning}")
@@ -172,8 +201,8 @@ def print_admission_result(session, decision: AdmissionDecision) -> None:
         )
     print()
     print(
-        "Note: This is a static complexity-based result, not a WCET or "
-        "scheduler guarantee."
+        "Final single-task admission uses A-H board-calibrated mixed-workload "
+        "cycle costs. Structural score is retained only for code-review risk."
     )
     print()
     print("Complexity Breakdown:")
@@ -367,7 +396,18 @@ def run_analyze(args: argparse.Namespace) -> None:
         print(f"STAR rule database failed: {exc}")
         return
 
-    print_admission_result(session, decision)
+    workload_profile = WorkloadCostLoader().load(
+        Path(__file__).parent
+        / "calibration"
+        / "profiles"
+        / "S32K148_workload_costs.json"
+    )
+    execution = evaluate_execution_admission(
+        session.task_profile,
+        session.task_descriptor.period_ms,
+        workload_profile,
+    )
+    print_admission_result(session, decision, execution)
 
 
 def run_analyze_taskset(args: argparse.Namespace) -> None:
@@ -605,11 +645,10 @@ def print_taskset_result(result) -> None:
         f"{'Period':<10}"
         f"{'Deadline':<10}"
         f"{'Priority':<10}"
-        f"{'Raw':<10}"
-        f"{'Adj':<10}"
-        f"{'Adj Max':<12}"
-        f"{'STAR Load':<12}"
-        f"{'Static':<10}"
+        f"{'Struct':<10}"
+        f"{'Est cyc':<12}"
+        f"{'Budget cyc':<14}"
+        f"{'Exec':<10}"
         "Scheduler"
     )
     for task in result.task_results:
@@ -620,10 +659,9 @@ def print_taskset_result(result) -> None:
             f"{task.deadline_ms:<10}"
             f"{task.priority:<10}"
             f"{task.complexity_score:<10.2f}"
-            f"{task.hardware_adjusted_score:<10.2f}"
-            f"{task.rule_max_complexity:<12.2f}"
-            f"{task.task_load:<12.2f}"
-            f"{task.admission_status:<10}"
+            f"{(task.estimated_execution_cycles or 0):<12.0f}"
+            f"{(task.safety_budget_cycles or 0):<14.0f}"
+            f"{task.execution_safety_status:<10}"
             f"{task.scheduler_status}"
         )
         if task.estimated_execution_time_us is not None:
@@ -634,23 +672,28 @@ def print_taskset_result(result) -> None:
             if task.estimated_execution_cycles is not None:
                 print(f"  Estimated Cycles: {task.estimated_execution_cycles:.0f}")
             if task.workload_breakdown:
-                breakdown = ", ".join(
-                    f"{name}={count}"
+                breakdown = "; ".join(
+                    f"{name}={count} -> "
+                    f"{task.cycle_breakdown.get(name, 0):.0f} cycles"
                     for name, count in sorted(task.workload_breakdown.items())
                 )
-                print(f"  Automatically Inferred Workload: {breakdown}")
+                print(f"  Calibrated Mixed Workload: {breakdown}")
             if task.safety_budget_used is not None:
                 print(
                     f"  80% Safety Budget Used: "
                     f"{task.safety_budget_used * 100.0:.2f}% "
                     f"({task.execution_safety_status})"
                 )
+            if task.response_time_us is not None:
+                print(
+                    f"  Priority Response Time: {task.response_time_us:.1f} us / "
+                    f"{task.deadline_ms * 1000:.1f} us deadline"
+                )
         elif task.dynamic_bound_notes:
             print("  Execution Estimate: UNVERIFIED")
             for note in task.dynamic_bound_notes:
                 print(f"    {note}")
     print("-" * 128)
-    print(f"STAR Complexity Load Indicator: {result.total_star_load:.2f}")
     print(f"System Status: {result.system_status}")
     print(f"System Reason: {result.system_reason}")
     print(f"Scheduler Feasibility: {result.scheduler_status}")
@@ -668,8 +711,9 @@ def print_taskset_result(result) -> None:
         for line in result.scheduler_timeline:
             print(f"  {line}")
     print(
-        "This is a static complexity-based risk indicator, not a WCET-based "
-        "scheduler guarantee."
+        "Final status uses A-H board-calibrated mixed-workload execution costs "
+        "and fixed-priority response-time analysis. Structural complexity is "
+        "reported only as a review metric."
     )
 
 

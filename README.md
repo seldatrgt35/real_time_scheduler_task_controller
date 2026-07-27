@@ -223,25 +223,19 @@ python -m task_admission_framework.main analyze \
   --hardware-adjustment calibrated
 ```
 
-The single-task result focuses on the user-facing admission summary:
+The single-task result uses the A-H board-calibrated mixed-workload model:
 
 ```text
-Code Complexity Score: 5.0 / 60.00
-Complexity Load: 8%
-Static Admission: ACCEPT
+Measurement-Calibrated Execution Admission
+Result: PASS
+Estimated Cycles: 8915
+Estimated Execution: 185.7 us
+80% Period Budget: 192000 cycles (4000.0 us)
+Budget Used: 4.64%
 ```
 
-Hardware reference details are still shown separately:
-
-```text
-S32K148 Reference Limit
-Hardware Scaling
-Adjusted Limit
-Hardware Model
-```
-
-The result is a static complexity-based result, not a WCET or scheduler
-guarantee.
+The raw structural score and its legacy threshold are shown only under
+`Structural Review`; they do not determine timing admission.
 
 ## GUI
 
@@ -271,13 +265,12 @@ For a task set:
 5. Repeat for each task.
 6. Press `Analyze All Tasks`.
 
-The task-set GUI output includes each task's own analysis, per-task STAR load
-indicator, total STAR complexity load indicator, static risk status, scheduler
-feasibility status, and reason. Priority does not affect raw complexity and is
-not used as a complexity multiplier. Priority is used only by the separate
-fixed-priority scheduler analyzer when validated execution budgets exist.
+The task-set GUI shows the inferred mixed workload, calibrated cycle subtotal
+for each operation class, estimated execution time, 80% period budget, and
+fixed-priority response time. Priority does not multiply complexity; it affects
+the interference term in response-time analysis.
 
-## Rule Database
+## Legacy Structural Review Database
 
 The bundled S32K148 rule profile is:
 
@@ -285,29 +278,16 @@ The bundled S32K148 rule profile is:
 task_admission_framework/rules/profiles/S32K148_rules.json
 ```
 
-It currently supports these placeholder periods:
+It supports these periods for backward-compatible structural review:
 
 ```text
 5 ms, 10 ms, 20 ms, 25 ms, 50 ms, 100 ms, 200 ms, 250 ms, 500 ms, 1000 ms
 ```
 
-Initial thresholds:
-
-```text
-5 ms     -> max complexity 60
-10 ms    -> max complexity 120
-20 ms    -> max complexity 250
-25 ms    -> max complexity 300
-50 ms    -> max complexity 600
-100 ms   -> max complexity 1200
-200 ms   -> max complexity 2400
-250 ms   -> max complexity 3000
-500 ms   -> max complexity 6000
-1000 ms  -> max complexity 12000
-```
-
-These values are engineering placeholders. They are not experimentally
-calibrated yet and do not represent measured execution time.
+Its thresholds are unvalidated engineering placeholders. They produce only a
+`NORMAL`/`HIGH` code-review indicator. Timing limits are calculated from the
+validated S32K148 profile as
+`period_ms * 1000 * 48 cycles/us * 0.80`.
 
 ## Hardware Adjustment Modes
 
@@ -496,12 +476,11 @@ indicator:
 If a calibrated execution budget exceeds its safety limit -> SYSTEM_REJECT
 Else if any dynamic bound is unknown -> UNVERIFIED
 Else if response-time analysis finds a deadline miss -> NOT_FEASIBLE
-Else if a legacy complexity threshold is exceeded -> FEASIBLE_WITH_STATIC_RISK
 Else -> FEASIBLE
 ```
 
-The complexity score and load indicator remain useful for code-review triage,
-but they do not replace measured WCET or calibrated scheduler analysis.
+Legacy structural thresholds may independently produce a HIGH review indicator,
+but never change a calibrated timing PASS into a scheduling failure.
 
 ## Legacy Complexity-Time Calibration
 

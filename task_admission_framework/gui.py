@@ -9,6 +9,12 @@ from tkinter import StringVar, Text
 from tkinter import ttk
 
 from task_admission_framework.admission.admission_controller import AdmissionController
+from task_admission_framework.calibration.execution_admission import (
+    evaluate_execution_admission,
+)
+from task_admission_framework.calibration.workload_cost_loader import (
+    WorkloadCostLoader,
+)
 from task_admission_framework.pipeline.exceptions import PipelineError
 from task_admission_framework.rules.exceptions import RuleError
 from task_admission_framework.rules.rule_database import RuleDatabase
@@ -270,6 +276,17 @@ class StarGui:
             rules = RuleLoader().load(rules_path)
             rule_database = RuleDatabase(rules)
             decision = AdmissionController().evaluate(session, rule_database)
+            workload_profile = WorkloadCostLoader().load(
+                Path(__file__).parent
+                / "calibration"
+                / "profiles"
+                / "S32K148_workload_costs.json"
+            )
+            execution = evaluate_execution_admission(
+                session.task_profile,
+                period_ms,
+                workload_profile,
+            )
         except PipelineError as exc:
             self._status.set("Analysis failed")
             self._set_output(f"STAR analysis failed: {exc}")
@@ -283,8 +300,8 @@ class StarGui:
             self._set_output(f"STAR failed: {exc}")
             return
 
-        self._status.set(f"Decision: {decision.status.name}")
-        self._set_output(self._format_result(session, decision))
+        self._status.set(f"Execution admission: {execution.status}")
+        self._set_output(self._format_result(session, decision, execution))
 
     def _add_task(self) -> None:
         source_path = Path(self._source_path.get())
@@ -437,7 +454,7 @@ class StarGui:
         )
 
     @staticmethod
-    def _format_result(session, decision) -> str:
+    def _format_result(session, decision, execution) -> str:
         descriptor = session.task_descriptor
         hardware = session.hardware_profile
         lines = [
@@ -449,21 +466,52 @@ class StarGui:
             f"Period: {descriptor.period_ms} ms",
             f"Deadline: {descriptor.deadline_ms} ms",
             "",
+            "Measurement-Calibrated Execution Admission",
+            f"Result: {execution.status}",
             (
-                "Hardware-Adjusted Score: "
-                f"{decision.hardware_adjusted_score:.1f} / "
-                f"{decision.hardware_adjusted_max_complexity:.2f}"
+                f"Estimated Cycles: {execution.estimated_cycles:.0f}"
+                if execution.estimated_cycles is not None
+                else "Estimated Cycles: UNVERIFIED"
             ),
-            f"Raw Complexity Score: {decision.complexity_score:.1f}",
-            f"Complexity Load: {decision.star_load_indicator:.0%}",
+            (
+                f"Estimated Execution: {execution.estimated_execution_us:.1f} us"
+                if execution.estimated_execution_us is not None
+                else "Estimated Execution: UNVERIFIED"
+            ),
+            f"80% Period Budget: {execution.safety_budget_cycles:.0f} cycles "
+            f"({execution.safety_budget_us:.1f} us)",
+            (
+                f"Budget Used: {execution.safety_budget_used:.2%}"
+                if execution.safety_budget_used is not None
+                else "Budget Used: UNVERIFIED"
+            ),
             "",
-            f"Static Admission: {decision.status.name}",
-            f"Reason: {decision.reason}",
+            "Automatically Inferred Mixed Workload:",
+            *[
+                (
+                    f"  {name}: {count} units x "
+                    f"{execution.cycle_breakdown[name] / count:.0f} cycles/unit "
+                    f"= {execution.cycle_breakdown[name]:.0f} cycles"
+                )
+                for name, count in sorted(execution.workload_counts.items())
+                if name in execution.cycle_breakdown
+            ],
+            *([f"  Note: {note}" for note in execution.notes]),
+            "",
+            "Structural Review (not the scheduling decision):",
+            f"  Raw Structural Score: {decision.complexity_score:.1f}",
+            f"  Review Threshold: {decision.hardware_adjusted_max_complexity:.2f}",
+            f"  Review Ratio: {decision.star_load_indicator:.0%}",
+            (
+                "  Review Level: HIGH"
+                if decision.star_load_indicator > 1.0
+                else "  Review Level: NORMAL"
+            ),
+            f"  Legacy Rule Result: {decision.status.name}",
+            f"  Legacy Rule Note: {decision.reason}",
             "",
             "Hardware Details:",
-            f"  S32K148 Reference Limit: {decision.max_complexity:.2f}",
             f"  CPU Score Factor: {decision.hardware_scaling_factor:.2f}",
-            f"  Reference Limit Used: {decision.hardware_adjusted_max_complexity:.2f}",
             f"  Hardware Model: {decision.hardware_adjustment_mode.name}",
             *([f"  Note: {decision.warning}"] if decision.warning is not None else []),
             "  Category Adjustment:",
@@ -477,8 +525,9 @@ class StarGui:
             ],
             "",
             (
-                "Note: This is a static complexity-based result, not a WCET or "
-                "scheduler guarantee."
+                "Final single-task admission above uses A-H board-calibrated "
+                "mixed-workload cycle costs. Structural score is retained only "
+                "for code-review risk."
             ),
             "",
             "Complexity Breakdown:",
@@ -500,11 +549,10 @@ class StarGui:
                 f"{'Period':<10}"
                 f"{'Deadline':<10}"
                 f"{'Priority':<10}"
-                f"{'Raw':<10}"
-                f"{'Adj':<10}"
-                f"{'Adj Max':<12}"
-                f"{'STAR Load':<12}"
-                f"{'Static':<10}"
+                f"{'Struct':<10}"
+                f"{'Est cyc':<12}"
+                f"{'Budget cyc':<14}"
+                f"{'Exec':<10}"
                 "Scheduler"
             ),
         ]
@@ -516,10 +564,9 @@ class StarGui:
                 f"{task.deadline_ms:<10}"
                 f"{task.priority:<10}"
                 f"{task.complexity_score:<10.2f}"
-                f"{task.hardware_adjusted_score:<10.2f}"
-                f"{task.rule_max_complexity:<12.2f}"
-                f"{task.task_load:<12.2f}"
-                f"{task.admission_status:<10}"
+                f"{(task.estimated_execution_cycles or 0):<12.0f}"
+                f"{(task.safety_budget_cycles or 0):<14.0f}"
+                f"{task.execution_safety_status:<10}"
                 f"{task.scheduler_status}"
             )
             if task.workload_breakdown:
@@ -541,14 +588,13 @@ class StarGui:
         lines.extend(
             [
                 "",
-                f"STAR Complexity Load Indicator: {result.total_star_load:.2f}",
                 f"System Status: {result.system_status}",
                 f"System Reason: {result.system_reason}",
                 f"Scheduler Feasibility: {result.scheduler_status}",
                 f"Scheduler Reason: {result.scheduler_reason}",
                 (
-                    "This is a static complexity-based risk indicator, not a "
-                    "WCET-based scheduler guarantee."
+                    "Final status uses A-H board-calibrated execution costs and "
+                    "fixed-priority response-time analysis."
                 ),
                 "",
                 "Individual Task Analysis",
@@ -562,14 +608,44 @@ class StarGui:
                     f"{task.task_name}",
                     f"  Function: {task.entry_function}",
                     f"  Period: {task.period_ms} ms",
-                    f"  Raw Score: {task.complexity_score:.2f}",
-                    f"  Hardware-Adjusted Score: {task.hardware_adjusted_score:.2f}",
-                    f"  Adjusted Max: {task.rule_max_complexity:.2f}",
-                    f"  STAR Load Indicator: {task.task_load:.2f}",
-                    f"  Static Admission: {task.admission_status}",
-                    f"  Reason: {task.admission_reason}",
+                    f"  Priority: {task.priority}",
+                    f"  Structural Score: {task.complexity_score:.2f}",
+                    (
+                        f"  Estimated Execution: "
+                        f"{task.estimated_execution_cycles:.0f} cycles / "
+                        f"{task.estimated_execution_time_us:.1f} us"
+                        if task.estimated_execution_cycles is not None
+                        and task.estimated_execution_time_us is not None
+                        else "  Estimated Execution: UNVERIFIED"
+                    ),
+                    (
+                        f"  80% Period Budget: {task.safety_budget_cycles:.0f} cycles"
+                        if task.safety_budget_cycles is not None
+                        else "  80% Period Budget: unavailable"
+                    ),
+                    (
+                        f"  Budget Used: {task.safety_budget_used:.2%} "
+                        f"({task.execution_safety_status})"
+                        if task.safety_budget_used is not None
+                        else "  Budget Used: UNVERIFIED"
+                    ),
+                    (
+                        f"  Priority Response Time: {task.response_time_us:.1f} us"
+                        if task.response_time_us is not None
+                        else "  Priority Response Time: UNVERIFIED"
+                    ),
                     f"  Scheduler Feasibility: {task.scheduler_status}",
                     f"  Scheduler Reason: {task.scheduler_reason}",
+                    "  Calibrated Cycle Breakdown:",
+                    *[
+                        f"    {name}: {task.workload_breakdown[name]} units -> "
+                        f"{cycles:.0f} cycles"
+                        for name, cycles in sorted(task.cycle_breakdown.items())
+                    ],
+                    "  Structural Review:",
+                    f"    Threshold: {task.rule_max_complexity:.2f}",
+                    f"    Ratio: {task.task_load:.2f}",
+                    f"    Legacy level: {task.admission_status}",
                     "  Complexity Breakdown:",
                 ]
             )

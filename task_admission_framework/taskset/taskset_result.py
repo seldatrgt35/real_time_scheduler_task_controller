@@ -32,6 +32,9 @@ class TaskSetTaskResult:
     safety_budget_used: float | None = None
     execution_safety_status: str = "UNVERIFIED"
     workload_breakdown: dict[str, int] = field(default_factory=dict)
+    cycle_breakdown: dict[str, float] = field(default_factory=dict)
+    safety_budget_cycles: float | None = None
+    response_time_us: float | None = None
     dynamic_bound_notes: list[str] = field(default_factory=list)
     complexity_breakdown: list[str] = field(default_factory=list)
 
