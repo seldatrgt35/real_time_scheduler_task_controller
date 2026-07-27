@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -16,6 +17,9 @@ from task_admission_framework.calibration.execution_time_estimator import (
 )
 from task_admission_framework.calibration.workload_cost_profile import (
     WorkloadCostProfile,
+)
+from task_admission_framework.calibration.workload_cost_loader import (
+    WorkloadCostLoader,
 )
 from task_admission_framework.calibration.workload_execution_estimator import (
     WorkloadExecutionEstimator,
@@ -60,9 +64,27 @@ class TaskSetAnalyzer:
         self._admission_controller = admission_controller or AdmissionController()
         self._calibration_profile = calibration_profile
         self._execution_time_estimator = ExecutionTimeEstimator()
-        self._workload_cost_profile = workload_cost_profile
+        self._workload_cost_profile = (
+            workload_cost_profile
+            if workload_cost_profile is not None
+            else (
+                None
+                if calibration_profile is not None
+                else self._load_default_workload_profile()
+            )
+        )
         self._workload_execution_estimator = WorkloadExecutionEstimator()
         self._simulation_window_ms = simulation_window_ms
+
+    @staticmethod
+    def _load_default_workload_profile() -> WorkloadCostProfile:
+        profile_path = (
+            Path(__file__).parents[1]
+            / "calibration"
+            / "profiles"
+            / "S32K148_workload_costs.json"
+        )
+        return WorkloadCostLoader().load(profile_path)
 
     def analyze(self, entries: list[TaskSetEntry]) -> TaskSetResult:
         if not entries:
@@ -91,7 +113,8 @@ class TaskSetAnalyzer:
                     estimate_source,
                     estimate_note,
                 ) = self._estimate_execution_time(
-                    entry,
+                    session.task_profile,
+                    entry.period_ms,
                     decision.hardware_adjusted_score,
                 )
                 task_results.append(
@@ -115,12 +138,28 @@ class TaskSetAnalyzer:
                         ),
                         scheduler_status=decision.scheduler_status,
                         scheduler_reason=decision.scheduler_reason,
-                        workload_class=entry.workload_class,
-                        work_units=entry.work_units,
+                        workload_class=(
+                            next(iter(session.task_profile.inferred_workload_counts))
+                            if len(session.task_profile.inferred_workload_counts) == 1
+                            else (
+                                "mixed"
+                                if session.task_profile.inferred_workload_counts
+                                else None
+                            )
+                        ),
+                        work_units=sum(
+                            session.task_profile.inferred_workload_counts.values()
+                        ) or None,
                         estimated_execution_cycles=estimated_execution_cycles,
                         execution_estimate_source=estimate_source,
                         safety_budget_used=safety_budget_used,
                         execution_safety_status=execution_safety_status,
+                        workload_breakdown=dict(
+                            session.task_profile.inferred_workload_counts
+                        ),
+                        dynamic_bound_notes=list(
+                            session.task_profile.dynamic_bound_notes
+                        ),
                         complexity_breakdown=[
                             (
                                 f"{item.name}: "
@@ -132,10 +171,6 @@ class TaskSetAnalyzer:
                 )
 
         total_star_load = sum(result.task_load for result in task_results)
-        system_status, system_reason = self._evaluate_system(
-            task_results,
-            total_star_load,
-        )
         scheduler_inputs = [
             SchedulerTaskInput(
                 task_name=result.task_name,
@@ -147,6 +182,22 @@ class TaskSetAnalyzer:
             for result in task_results
         ]
         scheduler_result = FixedPriorityAnalyzer().analyze(scheduler_inputs)
+        scheduler_by_task = {
+            item.task_name: item for item in scheduler_result.task_results
+        }
+        task_results = [
+            replace(
+                result,
+                scheduler_status=scheduler_by_task[result.task_name].status.name,
+                scheduler_reason=scheduler_by_task[result.task_name].reason,
+            )
+            for result in task_results
+        ]
+        system_status, system_reason = self._evaluate_system(
+            task_results,
+            total_star_load,
+            scheduler_result.overall_status.name,
+        )
         simulation_result = SchedulerSimulator().simulate(
             scheduler_inputs,
             self._simulation_window_ms,
@@ -172,7 +223,8 @@ class TaskSetAnalyzer:
 
     def _estimate_execution_time(
         self,
-        entry: TaskSetEntry,
+        task_profile,
+        period_ms: int,
         hardware_adjusted_score: float,
     ) -> tuple[
         float | None,
@@ -183,20 +235,29 @@ class TaskSetAnalyzer:
         str | None,
     ]:
         if self._workload_cost_profile is not None:
-            if entry.workload_class is None or entry.work_units is None:
+            if not task_profile.dynamic_bound_verified:
                 return (
                     None,
                     None,
                     None,
                     "UNVERIFIED",
                     None,
-                    "Dynamic execution estimate unavailable: workload_class and "
-                    "bounded work_units are required.",
+                    "Dynamic execution estimate unavailable: "
+                    + " ".join(task_profile.dynamic_bound_notes),
                 )
-            estimate = self._workload_execution_estimator.estimate(
-                workload_class=entry.workload_class,
-                work_units=entry.work_units,
-                period_ms=entry.period_ms,
+            if not task_profile.inferred_workload_counts:
+                return (
+                    None,
+                    None,
+                    None,
+                    "UNVERIFIED",
+                    None,
+                    "Dynamic execution estimate unavailable: no bounded workload "
+                    "could be inferred from the source.",
+                )
+            estimate = self._workload_execution_estimator.estimate_breakdown(
+                workload_counts=task_profile.inferred_workload_counts,
+                period_ms=period_ms,
                 profile=self._workload_cost_profile,
             )
             return (
@@ -250,7 +311,6 @@ class TaskSetAnalyzer:
                     f"deadline_ms: {entry.deadline_ms}",
                     f"priority: {entry.priority}",
                     "stack_size: 512",
-                    f"criticality: {entry.criticality}",
                     "",
                 ]
             ),
@@ -271,6 +331,7 @@ class TaskSetAnalyzer:
     def _evaluate_system(
         task_results: list[TaskSetTaskResult],
         total_star_load: float,
+        scheduler_status: str,
     ) -> tuple[str, str]:
         if any(
             result.execution_safety_status == "FAIL"
@@ -283,27 +344,35 @@ class TaskSetAnalyzer:
             )
 
         if any(
-            result.admission_status == AdmissionStatus.REJECT.name
+            result.execution_safety_status == "UNVERIFIED"
             for result in task_results
         ):
             return (
-                "SYSTEM_REJECT",
-                "At least one task is individually rejected by admission rules.",
+                "UNVERIFIED",
+                "At least one task has no statically proven dynamic execution "
+                "bound; schedulability cannot be concluded.",
             )
 
-        if total_star_load <= 1.0:
+        if scheduler_status == "NOT_FEASIBLE":
             return (
-                "FEASIBLE",
-                "Total STAR load is less than or equal to 1.0.",
+                "NOT_FEASIBLE",
+                "Fixed-priority response-time analysis found a deadline miss.",
             )
 
-        if total_star_load <= 1.2:
+        has_static_risk = any(
+            result.admission_status == AdmissionStatus.REJECT.name
+            for result in task_results
+        ) or total_star_load > 1.0
+        if has_static_risk:
             return (
-                "RISK",
-                "Total STAR load is above 1.0 but below or equal to 1.2.",
+                "FEASIBLE_WITH_STATIC_RISK",
+                "Calibrated execution budgets are schedulable, but one or more "
+                "legacy structural-complexity indicators exceed their review "
+                "thresholds.",
             )
 
         return (
-            "NOT_FEASIBLE",
-            "Total STAR load is above 1.2.",
+            "FEASIBLE",
+            "Calibrated execution budgets pass their safety limits and the "
+            "fixed-priority task set is schedulable.",
         )

@@ -15,8 +15,8 @@ cycles strongly (`R² = 0.99984`).
 STAR therefore reports two independent concepts:
 
 1. structural complexity, which remains hardware-independent; and
-2. target-calibrated dynamic execution cost, which requires a workload class
-   and a bounded number of work units.
+2. target-calibrated dynamic execution cost, for which STAR automatically
+   infers workload classes and bounded kernel-invocation counts from the AST.
 
 The execution result is an engineering estimate, not a measured or formally
 proven WCET.
@@ -73,7 +73,7 @@ The first STAR workload profile uses:
 
 The estimate is:
 
-`estimated_cycles = bounded_work_units * class_coefficient`
+`estimated_cycles = inferred_bounded_operations * class_coefficient`
 
 `estimated_execution_us = estimated_cycles / 48`
 
@@ -86,12 +86,16 @@ supports.
 
 ## STAR input contract
 
-A task-set entry may provide:
+A task-set entry contains scheduler metadata only:
 
 ```json
 {
-  "workload_class": "can_checksum",
-  "work_units": 48000
+  "name": "CanGateway",
+  "source_file": "can_gateway.c",
+  "entry_function": "CanGatewayTask",
+  "period_ms": 200,
+  "deadline_ms": 200,
+  "priority": 2
 }
 ```
 
@@ -104,13 +108,19 @@ The task-set config selects:
 }
 ```
 
-`work_units` must be a positive, bounded engineering value. It can come from a
-constant loop bound, protocol limit, array bound, generated configuration, or a
-separately proven upper bound. STAR must not invent it.
+Priority is restricted to `1` (LOW), `2` (MEDIUM), or `3` (HIGH).
+`criticality` is not required for scheduler simulation; STAR internally uses
+the existing HIGH rule class until a separate ISO 26262 model is introduced.
 
-If either workload field is absent, dynamic execution estimation is unavailable
-and scheduler feasibility remains unverified. Structural complexity reporting
-continues normally.
+STAR derives kernel classes and counts from constant loop bounds, nested-loop
+products, call structure, operand types, operators, and automotive token
+patterns. Floating-point, fixed-point, CAN/checksum, and integer/control work
+are accumulated separately.
+
+If a `while`/`do` loop, recursion, or data-dependent `for` loop has no
+statically proven maximum, execution estimation is `UNVERIFIED`. The user fixes
+the source by expressing and enforcing a real engineering maximum; the user
+does not manually enter a work-unit number.
 
 ## Limitations
 

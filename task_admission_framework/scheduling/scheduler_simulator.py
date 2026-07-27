@@ -25,6 +25,8 @@ class _Job:
 class SchedulerSimulator:
     """Simulates READY/RUNNING/IDLE behavior for fixed-priority tasks."""
 
+    _TIME_EPSILON_US = 1e-9
+
     def simulate(
         self,
         tasks: list[SchedulerTaskInput],
@@ -79,6 +81,13 @@ class SchedulerSimulator:
                 ready_jobs.remove(selected_job)
                 running_job = selected_job
 
+            if (
+                running_job is not None
+                and running_job.remaining_us <= self._TIME_EPSILON_US
+            ):
+                running_job = None
+                continue
+
             next_release = min(next_release_us.values())
             if running_job is None:
                 interval_end = min(next_release, window_us)
@@ -96,7 +105,7 @@ class SchedulerSimulator:
             self._append_event(events, now_us, interval_end, running_job.task_name, "run")
             now_us = interval_end
 
-            if running_job.remaining_us <= 0:
+            if running_job.remaining_us <= self._TIME_EPSILON_US:
                 if now_us > running_job.deadline_us:
                     deadline_misses.append(
                         f"{running_job.task_name} missed deadline at "
@@ -128,7 +137,10 @@ class SchedulerSimulator:
         sequence_counter: int,
     ) -> int:
         for task in tasks:
-            while next_release_us[task.task_name] <= now_us:
+            while (
+                next_release_us[task.task_name]
+                <= now_us + SchedulerSimulator._TIME_EPSILON_US
+            ):
                 execution_budget_us = task.execution_budget_us
                 if execution_budget_us is None:
                     continue
@@ -188,4 +200,3 @@ class SchedulerSimulator:
                 note=note,
             )
         )
-

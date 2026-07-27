@@ -238,6 +238,30 @@ class CorrectnessRefactorTests(unittest.TestCase):
         self.assertEqual(result.events[0].task_name, "high")
         self.assertTrue(any(event.task_name == "low" for event in result.events))
 
+    def test_scheduler_simulator_progresses_with_fractional_microseconds(self) -> None:
+        result = SchedulerSimulator().simulate(
+            [
+                SchedulerTaskInput(
+                    task_name="fractional",
+                    period_ms=5,
+                    deadline_ms=5,
+                    priority=3,
+                    execution_budget_us=185.72916666666666,
+                ),
+                SchedulerTaskInput(
+                    task_name="background",
+                    period_ms=10,
+                    deadline_ms=10,
+                    priority=1,
+                    execution_budget_us=1078.3333333333333,
+                ),
+            ],
+            simulation_window_ms=100,
+        )
+
+        self.assertEqual(result.status, SchedulerStatus.FEASIBLE)
+        self.assertTrue(result.events)
+
     def test_taskset_flow_remains_functional_with_unverified_scheduler(self) -> None:
         original_temp_directory = taskset_analyzer_module.tempfile.TemporaryDirectory
         taskset_analyzer_module.tempfile.TemporaryDirectory = _FakeTemporaryDirectory
@@ -252,7 +276,6 @@ class CorrectnessRefactorTests(unittest.TestCase):
                         period_ms=5,
                         deadline_ms=5,
                         priority=2,
-                        criticality="HIGH",
                         hardware_profile_file="synthetic.json",
                         rules_file=(
                             "task_admission_framework/rules/profiles/"
@@ -297,6 +320,13 @@ class CorrectnessRefactorTests(unittest.TestCase):
         api_call_counts = api_call_counts or {}
         category_scores = category_scores or {"computation_cost": score}
         return SimpleNamespace(
+            task_profile=SimpleNamespace(
+                inferred_workload_counts={},
+                dynamic_bound_verified=False,
+                dynamic_bound_notes=[
+                    "Synthetic test does not provide a proven dynamic bound."
+                ],
+            ),
             hardware_profile=HardwareProfile(
                 name="SYNTHETIC",
                 vendor="Synthetic",

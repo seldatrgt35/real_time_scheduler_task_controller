@@ -8,6 +8,7 @@ from pathlib import Path
 from clang.cindex import Cursor, CursorKind, TranslationUnit
 
 from task_admission_framework.analyzer.ast_parser import ClangAstParser
+from task_admission_framework.analyzer.dynamic_work import DynamicWorkAnalyzer
 from task_admission_framework.analyzer.visitors import (
     CompositeVisitor,
     ControlFlowVisitor,
@@ -102,6 +103,7 @@ class StaticAnalyzer:
             task_name=root_function.spelling,
             api_usage=self._api_database.empty_usage(),
         )
+        self._dynamic_work_analyzer = DynamicWorkAnalyzer()
         self._traverse_function(
             root_function,
             profile,
@@ -110,6 +112,13 @@ class StaticAnalyzer:
             set(),
         )
         self._augment_function_calls_from_tokens(root_function, profile)
+        dynamic_work = self._dynamic_work_analyzer.infer(
+            root_function,
+            function_definitions,
+        )
+        profile.inferred_workload_counts = dict(dynamic_work.counts)
+        profile.dynamic_bound_verified = dynamic_work.verified
+        profile.dynamic_bound_notes = list(dynamic_work.notes)
         return profile
 
     def _traverse_function(

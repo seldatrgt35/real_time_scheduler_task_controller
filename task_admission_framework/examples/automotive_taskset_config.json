@@ -1,5 +1,5 @@
 {
-  "calibration_profile_file": "task_admission_framework/calibration/profiles/S32K148_complexity_time.json",
+  "workload_cost_profile_file": "task_admission_framework/calibration/profiles/S32K148_workload_costs.json",
   "simulation_window_ms": 1000,
   "tasks": [
     {
@@ -8,8 +8,7 @@
       "entry_function": "StarTask_5ms_BrakeControl",
       "period_ms": 5,
       "deadline_ms": 5,
-      "priority": 5,
-      "criticality": "HIGH",
+      "priority": 3,
       "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
       "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
     },
@@ -19,8 +18,7 @@
       "entry_function": "StarTask_10ms_SteeringAssist",
       "period_ms": 10,
       "deadline_ms": 10,
-      "priority": 5,
-      "criticality": "HIGH",
+      "priority": 3,
       "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
       "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
     },
@@ -30,8 +28,7 @@
       "entry_function": "StarTask_25ms_CrashSafety",
       "period_ms": 25,
       "deadline_ms": 25,
-      "priority": 4,
-      "criticality": "HIGH",
+      "priority": 3,
       "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
       "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
     },
@@ -41,8 +38,7 @@
       "entry_function": "StarTask_50ms_BatteryThermal",
       "period_ms": 50,
       "deadline_ms": 50,
-      "priority": 4,
-      "criticality": "HIGH",
+      "priority": 2,
       "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
       "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
     },
@@ -52,8 +48,7 @@
       "entry_function": "StarTask_100ms_PowertrainManager",
       "period_ms": 100,
       "deadline_ms": 100,
-      "priority": 3,
-      "criticality": "HIGH",
+      "priority": 2,
       "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
       "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
     },
@@ -63,8 +58,7 @@
       "entry_function": "StarTask_200ms_Diagnostics",
       "period_ms": 200,
       "deadline_ms": 200,
-      "priority": 3,
-      "criticality": "HIGH",
+      "priority": 2,
       "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
       "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
     },
@@ -74,8 +68,7 @@
       "entry_function": "StarTask_500ms_NetworkGateway",
       "period_ms": 500,
       "deadline_ms": 500,
-      "priority": 2,
-      "criticality": "HIGH",
+      "priority": 1,
       "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
       "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
     },
@@ -86,7 +79,6 @@
       "period_ms": 1000,
       "deadline_ms": 1000,
       "priority": 1,
-      "criticality": "HIGH",
       "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
       "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
     }

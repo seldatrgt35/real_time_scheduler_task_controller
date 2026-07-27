@@ -1,5 +1,5 @@
 {
-  "calibration_profile_file": "task_admission_framework/calibration/profiles/S32K148_complexity_time.json",
+  "workload_cost_profile_file": "task_admission_framework/calibration/profiles/S32K148_workload_costs.json",
   "simulation_window_ms": 50,
   "tasks": [
     {
@@ -9,7 +9,6 @@
       "period_ms": 5,
       "deadline_ms": 5,
       "priority": 3,
-      "criticality": "HIGH",
       "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
       "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
     },
@@ -20,7 +19,6 @@
       "period_ms": 10,
       "deadline_ms": 10,
       "priority": 2,
-      "criticality": "HIGH",
       "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
       "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
     }

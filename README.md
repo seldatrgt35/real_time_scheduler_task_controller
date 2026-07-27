@@ -3,8 +3,8 @@
 STAR (Static Task Admission for Real-time Systems) is a static analysis and admission-control framework for real-time embedded tasks. It analyzes C/C++ task code before scheduler admission and produces a static, explainable complexity-based decision.
 
 > **S32K148 calibration update:** raw structural complexity is no longer treated
-> as a universal execution-time proxy. For target-specific timing, use the
-> workload cost profile with an explicit `workload_class` and bounded
+> as a universal execution-time proxy. STAR now infers bounded workload classes
+> and counts directly from the AST; users do not enter `workload_class` or
 > `work_units`. See
 > [`docs/S32K148_WORKLOAD_CALIBRATION_REPORT.md`](docs/S32K148_WORKLOAD_CALIBRATION_REPORT.md).
 
@@ -488,19 +488,25 @@ For the full task set:
 TotalSTARComplexityLoadIndicator = sum(TaskLoad_i)
 ```
 
-System status:
+System status is based on calibrated execution estimates and fixed-priority
+schedulability. Structural complexity is reported separately as a review-risk
+indicator:
 
 ```text
-If any individual task is REJECT -> SYSTEM_REJECT
-Else if TotalSTARComplexityLoadIndicator <= 1.0 -> FEASIBLE
-Else if TotalSTARComplexityLoadIndicator <= 1.2 -> RISK
-Else -> NOT_FEASIBLE
+If a calibrated execution budget exceeds its safety limit -> SYSTEM_REJECT
+Else if any dynamic bound is unknown -> UNVERIFIED
+Else if response-time analysis finds a deadline miss -> NOT_FEASIBLE
+Else if a legacy complexity threshold is exceeded -> FEASIBLE_WITH_STATIC_RISK
+Else -> FEASIBLE
 ```
 
-These statuses are kept for backward compatibility as static risk indicators.
-They are not scheduler guarantees.
+The complexity score and load indicator remain useful for code-review triage,
+but they do not replace measured WCET or calibrated scheduler analysis.
 
-## Complexity-Time Calibration
+## Legacy Complexity-Time Calibration
+
+This section documents the backward-compatible interpolation path. New S32K148
+task sets should use automatic AST-derived workload estimation instead.
 
 STAR does not require users to enter execution time for every task. Instead,
 users can provide one task-independent calibration profile that maps complexity
@@ -759,7 +765,6 @@ Example task-set config:
       "period_ms": 5,
       "deadline_ms": 5,
       "priority": 3,
-      "criticality": "HIGH",
       "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
       "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
     },
@@ -770,7 +775,6 @@ Example task-set config:
       "period_ms": 10,
       "deadline_ms": 10,
       "priority": 2,
-      "criticality": "HIGH",
       "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
       "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
     }

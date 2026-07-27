@@ -510,16 +510,11 @@ def load_taskset_entries(config_path: Path):
             period_ms=int(item["period_ms"]),
             deadline_ms=int(item["deadline_ms"]),
             priority=int(item["priority"]),
-            criticality=str(item["criticality"]).upper(),
             hardware_profile_file=resolve_taskset_path(
                 config_path,
                 item["hardware_profile_file"],
             ),
             rules_file=resolve_taskset_path(config_path, item["rules_file"]),
-            workload_class=(
-                str(item["workload_class"]) if "workload_class" in item else None
-            ),
-            work_units=(int(item["work_units"]) if "work_units" in item else None),
         )
         for item in tasks
     ]
@@ -610,7 +605,6 @@ def print_taskset_result(result) -> None:
         f"{'Period':<10}"
         f"{'Deadline':<10}"
         f"{'Priority':<10}"
-        f"{'Criticality':<16}"
         f"{'Raw':<10}"
         f"{'Adj':<10}"
         f"{'Adj Max':<12}"
@@ -625,7 +619,6 @@ def print_taskset_result(result) -> None:
             f"{task.period_ms:<10}"
             f"{task.deadline_ms:<10}"
             f"{task.priority:<10}"
-            f"{task.criticality:<16}"
             f"{task.complexity_score:<10.2f}"
             f"{task.hardware_adjusted_score:<10.2f}"
             f"{task.rule_max_complexity:<12.2f}"
@@ -640,17 +633,22 @@ def print_taskset_result(result) -> None:
             )
             if task.estimated_execution_cycles is not None:
                 print(f"  Estimated Cycles: {task.estimated_execution_cycles:.0f}")
-            if task.workload_class is not None and task.work_units is not None:
-                print(
-                    f"  Dynamic Work: {task.work_units} x "
-                    f"{task.workload_class}"
+            if task.workload_breakdown:
+                breakdown = ", ".join(
+                    f"{name}={count}"
+                    for name, count in sorted(task.workload_breakdown.items())
                 )
+                print(f"  Automatically Inferred Workload: {breakdown}")
             if task.safety_budget_used is not None:
                 print(
                     f"  80% Safety Budget Used: "
                     f"{task.safety_budget_used * 100.0:.2f}% "
                     f"({task.execution_safety_status})"
                 )
+        elif task.dynamic_bound_notes:
+            print("  Execution Estimate: UNVERIFIED")
+            for note in task.dynamic_bound_notes:
+                print(f"    {note}")
     print("-" * 128)
     print(f"STAR Complexity Load Indicator: {result.total_star_load:.2f}")
     print(f"System Status: {result.system_status}")

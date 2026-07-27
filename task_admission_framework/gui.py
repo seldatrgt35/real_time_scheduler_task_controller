@@ -116,7 +116,7 @@ class StarGui:
         ttk.Combobox(
             input_frame,
             textvariable=self._priority,
-            values=("0", "1", "2", "3", "4", "5"),
+            values=("1", "2", "3"),
             state="readonly",
         ).grid(row=4, column=1, columnspan=2, padx=8, pady=4, sticky="ew")
 
@@ -379,7 +379,6 @@ class StarGui:
                     period_ms=int(row["period"]),
                     deadline_ms=int(row["period"]),
                     priority=int(row["priority"]),
-                    criticality=self._DEFAULT_CRITICALITY,
                     hardware_profile_file=self._hardware_path_for(row["hardware"]),
                     rules_file=self._rules_path_for(row["hardware"]),
                 )
@@ -419,7 +418,6 @@ class StarGui:
                     f"deadline_ms: {period_ms}",
                     f"priority: {priority}",
                     f"stack_size: {self._DEFAULT_STACK_SIZE}",
-                    f"criticality: {self._DEFAULT_CRITICALITY}",
                     "",
                 ]
             ),
@@ -450,7 +448,6 @@ class StarGui:
             f"Hardware: {hardware.name}",
             f"Period: {descriptor.period_ms} ms",
             f"Deadline: {descriptor.deadline_ms} ms",
-            f"Criticality: {descriptor.criticality.name}",
             "",
             (
                 "Hardware-Adjusted Score: "
@@ -503,7 +500,6 @@ class StarGui:
                 f"{'Period':<10}"
                 f"{'Deadline':<10}"
                 f"{'Priority':<10}"
-                f"{'Criticality':<16}"
                 f"{'Raw':<10}"
                 f"{'Adj':<10}"
                 f"{'Adj Max':<12}"
@@ -519,7 +515,6 @@ class StarGui:
                 f"{task.period_ms:<10}"
                 f"{task.deadline_ms:<10}"
                 f"{task.priority:<10}"
-                f"{task.criticality:<16}"
                 f"{task.complexity_score:<10.2f}"
                 f"{task.hardware_adjusted_score:<10.2f}"
                 f"{task.rule_max_complexity:<12.2f}"
@@ -527,6 +522,21 @@ class StarGui:
                 f"{task.admission_status:<10}"
                 f"{task.scheduler_status}"
             )
+            if task.workload_breakdown:
+                breakdown = ", ".join(
+                    f"{name}={count}"
+                    for name, count in sorted(task.workload_breakdown.items())
+                )
+                lines.append(f"  Inferred workload: {breakdown}")
+            if task.estimated_execution_time_us is not None:
+                lines.append(
+                    "  Estimated execution: "
+                    f"{task.estimated_execution_time_us:.1f} us; "
+                    f"80% budget: {task.execution_safety_status}"
+                )
+            elif task.dynamic_bound_notes:
+                lines.append("  Estimated execution: UNVERIFIED")
+                lines.extend(f"    {note}" for note in task.dynamic_bound_notes)
 
         lines.extend(
             [

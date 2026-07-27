@@ -3,5 +3,3 @@ entry_function: SensorTask
 period_ms: 10
 deadline_ms: 10
 priority: 3
-stack_size: 512
-criticality: HIGH

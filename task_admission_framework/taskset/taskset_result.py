@@ -31,6 +31,8 @@ class TaskSetTaskResult:
     execution_estimate_source: str | None = None
     safety_budget_used: float | None = None
     execution_safety_status: str = "UNVERIFIED"
+    workload_breakdown: dict[str, int] = field(default_factory=dict)
+    dynamic_bound_notes: list[str] = field(default_factory=list)
     complexity_breakdown: list[str] = field(default_factory=list)
 
 

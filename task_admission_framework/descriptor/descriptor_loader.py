@@ -95,8 +95,10 @@ class YamlDescriptorLoader(DescriptorLoader):
                 period_ms=int(data["period_ms"]),
                 deadline_ms=int(data["deadline_ms"]),
                 priority=int(data["priority"]),
-                stack_size=int(data["stack_size"]),
-                criticality=YamlDescriptorLoader._parse_criticality(data["criticality"]),
+                stack_size=int(data.get("stack_size", 512)),
+                criticality=YamlDescriptorLoader._parse_criticality(
+                    data.get("criticality", "HIGH")
+                ),
             )
         except KeyError as exc:
             raise DescriptorLoadError(f"Missing descriptor field: {exc.args[0]}") from exc

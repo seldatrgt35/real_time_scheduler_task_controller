@@ -27,8 +27,10 @@ class DescriptorValidator:
                 "deadline_ms must be less than or equal to period_ms."
             )
 
-        if descriptor.priority < 0:
-            raise DescriptorValidationError("priority must be greater than or equal to 0.")
+        if descriptor.priority not in {1, 2, 3}:
+            raise DescriptorValidationError(
+                "priority must be one of 1 (LOW), 2 (MEDIUM), or 3 (HIGH)."
+            )
 
         self._validate_positive("stack_size", descriptor.stack_size)
 

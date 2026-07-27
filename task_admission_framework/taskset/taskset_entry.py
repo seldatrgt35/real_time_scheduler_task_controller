@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -16,8 +16,9 @@ class TaskSetEntry:
     period_ms: int
     deadline_ms: int
     priority: int
-    criticality: str
     hardware_profile_file: Path
     rules_file: Path
-    workload_class: str | None = None
-    work_units: int | None = None
+    # Internal compatibility value for the legacy rule database. It is not a
+    # second user-controlled scheduling input; priority is the sole urgency
+    # input in the task-set API.
+    criticality: str = field(default="HIGH", init=False, repr=False)

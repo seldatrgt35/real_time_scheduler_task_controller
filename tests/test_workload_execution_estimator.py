@@ -4,7 +4,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
+from task_admission_framework.analyzer.workload_classifier import WorkloadClassifier
 from task_admission_framework.calibration.workload_cost_loader import (
     WorkloadCostLoader,
 )
@@ -15,7 +17,6 @@ from task_admission_framework.calibration.workload_execution_estimator import (
     WorkloadExecutionEstimator,
 )
 from task_admission_framework.taskset.taskset_analyzer import TaskSetAnalyzer
-from task_admission_framework.taskset.taskset_entry import TaskSetEntry
 
 
 class WorkloadExecutionEstimatorTests(unittest.TestCase):
@@ -28,6 +29,8 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
             validated=True,
             cycles_per_work_unit={
                 "integer_control": 155.0,
+                "fixed_point_filter": 160.0,
+                "can_checksum": 160.0,
                 "floating_point_iir": 600.0,
             },
         )
@@ -47,16 +50,23 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
         self.assertAlmostEqual(estimate.safety_budget_used, 15500.0 / 38400.0)
         self.assertTrue(estimate.passes_safety_limit)
 
-    def test_float_class_uses_separate_calibrated_cost(self) -> None:
-        estimate = WorkloadExecutionEstimator().estimate(
-            workload_class="floating_point_iir",
-            work_units=100,
+    def test_mixed_breakdown_uses_separate_costs(self) -> None:
+        estimate = WorkloadExecutionEstimator().estimate_breakdown(
+            workload_counts={
+                "integer_control": 100,
+                "floating_point_iir": 2,
+            },
             period_ms=1,
             profile=self.profile,
         )
 
-        self.assertEqual(estimate.estimated_cycles, 60000.0)
-        self.assertFalse(estimate.passes_safety_limit)
+        expected_cycles = 100 * 155.0 + 2 * 600.0
+        self.assertEqual(estimate.workload_class, "mixed")
+        self.assertEqual(estimate.estimated_cycles, expected_cycles)
+        self.assertEqual(
+            estimate.workload_breakdown,
+            {"integer_control": 100, "floating_point_iir": 2},
+        )
 
     def test_rejects_unbounded_or_unknown_work(self) -> None:
         with self.assertRaisesRegex(ValueError, "work_units"):
@@ -91,31 +101,32 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
         self.assertEqual(profile.coefficient_for("integer_control"), 155.0)
         self.assertTrue(profile.validated)
 
-    def test_taskset_prefers_dynamic_workload_estimate(self) -> None:
+    def test_taskset_uses_automatic_workload_breakdown(self) -> None:
         analyzer = TaskSetAnalyzer(
             pipeline=object(),
             workload_cost_profile=self.profile,
         )
-        entry = self._entry(workload_class="integer_control", work_units=100)
+        task_profile = SimpleNamespace(
+            dynamic_bound_verified=True,
+            dynamic_bound_notes=[],
+            inferred_workload_counts={
+                "integer_control": 100,
+                "floating_point_iir": 2,
+            },
+        )
 
-        (
-            estimate_us,
-            cycles,
-            load,
-            safety_status,
-            source,
-            note,
-        ) = analyzer._estimate_execution_time(
-            entry,
+        result = analyzer._estimate_execution_time(
+            task_profile,
+            1,
             hardware_adjusted_score=999999.0,
         )
 
-        self.assertAlmostEqual(estimate_us, 15500.0 / 48.0)
-        self.assertEqual(cycles, 15500.0)
-        self.assertAlmostEqual(load, 15500.0 / 38400.0)
-        self.assertEqual(safety_status, "PASS")
-        self.assertEqual(source, "workload_cost_profile")
-        self.assertIn("100 work units", note or "")
+        expected_cycles = 100 * 155.0 + 2 * 600.0
+        self.assertAlmostEqual(result[0] or 0.0, expected_cycles / 48.0)
+        self.assertEqual(result[1], expected_cycles)
+        self.assertEqual(result[3], "PASS")
+        self.assertEqual(result[4], "workload_cost_profile")
+        self.assertIn("100 integer_control", result[5] or "")
 
     def test_taskset_does_not_invent_missing_dynamic_bound(self) -> None:
         analyzer = TaskSetAnalyzer(
@@ -124,31 +135,38 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
         )
 
         result = analyzer._estimate_execution_time(
-            self._entry(workload_class=None, work_units=None),
+            SimpleNamespace(
+                dynamic_bound_verified=False,
+                dynamic_bound_notes=[
+                    "Loop at line 12 has no statically proven bound."
+                ],
+                inferred_workload_counts={},
+            ),
+            1,
             hardware_adjusted_score=50.0,
         )
 
         self.assertEqual(result[:5], (None, None, None, "UNVERIFIED", None))
-        self.assertIn("required", result[5] or "")
+        self.assertIn("line 12", result[5] or "")
 
-    @staticmethod
-    def _entry(
-        *,
-        workload_class: str | None,
-        work_units: int | None,
-    ) -> TaskSetEntry:
-        return TaskSetEntry(
-            name="Task",
-            source_file=Path("task.c"),
-            entry_function="task",
-            period_ms=1,
-            deadline_ms=1,
-            priority=1,
-            criticality="HIGH",
-            hardware_profile_file=Path("hardware.json"),
-            rules_file=Path("rules.json"),
-            workload_class=workload_class,
-            work_units=work_units,
+    def test_automatic_workload_classification(self) -> None:
+        classify = WorkloadClassifier.classify
+
+        self.assertEqual(
+            classify(["output", "=", "a", "*", "b", "+", "0.5f"]),
+            "floating_point_iir",
+        )
+        self.assertEqual(
+            classify(["crc", "^", "payload", "[", "i", "]"]),
+            "can_checksum",
+        )
+        self.assertEqual(
+            classify(["result", "=", "input", "*", "gain", ">>", "8"]),
+            "fixed_point_filter",
+        )
+        self.assertEqual(
+            classify(["if", "(", "speed", ">", "limit", ")"]),
+            "integer_control",
         )
 
 
