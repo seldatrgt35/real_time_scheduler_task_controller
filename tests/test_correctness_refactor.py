@@ -158,6 +158,30 @@ class CorrectnessRefactorTests(unittest.TestCase):
         self.assertEqual(by_name["high"].response_time_us, 500.0)
         self.assertEqual(by_name["low"].response_time_us, 1500.0)
 
+    def test_equal_priority_tasks_interfere_conservatively(self) -> None:
+        result = FixedPriorityAnalyzer().analyze(
+            [
+                SchedulerTaskInput(
+                    task_name="peer_a",
+                    period_ms=5,
+                    deadline_ms=5,
+                    priority=3,
+                    execution_budget_us=200.0,
+                ),
+                SchedulerTaskInput(
+                    task_name="peer_b",
+                    period_ms=10,
+                    deadline_ms=10,
+                    priority=3,
+                    execution_budget_us=300.0,
+                ),
+            ]
+        )
+
+        by_name = {task.task_name: task for task in result.task_results}
+        self.assertEqual(by_name["peer_a"].response_time_us, 500.0)
+        self.assertEqual(by_name["peer_b"].response_time_us, 500.0)
+
     def test_scheduler_unverified_without_execution_budgets(self) -> None:
         result = FixedPriorityAnalyzer().analyze(
             [

@@ -65,7 +65,9 @@ class FixedPriorityAnalyzer:
         blocking_budget_us = task.blocking_budget_us
         deadline_us = task.deadline_ms * 1000.0
         higher_priority_tasks = [
-            other for other in tasks if other.priority > task.priority
+            other
+            for other in tasks
+            if other is not task and other.priority >= task.priority
         ]
 
         response_time_us = execution_budget_us + blocking_budget_us
@@ -134,4 +136,3 @@ class FixedPriorityAnalyzer:
             overall_status=SchedulerStatus.UNVERIFIED,
             reason="Validated execution-budget calibration is missing.",
         )
-

@@ -509,111 +509,60 @@ class StarGui:
     @staticmethod
     def _format_taskset_result(result) -> str:
         lines = [
-            "Task Set Result",
+            "STAR TASK SET RESULT",
             "",
-            (
-                f"{'Task':<18}"
-                f"{'Function':<24}"
-                f"{'Period':<10}"
-                f"{'Deadline':<10}"
-                f"{'Priority':<10}"
-                f"{'Struct':<10}"
-                f"{'Est cyc':<12}"
-                f"{'Budget cyc':<14}"
-                f"{'Exec':<10}"
-                "Scheduler"
-            ),
+            f"FINAL SYSTEM DECISION: "
+            f"{'ACCEPTED' if result.system_status == 'FEASIBLE' else result.system_status}",
+            f"Tasks Analyzed: {len(result.task_results)}",
+            "",
         ]
-        for task in result.task_results:
-            lines.append(
-                f"{task.task_name:<18}"
-                f"{task.entry_function:<24}"
-                f"{task.period_ms:<10}"
-                f"{task.deadline_ms:<10}"
-                f"{task.priority:<10}"
-                f"{task.complexity_score:<10.2f}"
-                f"{(task.estimated_execution_cycles or 0):<12.0f}"
-                f"{(task.safety_budget_cycles or 0):<14.0f}"
-                f"{task.execution_safety_status:<10}"
-                f"{task.scheduler_status}"
+        for index, task in enumerate(result.task_results, start=1):
+            final_decision = (
+                "ACCEPTED"
+                if task.execution_safety_status == "PASS"
+                and task.scheduler_status == "FEASIBLE"
+                else (
+                    "UNVERIFIED"
+                    if "UNVERIFIED"
+                    in {task.execution_safety_status, task.scheduler_status}
+                    else "REJECTED"
+                )
+            )
+            lines.extend(
+                [
+                    f"{index}. {task.task_name}",
+                    f"   Period / Deadline : {task.period_ms} / "
+                    f"{task.deadline_ms} ms",
+                    f"   Priority          : {task.priority}",
+                ]
             )
             if task.workload_breakdown:
                 breakdown = ", ".join(
                     f"{name}={count}"
                     for name, count in sorted(task.workload_breakdown.items())
                 )
-                lines.append(f"  Inferred workload: {breakdown}")
+                lines.append(f"   Workload          : {breakdown}")
             if task.estimated_execution_time_us is not None:
-                lines.append(
-                    "  Estimated execution: "
-                    f"{task.estimated_execution_time_us:.1f} us; "
-                    f"80% budget: {task.execution_safety_status}"
+                lines.extend(
+                    [
+                        f"   Complexity        : "
+                        f"{task.estimated_execution_cycles:.0f} / "
+                        f"{task.safety_budget_cycles:.0f} cycles",
+                        f"   Estimated Time    : "
+                        f"{task.estimated_execution_time_us:.1f} us",
+                        f"   Limit Usage       : {task.safety_budget_used:.2%}",
+                    ]
                 )
             elif task.dynamic_bound_notes:
-                lines.append("  Estimated execution: UNVERIFIED")
-                lines.extend(f"    {note}" for note in task.dynamic_bound_notes)
-
-        lines.extend(
-            [
-                "",
-                f"System Status: {result.system_status}",
-                f"System Reason: {result.system_reason}",
-                f"Scheduler Feasibility: {result.scheduler_status}",
-                f"Scheduler Reason: {result.scheduler_reason}",
-                (
-                    "Final status uses A-H board-calibrated execution costs and "
-                    "fixed-priority response-time analysis."
-                ),
-                "",
-                "Individual Task Analysis",
-            ]
-        )
-
-        for task in result.task_results:
-            lines.extend(
-                [
-                    "",
-                    f"{task.task_name}",
-                    f"  Function: {task.entry_function}",
-                    f"  Period: {task.period_ms} ms",
-                    f"  Priority: {task.priority}",
-                    f"  Structural Score: {task.complexity_score:.2f}",
-                    (
-                        f"  Estimated Execution: "
-                        f"{task.estimated_execution_cycles:.0f} cycles / "
-                        f"{task.estimated_execution_time_us:.1f} us"
-                        if task.estimated_execution_cycles is not None
-                        and task.estimated_execution_time_us is not None
-                        else "  Estimated Execution: UNVERIFIED"
-                    ),
-                    (
-                        f"  80% Period Budget: {task.safety_budget_cycles:.0f} cycles"
-                        if task.safety_budget_cycles is not None
-                        else "  80% Period Budget: unavailable"
-                    ),
-                    (
-                        f"  Budget Used: {task.safety_budget_used:.2%} "
-                        f"({task.execution_safety_status})"
-                        if task.safety_budget_used is not None
-                        else "  Budget Used: UNVERIFIED"
-                    ),
-                    (
-                        f"  Priority Response Time: {task.response_time_us:.1f} us"
-                        if task.response_time_us is not None
-                        else "  Priority Response Time: UNVERIFIED"
-                    ),
-                    f"  Scheduler Feasibility: {task.scheduler_status}",
-                    f"  Scheduler Reason: {task.scheduler_reason}",
-                    "  Calibrated Cycle Breakdown:",
-                    *[
-                        f"    {name}: {task.workload_breakdown[name]} units -> "
-                        f"{cycles:.0f} cycles"
-                        for name, cycles in sorted(task.cycle_breakdown.items())
-                    ],
-                    "  Complexity Breakdown:",
-                ]
+                lines.append("   Complexity        : UNVERIFIED")
+                lines.extend(f"     {note}" for note in task.dynamic_bound_notes)
+            lines.append(
+                f"   Response Time     : "
+                f"{task.response_time_us:.1f} / {task.deadline_ms * 1000:.1f} us"
+                if task.response_time_us is not None
+                else "   Response Time     : UNVERIFIED"
             )
-            lines.extend(f"    {item}" for item in task.complexity_breakdown)
+            lines.extend([f"   DECISION          : {final_decision}", ""])
         return "\n".join(lines)
 
     def _set_output(self, text: str) -> None:
