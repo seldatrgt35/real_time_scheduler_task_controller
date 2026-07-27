@@ -498,36 +498,13 @@ class StarGui:
             ],
             *([f"  Note: {note}" for note in execution.notes]),
             "",
-            "Structural Review (not the scheduling decision):",
-            f"  Raw Structural Score: {decision.complexity_score:.1f}",
-            f"  Review Threshold: {decision.hardware_adjusted_max_complexity:.2f}",
-            f"  Review Ratio: {decision.star_load_indicator:.0%}",
-            (
-                "  Review Level: HIGH"
-                if decision.star_load_indicator > 1.0
-                else "  Review Level: NORMAL"
-            ),
-            f"  Legacy Rule Result: {decision.status.name}",
-            f"  Legacy Rule Note: {decision.reason}",
-            "",
-            "Hardware Details:",
-            f"  CPU Score Factor: {decision.hardware_scaling_factor:.2f}",
-            f"  Hardware Model: {decision.hardware_adjustment_mode.name}",
-            *([f"  Note: {decision.warning}"] if decision.warning is not None else []),
-            "  Category Adjustment:",
-            *[
-                (
-                    f"    {item.category}: "
-                    f"{item.raw_score:.2f} x {item.factor:.2f} = "
-                    f"{item.adjusted_score:.2f}"
-                )
-                for item in decision.hardware_adjustment_breakdown
-            ],
+            "Structural Complexity (informational only):",
+            f"  Raw Score: {decision.complexity_score:.1f}",
             "",
             (
                 "Final single-task admission above uses A-H board-calibrated "
-                "mixed-workload cycle costs. Structural score is retained only "
-                "for code-review risk."
+                "mixed-workload cycle costs. No unvalidated structural threshold "
+                "is used."
             ),
             "",
             "Complexity Breakdown:",
@@ -642,10 +619,6 @@ class StarGui:
                         f"{cycles:.0f} cycles"
                         for name, cycles in sorted(task.cycle_breakdown.items())
                     ],
-                    "  Structural Review:",
-                    f"    Threshold: {task.rule_max_complexity:.2f}",
-                    f"    Ratio: {task.task_load:.2f}",
-                    f"    Legacy level: {task.admission_status}",
                     "  Complexity Breakdown:",
                 ]
             )

@@ -234,8 +234,9 @@ Estimated Execution: 185.7 us
 Budget Used: 4.64%
 ```
 
-The raw structural score and its legacy threshold are shown only under
-`Structural Review`; they do not determine timing admission.
+The raw structural score and breakdown remain informational. Unvalidated legacy
+thresholds, ratios, and ACCEPT/REJECT labels are not shown or used for timing
+admission.
 
 ## GUI
 
@@ -479,8 +480,8 @@ Else if response-time analysis finds a deadline miss -> NOT_FEASIBLE
 Else -> FEASIBLE
 ```
 
-Legacy structural thresholds may independently produce a HIGH review indicator,
-but never change a calibrated timing PASS into a scheduling failure.
+Legacy structural thresholds are not included in the user-facing result and
+never change a calibrated timing PASS into a scheduling failure.
 
 ## Legacy Complexity-Time Calibration
 

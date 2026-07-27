@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from task_admission_framework.admission.admission_controller import AdmissionController
-from task_admission_framework.admission.admission_decision import AdmissionStatus
 from task_admission_framework.calibration.complexity_time_profile import (
     ComplexityTimeProfile,
 )
@@ -202,7 +201,6 @@ class TaskSetAnalyzer:
         ]
         system_status, system_reason = self._evaluate_system(
             task_results,
-            total_star_load,
             scheduler_result.overall_status.name,
         )
         simulation_result = SchedulerSimulator().simulate(
@@ -355,7 +353,6 @@ class TaskSetAnalyzer:
     @staticmethod
     def _evaluate_system(
         task_results: list[TaskSetTaskResult],
-        total_star_load: float,
         scheduler_status: str,
     ) -> tuple[str, str]:
         if any(
@@ -384,20 +381,8 @@ class TaskSetAnalyzer:
                 "Fixed-priority response-time analysis found a deadline miss.",
             )
 
-        has_static_risk = any(
-            result.admission_status == AdmissionStatus.REJECT.name
-            for result in task_results
-        ) or total_star_load > 1.0
-        if has_static_risk:
-            return (
-                "FEASIBLE",
-                "A-H calibrated execution budgets are schedulable. One or more "
-                "structural review indicators are HIGH, but they do not change "
-                "the timing admission decision.",
-            )
-
         return (
             "FEASIBLE",
-            "Calibrated execution budgets pass their safety limits and the "
+            "A-H calibrated execution budgets pass their period limits and the "
             "fixed-priority task set is schedulable.",
         )

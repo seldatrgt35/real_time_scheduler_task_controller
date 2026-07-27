@@ -150,7 +150,6 @@ def print_admission_result(session, decision: AdmissionDecision, execution=None)
     print(f"Hardware: {hardware.name}")
     print(f"Period: {descriptor.period_ms} ms")
     print(f"Deadline: {descriptor.deadline_ms} ms")
-    print(f"Criticality: {descriptor.criticality.name}")
     print()
     if execution is not None:
         print("Measurement-Calibrated Execution Admission")
@@ -177,32 +176,12 @@ def print_admission_result(session, decision: AdmissionDecision, execution=None)
         for note in execution.notes:
             print(f"  Note: {note}")
         print()
-    print("Structural Review (not the scheduling decision):")
-    print(f"  Raw Structural Score: {decision.complexity_score:.1f}")
-    print(f"  Review Threshold: {decision.hardware_adjusted_max_complexity:.2f}")
-    print(f"  Review Ratio: {decision.star_load_indicator:.0%}")
-    print(
-        "  Review Level: "
-        + ("HIGH" if decision.star_load_indicator > 1.0 else "NORMAL")
-    )
-    print(f"  Legacy Rule Result: {decision.status.name}")
-    print(f"  Legacy Rule Note: {decision.reason}")
-    print()
-    print("Hardware Details:")
-    print(f"  CPU Score Factor: {decision.hardware_scaling_factor:.2f}")
-    print(f"  Hardware Model: {decision.hardware_adjustment_mode.name}")
-    if decision.warning is not None:
-        print(f"  Note: {decision.warning}")
-    print("  Category Adjustment:")
-    for item in decision.hardware_adjustment_breakdown:
-        print(
-            f"    {item.category}: "
-            f"{item.raw_score:.2f} x {item.factor:.2f} = {item.adjusted_score:.2f}"
-        )
+    print("Structural Complexity (informational only):")
+    print(f"  Raw Score: {decision.complexity_score:.1f}")
     print()
     print(
         "Final single-task admission uses A-H board-calibrated mixed-workload "
-        "cycle costs. Structural score is retained only for code-review risk."
+        "cycle costs. No unvalidated structural threshold is used."
     )
     print()
     print("Complexity Breakdown:")
