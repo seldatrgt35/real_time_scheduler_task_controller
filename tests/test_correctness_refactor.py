@@ -293,6 +293,44 @@ class CorrectnessRefactorTests(unittest.TestCase):
         self.assertEqual(result.status, SchedulerStatus.FEASIBLE)
         self.assertTrue(result.events)
 
+    def test_scheduler_simulator_reports_overload_deadline_misses(self) -> None:
+        result = SchedulerSimulator().simulate(
+            [
+                SchedulerTaskInput(
+                    task_name="overload_a",
+                    period_ms=5,
+                    deadline_ms=5,
+                    priority=3,
+                    execution_budget_us=3000.0,
+                ),
+                SchedulerTaskInput(
+                    task_name="overload_b",
+                    period_ms=5,
+                    deadline_ms=5,
+                    priority=3,
+                    execution_budget_us=3000.0,
+                ),
+            ],
+            simulation_window_ms=20,
+        )
+
+        self.assertEqual(result.status, SchedulerStatus.NOT_FEASIBLE)
+        self.assertTrue(result.deadline_misses)
+        self.assertGreater(sum(item.deadline_misses for item in result.task_stats), 0)
+
+    def test_scheduler_simulator_rejects_duplicate_instance_names(self) -> None:
+        task = SchedulerTaskInput(
+            task_name="duplicate",
+            period_ms=5,
+            deadline_ms=5,
+            priority=3,
+            execution_budget_us=100.0,
+        )
+        result = SchedulerSimulator().simulate([task, task], simulation_window_ms=20)
+
+        self.assertEqual(result.status, SchedulerStatus.UNVERIFIED)
+        self.assertIn("unique", result.reason)
+
     def test_taskset_flow_remains_functional_with_unverified_scheduler(self) -> None:
         original_temp_directory = taskset_analyzer_module.tempfile.TemporaryDirectory
         taskset_analyzer_module.tempfile.TemporaryDirectory = _FakeTemporaryDirectory

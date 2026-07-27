@@ -322,8 +322,16 @@ class StarGui:
             self._show_error("Please enter a method or function name.")
             return
 
+        instance_number = (
+            sum(row["function"] == entry_function for row in self._task_rows) + 1
+        )
+        task_name = (
+            entry_function
+            if instance_number == 1
+            else f"{entry_function}#{instance_number}"
+        )
         row = {
-            "task": entry_function,
+            "task": task_name,
             "function": entry_function,
             "period": period_ms,
             "priority": priority,
@@ -343,7 +351,7 @@ class StarGui:
                 row["source"],
             ),
         )
-        self._status.set(f"Task added: {entry_function}")
+        self._status.set(f"Task added: {task_name}")
 
     def _remove_task(self) -> None:
         selected_items = self._task_table.selection()

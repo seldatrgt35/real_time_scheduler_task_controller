@@ -21,6 +21,7 @@ class _Job:
     priority: int
     remaining_us: float
     sequence: int
+    deadline_reported: bool = False
 
 
 class SchedulerSimulator:
@@ -40,6 +41,13 @@ class SchedulerSimulator:
                 events=[],
                 status=SchedulerStatus.UNVERIFIED,
                 reason="No scheduler tasks were provided.",
+            )
+        task_names = [task.task_name for task in tasks]
+        if len(task_names) != len(set(task_names)):
+            return SchedulerSimulationResult(
+                events=[],
+                status=SchedulerStatus.UNVERIFIED,
+                reason="Scheduler task instance names must be unique.",
             )
 
         if any(task.execution_budget_us is None for task in tasks):
@@ -73,6 +81,13 @@ class SchedulerSimulator:
                 ready_jobs,
                 now_us,
                 sequence_counter,
+                stats,
+            )
+            self._record_overdue_jobs(
+                ready_jobs,
+                running_job,
+                now_us,
+                deadline_misses,
                 stats,
             )
 
@@ -140,7 +155,12 @@ class SchedulerSimulator:
                     task_stats.max_wait_time_us,
                     max(0.0, response_time_us - execution_budget_us),
                 )
-                if now_us > running_job.deadline_us:
+                if (
+                    not running_job.deadline_reported
+                    and now_us
+                    > running_job.deadline_us + self._TIME_EPSILON_US
+                ):
+                    running_job.deadline_reported = True
                     task_stats.deadline_misses += 1
                     deadline_misses.append(
                         f"{running_job.task_name} missed deadline at "
@@ -200,6 +220,29 @@ class SchedulerSimulator:
                 sequence_counter += 1
                 next_release_us[task.task_name] += task.period_ms * 1000.0
         return sequence_counter
+
+    @staticmethod
+    def _record_overdue_jobs(
+        ready_jobs: list[_Job],
+        running_job: _Job | None,
+        now_us: float,
+        deadline_misses: list[str],
+        stats: dict[str, SchedulerTaskSimulationStats],
+    ) -> None:
+        jobs = list(ready_jobs)
+        if running_job is not None:
+            jobs.append(running_job)
+        for job in jobs:
+            if (
+                not job.deadline_reported
+                and now_us > job.deadline_us + SchedulerSimulator._TIME_EPSILON_US
+            ):
+                job.deadline_reported = True
+                stats[job.task_name].deadline_misses += 1
+                deadline_misses.append(
+                    f"{job.task_name} missed deadline at "
+                    f"{now_us / 1000.0:.3f} ms."
+                )
 
     @staticmethod
     def _select_job(

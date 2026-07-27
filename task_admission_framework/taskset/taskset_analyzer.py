@@ -88,6 +88,12 @@ class TaskSetAnalyzer:
     def analyze(self, entries: list[TaskSetEntry]) -> TaskSetResult:
         if not entries:
             raise TaskSetError("Task set must contain at least one task.")
+        task_names = [entry.name for entry in entries]
+        if len(task_names) != len(set(task_names)):
+            raise TaskSetError(
+                "Task instance names must be unique. Use separate names such as "
+                "VehicleHealth, VehicleHealth#2, and VehicleHealth#3."
+            )
 
         task_results: list[TaskSetTaskResult] = []
 
