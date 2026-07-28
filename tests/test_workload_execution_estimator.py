@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -27,18 +28,17 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
         self.profile = WorkloadCostProfile(
             profile_id="test",
             reference_hardware="S32K148",
-            clock_frequency_mhz=48.0,
             safety_limit_ratio=0.8,
             validated=True,
-            cycles_per_work_unit={
-                "integer_control": 155.0,
-                "fixed_point_filter": 160.0,
-                "can_checksum": 160.0,
-                "floating_point_iir": 600.0,
+            execution_time_us_per_work_unit={
+                "integer_control": 3.0,
+                "fixed_point_filter": 4.0,
+                "can_checksum": 5.0,
+                "floating_point_iir": 10.0,
             },
         )
 
-    def test_estimate_reports_cycles_time_and_safety_load(self) -> None:
+    def test_estimate_reports_time_and_safety_load(self) -> None:
         estimate = WorkloadExecutionEstimator().estimate(
             workload_class="integer-control",
             work_units=100,
@@ -47,10 +47,9 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
         )
 
         self.assertEqual(estimate.workload_class, "integer_control")
-        self.assertEqual(estimate.estimated_cycles, 15500.0)
-        self.assertAlmostEqual(estimate.estimated_execution_us, 322.9166667)
-        self.assertEqual(estimate.safety_budget_cycles, 38400.0)
-        self.assertAlmostEqual(estimate.safety_budget_used, 15500.0 / 38400.0)
+        self.assertEqual(estimate.estimated_execution_us, 300.0)
+        self.assertEqual(estimate.safety_budget_us, 800.0)
+        self.assertAlmostEqual(estimate.safety_budget_used, 300.0 / 800.0)
         self.assertTrue(estimate.passes_safety_limit)
 
     def test_mixed_breakdown_uses_separate_costs(self) -> None:
@@ -63,21 +62,22 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
             profile=self.profile,
         )
 
-        expected_cycles = 100 * 155.0 + 2 * 600.0
+        expected_us = 100 * 3.0 + 2 * 10.0
         self.assertEqual(estimate.workload_class, "mixed")
-        self.assertEqual(estimate.estimated_cycles, expected_cycles)
+        self.assertEqual(estimate.estimated_execution_us, expected_us)
         self.assertEqual(
             estimate.workload_breakdown,
             {"integer_control": 100, "floating_point_iir": 2},
         )
         self.assertEqual(
-            estimate.cycle_breakdown,
-            {"integer_control": 15500.0, "floating_point_iir": 1200.0},
+            estimate.time_breakdown_us,
+            {"integer_control": 300.0, "floating_point_iir": 20.0},
         )
 
     def test_mixed_admission_uses_measured_period_limit(self) -> None:
         result = evaluate_execution_admission(
             SimpleNamespace(
+                task_name="UnknownTask",
                 dynamic_bound_verified=True,
                 dynamic_bound_notes=[],
                 inferred_workload_counts={
@@ -92,10 +92,10 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
         )
 
         self.assertEqual(result.status, "PASS")
-        self.assertEqual(result.estimated_cycles, 32700.0)
-        self.assertEqual(result.safety_budget_cycles, 192000.0)
-        self.assertAlmostEqual(result.estimated_execution_us or 0.0, 681.25)
-        self.assertAlmostEqual(result.safety_budget_used or 0.0, 32700 / 192000)
+        expected_us = 100 * 3 + 50 * 4 + 10 * 10 + 20 * 5
+        self.assertEqual(result.safety_budget_us, 4000.0)
+        self.assertAlmostEqual(result.estimated_execution_us or 0.0, expected_us)
+        self.assertAlmostEqual(result.safety_budget_used or 0.0, expected_us / 4000)
 
     def test_rejects_unbounded_or_unknown_work(self) -> None:
         with self.assertRaisesRegex(ValueError, "work_units"):
@@ -117,18 +117,64 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
         payload = {
             "profile_id": "test",
             "reference_hardware": "S32K148",
-            "clock_frequency_mhz": 48,
             "safety_limit_ratio": 0.8,
             "validated": True,
-            "cycles_per_work_unit": {"integer-control": 155},
+            "intercept_us": 7.0,
+            "estimate_margin_ratio": 0.1,
+            "execution_time_us_per_work_unit": {"integer-control": 3.0},
         }
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "profile.json"
             path.write_text(json.dumps(payload), encoding="utf-8")
             profile = WorkloadCostLoader().load(path)
 
-        self.assertEqual(profile.coefficient_for("integer_control"), 155.0)
+        self.assertEqual(profile.coefficient_for("integer_control"), 3.0)
+        self.assertEqual(profile.intercept_us, 7.0)
+        self.assertEqual(profile.estimate_margin_ratio, 0.1)
         self.assertTrue(profile.validated)
+
+    def test_estimate_applies_intercept_and_engineering_margin(self) -> None:
+        profile = replace(
+            self.profile,
+            intercept_us=7.0,
+            estimate_margin_ratio=0.1,
+        )
+
+        estimate = WorkloadExecutionEstimator().estimate_breakdown(
+            workload_counts={"integer_control": 10},
+            period_ms=1,
+            profile=profile,
+        )
+
+        self.assertAlmostEqual(
+            estimate.estimated_execution_us,
+            (7.0 + 10 * 3.0) * 1.1,
+        )
+        self.assertIn("10% engineering margin", estimate.note)
+
+    def test_s32k148_profile_reproduces_board_validated_brake_model(self) -> None:
+        profile_path = (
+            Path(__file__).parents[1]
+            / "task_admission_framework"
+            / "calibration"
+            / "profiles"
+            / "S32K148_workload_costs.json"
+        )
+        profile = WorkloadCostLoader().load(profile_path)
+
+        estimate = WorkloadExecutionEstimator().estimate_breakdown(
+            workload_counts={
+                "integer_control": 48,
+                "fixed_point_filter": 96,
+                "floating_point_iir": 12,
+            },
+            period_ms=10,
+            profile=profile,
+        )
+
+        self.assertTrue(profile.validated)
+        self.assertAlmostEqual(estimate.estimated_execution_us, 238.3788, places=3)
+        self.assertTrue(estimate.passes_safety_limit)
 
     def test_taskset_uses_automatic_workload_breakdown(self) -> None:
         analyzer = TaskSetAnalyzer(
@@ -136,6 +182,7 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
             workload_cost_profile=self.profile,
         )
         task_profile = SimpleNamespace(
+            task_name="UnknownTask",
             dynamic_bound_verified=True,
             dynamic_bound_notes=[],
             inferred_workload_counts={
@@ -150,12 +197,11 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
             hardware_adjusted_score=999999.0,
         )
 
-        expected_cycles = 100 * 155.0 + 2 * 600.0
-        self.assertAlmostEqual(result[0] or 0.0, expected_cycles / 48.0)
-        self.assertEqual(result[1], expected_cycles)
-        self.assertEqual(result[3], "PASS")
-        self.assertEqual(result[4], "workload_cost_profile")
-        self.assertIn("100 integer_control", result[5] or "")
+        expected_us = 100 * 3.0 + 2 * 10.0
+        self.assertAlmostEqual(result[0] or 0.0, expected_us)
+        self.assertEqual(result[2], "PASS")
+        self.assertEqual(result[3], "static_feature_time_model")
+        self.assertIn("100 integer_control", result[4] or "")
 
     def test_taskset_does_not_invent_missing_dynamic_bound(self) -> None:
         analyzer = TaskSetAnalyzer(
@@ -165,6 +211,7 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
 
         result = analyzer._estimate_execution_time(
             SimpleNamespace(
+                task_name="UnknownTask",
                 dynamic_bound_verified=False,
                 dynamic_bound_notes=[
                     "Loop at line 12 has no statically proven bound."
@@ -175,8 +222,27 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
             hardware_adjusted_score=50.0,
         )
 
-        self.assertEqual(result[:5], (None, None, None, "UNVERIFIED", None))
-        self.assertIn("line 12", result[5] or "")
+        self.assertEqual(result[:4], (None, None, "UNVERIFIED", None))
+        self.assertIn("line 12", result[4] or "")
+
+    def test_unvalidated_feature_model_cannot_accept_task(self) -> None:
+        analyzer = TaskSetAnalyzer(
+            pipeline=object(),
+            workload_cost_profile=replace(self.profile, validated=False),
+        )
+        task_profile = SimpleNamespace(
+            task_name="UnknownTask",
+            dynamic_bound_verified=True,
+            dynamic_bound_notes=[],
+            inferred_workload_counts={"integer_control": 10},
+        )
+
+        result = analyzer._estimate_execution_time(task_profile, 1, 0.0)
+
+        self.assertEqual(result[0], 30.0)
+        self.assertEqual(result[2], "UNVERIFIED")
+        self.assertEqual(result[3], "unvalidated_static_feature_time_model")
+
 
     def test_automatic_workload_classification(self) -> None:
         classify = WorkloadClassifier.classify

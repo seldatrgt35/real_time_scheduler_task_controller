@@ -29,6 +29,7 @@ class TaskProfile:
     floating_point_usage: bool = False
     floating_point_operations: int = 0
     inferred_workload_counts: dict[str, int] = field(default_factory=dict)
+    inferred_operation_counts: dict[str, int] = field(default_factory=dict)
     dynamic_bound_verified: bool = False
     dynamic_bound_notes: list[str] = field(default_factory=list)
     # Blocking calls are stored per occurrence. Repeated calls to the same API

@@ -478,24 +478,18 @@ class StarGui:
             f"Period: {descriptor.period_ms} ms",
             f"Deadline: {descriptor.deadline_ms} ms",
             "",
-            "Measured Complexity Model:",
+            "Execution Time Model:",
             *[
                 (
                     f"  {name}: {count} x "
-                    f"{execution.cycle_breakdown[name] / count:.0f} cycles/unit "
-                    f"= {execution.cycle_breakdown[name]:.0f} cycles"
+                    f"{execution.time_breakdown_us[name] / count:.3f} us/unit "
+                    f"= {execution.time_breakdown_us[name]:.1f} us"
                 )
                 for name, count in sorted(execution.workload_counts.items())
-                if name in execution.cycle_breakdown
+                if name in execution.time_breakdown_us
             ],
             "",
-            (
-                f"Calculated Complexity: {execution.estimated_cycles:.0f} cycles"
-                if execution.estimated_cycles is not None
-                else "Calculated Complexity: UNVERIFIED"
-            ),
-            f"Period Limit: {execution.safety_budget_cycles:.0f} cycles "
-            f"({execution.safety_budget_us:.1f} us)",
+            f"Period Limit: {execution.safety_budget_us:.1f} us",
             (
                 f"Estimated Time: {execution.estimated_execution_us:.1f} us"
                 if execution.estimated_execution_us is not None
@@ -509,7 +503,7 @@ class StarGui:
             "",
             f"FINAL DECISION: {final_decision}",
         ]
-        if execution.status == "UNVERIFIED":
+        if execution.notes:
             lines.append("Reason:")
             lines.extend(f"  {note}" for note in execution.notes)
         return "\n".join(lines)
@@ -551,13 +545,18 @@ class StarGui:
                 )
                 lines.append(f"   Workload          : {breakdown}")
             if task.estimated_execution_time_us is not None:
+                source_label = (
+                    "STATIC ESTIMATE"
+                    if task.execution_safety_status != "UNVERIFIED"
+                    else "UNVERIFIED STATIC ESTIMATE"
+                )
                 lines.extend(
                     [
-                        f"   Complexity        : "
-                        f"{task.estimated_execution_cycles:.0f} / "
-                        f"{task.safety_budget_cycles:.0f} cycles",
-                        f"   Estimated Time    : "
+                        f"   Time Source       : {source_label}",
+                        f"   Execution Time    : "
                         f"{task.estimated_execution_time_us:.1f} us",
+                        f"   Period Limit      : "
+                        f"{task.safety_budget_us:.1f} us",
                         f"   Limit Usage       : {task.safety_budget_used:.2%}",
                     ]
                 )

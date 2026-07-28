@@ -21,3 +21,4 @@ class FeatureVector:
     dynamic_memory_calls: int
     recursion_detected: bool
     api_call_counts: dict[str, int] = field(default_factory=dict)
+    dynamic_operation_counts: dict[str, int] = field(default_factory=dict)

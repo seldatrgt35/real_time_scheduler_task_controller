@@ -9,6 +9,9 @@ from clang.cindex import Cursor, CursorKind, TranslationUnit
 
 from task_admission_framework.analyzer.ast_parser import ClangAstParser
 from task_admission_framework.analyzer.dynamic_work import DynamicWorkAnalyzer
+from task_admission_framework.analyzer.dynamic_operations import (
+    DynamicOperationAnalyzer,
+)
 from task_admission_framework.analyzer.visitors import (
     CompositeVisitor,
     ControlFlowVisitor,
@@ -116,9 +119,18 @@ class StaticAnalyzer:
             root_function,
             function_definitions,
         )
+        dynamic_operations = DynamicOperationAnalyzer().infer(
+            root_function,
+            function_definitions,
+        )
         profile.inferred_workload_counts = dict(dynamic_work.counts)
-        profile.dynamic_bound_verified = dynamic_work.verified
-        profile.dynamic_bound_notes = list(dynamic_work.notes)
+        profile.inferred_operation_counts = dict(dynamic_operations.counts)
+        profile.dynamic_bound_verified = (
+            dynamic_work.verified and dynamic_operations.verified
+        )
+        profile.dynamic_bound_notes = list(
+            dict.fromkeys([*dynamic_work.notes, *dynamic_operations.notes])
+        )
         return profile
 
     def _traverse_function(

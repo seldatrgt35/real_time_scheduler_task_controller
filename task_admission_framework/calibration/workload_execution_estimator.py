@@ -15,15 +15,14 @@ class WorkloadExecutionEstimate:
 
     workload_class: str
     work_units: int
-    cycles_per_work_unit: float
-    estimated_cycles: float
+    execution_time_us_per_work_unit: float
     estimated_execution_us: float
-    safety_budget_cycles: float
+    safety_budget_us: float
     safety_budget_used: float
     passes_safety_limit: bool
     note: str
     workload_breakdown: dict[str, int] | None = None
-    cycle_breakdown: dict[str, float] | None = None
+    time_breakdown_us: dict[str, float] | None = None
 
 
 class WorkloadExecutionEstimator:
@@ -43,34 +42,33 @@ class WorkloadExecutionEstimator:
             raise ValueError("period_ms must be greater than 0.")
 
         coefficient = profile.coefficient_for(workload_class)
-        estimated_cycles = work_units * coefficient
-        cycles_per_us = profile.clock_frequency_mhz
-        estimated_us = estimated_cycles / cycles_per_us
-        period_cycles = period_ms * 1000.0 * cycles_per_us
-        safety_budget = period_cycles * profile.safety_limit_ratio
-        budget_used = estimated_cycles / safety_budget
+        model_us = profile.intercept_us + work_units * coefficient
+        estimated_us = model_us * (1.0 + profile.estimate_margin_ratio)
+        safety_budget = period_ms * 1000.0 * profile.safety_limit_ratio
+        budget_used = estimated_us / safety_budget
 
         validation = "validated" if profile.validated else "unvalidated"
         note = (
             f"{validation} workload estimate: {work_units} work units x "
-            f"{coefficient:g} cycles/unit on {profile.reference_hardware}. "
-            "This is a calibrated engineering estimate, not a measured WCET."
+            f"{coefficient:g} us/unit + {profile.intercept_us:g} us intercept "
+            f"with {profile.estimate_margin_ratio:.0%} margin on "
+            f"{profile.reference_hardware}. This is a calibrated engineering "
+            "estimate, not a measured WCET."
         )
         return WorkloadExecutionEstimate(
             workload_class=workload_class.strip().lower().replace("-", "_"),
             work_units=work_units,
-            cycles_per_work_unit=coefficient,
-            estimated_cycles=estimated_cycles,
+            execution_time_us_per_work_unit=coefficient,
             estimated_execution_us=estimated_us,
-            safety_budget_cycles=safety_budget,
+            safety_budget_us=safety_budget,
             safety_budget_used=budget_used,
-            passes_safety_limit=estimated_cycles <= safety_budget,
+            passes_safety_limit=estimated_us <= safety_budget,
             note=note,
             workload_breakdown={
                 workload_class.strip().lower().replace("-", "_"): work_units
             },
-            cycle_breakdown={
-                workload_class.strip().lower().replace("-", "_"): estimated_cycles
+            time_breakdown_us={
+                workload_class.strip().lower().replace("-", "_"): estimated_us
             },
         )
 
@@ -89,9 +87,9 @@ class WorkloadExecutionEstimator:
             raise ValueError("period_ms must be greater than 0.")
 
         normalized: dict[str, int] = {}
-        estimated_cycles = 0.0
+        model_us = profile.intercept_us
         details: list[str] = []
-        cycle_breakdown: dict[str, float] = {}
+        time_breakdown: dict[str, float] = {}
         for raw_class, raw_count in workload_counts.items():
             count = int(raw_count)
             if count <= 0:
@@ -100,37 +98,36 @@ class WorkloadExecutionEstimator:
             coefficient = profile.coefficient_for(workload_class)
             normalized[workload_class] = normalized.get(workload_class, 0) + count
             subtotal = count * coefficient
-            estimated_cycles += subtotal
-            cycle_breakdown[workload_class] = (
-                cycle_breakdown.get(workload_class, 0.0) + subtotal
+            model_us += subtotal
+            time_breakdown[workload_class] = (
+                time_breakdown.get(workload_class, 0.0) + subtotal
             )
             details.append(f"{count} {workload_class} x {coefficient:g}")
 
-        cycles_per_us = profile.clock_frequency_mhz
-        estimated_us = estimated_cycles / cycles_per_us
-        period_cycles = period_ms * 1000.0 * cycles_per_us
-        safety_budget = period_cycles * profile.safety_limit_ratio
-        budget_used = estimated_cycles / safety_budget
+        estimated_us = model_us * (1.0 + profile.estimate_margin_ratio)
+        safety_budget = period_ms * 1000.0 * profile.safety_limit_ratio
+        budget_used = estimated_us / safety_budget
         total_units = sum(normalized.values())
-        effective_coefficient = estimated_cycles / total_units
+        effective_coefficient = estimated_us / total_units
         validation = "validated" if profile.validated else "unvalidated"
         note = (
             f"{validation} automatic workload estimate: "
             + "; ".join(details)
-            + f" on {profile.reference_hardware}. "
+            + f"; {profile.intercept_us:g} us intercept; "
+            + f"{profile.estimate_margin_ratio:.0%} engineering margin on "
+            + f"{profile.reference_hardware}. "
             "Loop bounds and workload classes were inferred from source. "
             "This is a calibrated engineering estimate, not a measured WCET."
         )
         return WorkloadExecutionEstimate(
             workload_class="mixed" if len(normalized) > 1 else next(iter(normalized)),
             work_units=total_units,
-            cycles_per_work_unit=effective_coefficient,
-            estimated_cycles=estimated_cycles,
+            execution_time_us_per_work_unit=effective_coefficient,
             estimated_execution_us=estimated_us,
-            safety_budget_cycles=safety_budget,
+            safety_budget_us=safety_budget,
             safety_budget_used=budget_used,
-            passes_safety_limit=estimated_cycles <= safety_budget,
+            passes_safety_limit=estimated_us <= safety_budget,
             note=note,
             workload_breakdown=normalized,
-            cycle_breakdown=cycle_breakdown,
+            time_breakdown_us=time_breakdown,
         )

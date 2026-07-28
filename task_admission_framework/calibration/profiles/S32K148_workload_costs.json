@@ -1,14 +1,15 @@
 {
-  "profile_id": "s32k148_workload_cost_v1",
+  "profile_id": "s32k148_automotive_execution_time_us_v3",
   "reference_hardware": "S32K148",
-  "clock_frequency_mhz": 48.0,
   "safety_limit_ratio": 0.8,
   "validated": true,
-  "source": "S32K148 board calibration Tasks A-H, STAR benchmark project, 2026-07",
-  "cycles_per_work_unit": {
-    "integer_control": 155.0,
-    "fixed_point_filter": 160.0,
-    "can_checksum": 160.0,
-    "floating_point_iir": 600.0
+  "intercept_us": 6.9643831672,
+  "estimate_margin_ratio": 0.10,
+  "source": "Resettable isolated S32K148 calibration: 48 mixed training points, 16 held-out mixed points, two automotive coefficient-calibration tasks, and eight held-out automotive validation tasks. Automotive validation MAPE 2.06%, maximum absolute error 16.96 us, maximum underprediction 1.66%. A 10% engineering margin is applied to admission estimates. This is not a WCET certificate.",
+  "execution_time_us_per_work_unit": {
+    "integer_control": 0.9932721680,
+    "fixed_point_filter": 0.7832470633,
+    "can_checksum": 1.2303082322,
+    "floating_point_iir": 7.2395695574
   }
 }

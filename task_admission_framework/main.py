@@ -155,24 +155,16 @@ def print_admission_result(session, decision: AdmissionDecision, execution=None)
     print(f"Deadline: {descriptor.deadline_ms} ms")
     print()
     if execution is not None:
-        print("Measured Complexity Model:")
+        print("Execution Time Model:")
         for name, count in sorted(execution.workload_counts.items()):
-            cycles = execution.cycle_breakdown.get(name)
-            if cycles is not None:
+            time_us = execution.time_breakdown_us.get(name)
+            if time_us is not None:
                 print(
-                    f"  {name}: {count} x {cycles / count:.0f} "
-                    f"cycles/unit = {cycles:.0f} cycles"
+                    f"  {name}: {count} x {time_us / count:.3f} "
+                    f"us/unit = {time_us:.1f} us"
                 )
         print()
-        print(
-            f"Calculated Complexity: {execution.estimated_cycles:.0f} cycles"
-            if execution.estimated_cycles is not None
-            else "Calculated Complexity: UNVERIFIED"
-        )
-        print(
-            f"Period Limit: {execution.safety_budget_cycles:.0f} cycles "
-            f"({execution.safety_budget_us:.1f} us)"
-        )
+        print(f"Period Limit: {execution.safety_budget_us:.1f} us")
         print(
             f"Estimated Time: {execution.estimated_execution_us:.1f} us"
             if execution.estimated_execution_us is not None
@@ -185,7 +177,7 @@ def print_admission_result(session, decision: AdmissionDecision, execution=None)
         )
         print()
         print(f"FINAL DECISION: {final_decision}")
-        if execution.status == "UNVERIFIED":
+        if execution.notes:
             print("Reason:")
             for note in execution.notes:
                 print(f"  {note}")
@@ -623,9 +615,9 @@ def print_taskset_result(result) -> None:
         f"{'Period':<10}"
         f"{'Deadline':<10}"
         f"{'Priority':<10}"
-        f"{'Struct':<10}"
-        f"{'Est cyc':<12}"
-        f"{'Budget cyc':<14}"
+        f"{'Execution':<14}"
+        f"{'Limit':<14}"
+        f"{'Usage':<10}"
         f"{'Exec':<10}"
         "Scheduler"
     )
@@ -636,10 +628,10 @@ def print_taskset_result(result) -> None:
             f"{task.period_ms:<10}"
             f"{task.deadline_ms:<10}"
             f"{task.priority:<10}"
-            f"{task.complexity_score:<10.2f}"
-            f"{(task.estimated_execution_cycles or 0):<12.0f}"
-            f"{(task.safety_budget_cycles or 0):<14.0f}"
-            f"{task.execution_safety_status:<10}"
+            f"{(task.estimated_execution_time_us or 0):<14.1f}"
+            f"{(task.safety_budget_us or 0):<14.1f}"
+            f"{((task.safety_budget_used or 0) * 100):<10.2f}"
+            f"{task.execution_safety_status:<12}"
             f"{task.scheduler_status}"
         )
         if task.estimated_execution_time_us is not None:
@@ -647,15 +639,13 @@ def print_taskset_result(result) -> None:
                 f"  Estimated Execution: "
                 f"{task.estimated_execution_time_us / 1000.0:.3f} ms"
             )
-            if task.estimated_execution_cycles is not None:
-                print(f"  Estimated Cycles: {task.estimated_execution_cycles:.0f}")
-            if task.workload_breakdown:
+            if task.time_breakdown_us:
                 breakdown = "; ".join(
                     f"{name}={count} -> "
-                    f"{task.cycle_breakdown.get(name, 0):.0f} cycles"
+                    f"{task.time_breakdown_us.get(name, 0):.1f} us"
                     for name, count in sorted(task.workload_breakdown.items())
                 )
-                print(f"  Calibrated Mixed Workload: {breakdown}")
+                print(f"  Static Feature Time Model: {breakdown}")
             if task.safety_budget_used is not None:
                 print(
                     f"  80% Safety Budget Used: "
@@ -689,7 +679,7 @@ def print_taskset_result(result) -> None:
         for line in result.scheduler_timeline:
             print(f"  {line}")
     print(
-        "Final status uses A-H board-calibrated mixed-workload execution costs "
+        "Final status uses S32K148 board-calibrated execution times "
         "and fixed-priority response-time analysis. Structural complexity is "
         "reported only as a review metric."
     )

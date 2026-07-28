@@ -31,6 +31,7 @@ class FeatureExtractor:
                 for api_name, occurrences in profile.api_usage.items()
                 if occurrences > 0
             },
+            dynamic_operation_counts=dict(profile.inferred_operation_counts),
         )
 
     @staticmethod

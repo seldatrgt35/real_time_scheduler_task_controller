@@ -31,13 +31,12 @@ class TaskSetTaskResult:
     scheduler_reason: str
     workload_class: str | None = None
     work_units: int | None = None
-    estimated_execution_cycles: float | None = None
     execution_estimate_source: str | None = None
     safety_budget_used: float | None = None
     execution_safety_status: str = "UNVERIFIED"
     workload_breakdown: dict[str, int] = field(default_factory=dict)
-    cycle_breakdown: dict[str, float] = field(default_factory=dict)
-    safety_budget_cycles: float | None = None
+    time_breakdown_us: dict[str, float] = field(default_factory=dict)
+    safety_budget_us: float | None = None
     response_time_us: float | None = None
     dynamic_bound_notes: list[str] = field(default_factory=list)
     complexity_breakdown: list[str] = field(default_factory=list)

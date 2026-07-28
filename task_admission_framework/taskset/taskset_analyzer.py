@@ -112,7 +112,6 @@ class TaskSetAnalyzer:
                 task_load = decision.star_load_indicator
                 (
                     estimated_execution_time_us,
-                    estimated_execution_cycles,
                     safety_budget_used,
                     execution_safety_status,
                     estimate_source,
@@ -155,19 +154,16 @@ class TaskSetAnalyzer:
                         work_units=sum(
                             session.task_profile.inferred_workload_counts.values()
                         ) or None,
-                        estimated_execution_cycles=estimated_execution_cycles,
                         execution_estimate_source=estimate_source,
                         safety_budget_used=safety_budget_used,
                         execution_safety_status=execution_safety_status,
                         workload_breakdown=dict(
                             session.task_profile.inferred_workload_counts
                         ),
-                        cycle_breakdown=self._cycle_breakdown(
+                        time_breakdown_us=self._time_breakdown(
                             session.task_profile.inferred_workload_counts
                         ),
-                        safety_budget_cycles=self._safety_budget_cycles(
-                            entry.period_ms
-                        ),
+                        safety_budget_us=self._safety_budget_us(entry.period_ms),
                         dynamic_bound_notes=list(
                             session.task_profile.dynamic_bound_notes
                         ),
@@ -245,7 +241,6 @@ class TaskSetAnalyzer:
     ) -> tuple[
         float | None,
         float | None,
-        float | None,
         str,
         str | None,
         str | None,
@@ -255,7 +250,6 @@ class TaskSetAnalyzer:
                 return (
                     None,
                     None,
-                    None,
                     "UNVERIFIED",
                     None,
                     "Dynamic execution estimate unavailable: "
@@ -263,7 +257,6 @@ class TaskSetAnalyzer:
                 )
             if not task_profile.inferred_workload_counts:
                 return (
-                    None,
                     None,
                     None,
                     "UNVERIFIED",
@@ -278,15 +271,22 @@ class TaskSetAnalyzer:
             )
             return (
                 estimate.estimated_execution_us,
-                estimate.estimated_cycles,
                 estimate.safety_budget_used,
-                "PASS" if estimate.passes_safety_limit else "FAIL",
-                "workload_cost_profile",
+                (
+                    "PASS" if estimate.passes_safety_limit else "FAIL"
+                )
+                if self._workload_cost_profile.validated
+                else "UNVERIFIED",
+                (
+                    "static_feature_time_model"
+                    if self._workload_cost_profile.validated
+                    else "unvalidated_static_feature_time_model"
+                ),
                 estimate.note,
             )
 
         if self._calibration_profile is None:
-            return None, None, None, "UNVERIFIED", None, None
+            return None, None, "UNVERIFIED", None, None
         estimate_us, note = self._execution_time_estimator.estimate_us(
             hardware_adjusted_score,
             self._calibration_profile,
@@ -298,7 +298,6 @@ class TaskSetAnalyzer:
         ).strip()
         return (
             estimate_us,
-            None,
             None,
             "UNVERIFIED",
             "legacy_complexity_profile",
@@ -343,23 +342,24 @@ class TaskSetAnalyzer:
             raise TaskSetError("Adjusted maximum complexity must be greater than 0.")
         return complexity_score / max_complexity
 
-    def _cycle_breakdown(self, counts: dict[str, int]) -> dict[str, float]:
+    def _time_breakdown(self, counts: dict[str, int]) -> dict[str, float]:
         if self._workload_cost_profile is None:
             return {}
-        return {
+        breakdown = {
             name: count * self._workload_cost_profile.coefficient_for(name)
             for name, count in counts.items()
         }
+        breakdown["model_intercept"] = self._workload_cost_profile.intercept_us
+        breakdown["engineering_margin"] = (
+            sum(breakdown.values())
+            * self._workload_cost_profile.estimate_margin_ratio
+        )
+        return breakdown
 
-    def _safety_budget_cycles(self, period_ms: int) -> float | None:
+    def _safety_budget_us(self, period_ms: int) -> float | None:
         if self._workload_cost_profile is None:
             return None
-        return (
-            period_ms
-            * 1000.0
-            * self._workload_cost_profile.clock_frequency_mhz
-            * self._workload_cost_profile.safety_limit_ratio
-        )
+        return period_ms * 1000.0 * self._workload_cost_profile.safety_limit_ratio
 
     @staticmethod
     def _evaluate_system(
@@ -380,6 +380,18 @@ class TaskSetAnalyzer:
             result.execution_safety_status == "UNVERIFIED"
             for result in task_results
         ):
+            if any(
+                result.execution_estimate_source
+                == "unvalidated_static_feature_time_model"
+                for result in task_results
+            ):
+                return (
+                    "UNVERIFIED",
+                    "The available board sweeps calibrated kernel repetitions, "
+                    "not STAR AST feature counts. The microsecond feature model "
+                    "must be calibrated with feature-aligned measurements before "
+                    "it can accept or reject tasks.",
+                )
             return (
                 "UNVERIFIED",
                 "At least one task has no statically proven dynamic execution "
@@ -394,6 +406,6 @@ class TaskSetAnalyzer:
 
         return (
             "FEASIBLE",
-            "A-H calibrated execution budgets pass their period limits and the "
+            "Board-calibrated execution-time budgets pass their period limits and the "
             "fixed-priority task set is schedulable.",
         )

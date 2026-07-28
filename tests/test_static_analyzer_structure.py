@@ -118,6 +118,74 @@ class StaticAnalyzerStructureTests(unittest.TestCase):
         self.assertTrue(profile.dynamic_bound_verified)
         self.assertEqual({"can_checksum": 8}, profile.inferred_workload_counts)
 
+    def test_primitive_operations_are_scaled_by_loop_bound(self) -> None:
+        source = """
+        void task(void)
+        {
+            unsigned value = 1;
+            for (unsigned i = 0; i < 8; ++i) {
+                value += i * 3U;
+                if ((value % 5U) == 0U) {
+                    value += 1U;
+                } else {
+                    value -= 1U;
+                }
+            }
+        }
+        """
+        profile = self._profile(source, "task")
+        operations = profile.inferred_operation_counts
+
+        self.assertTrue(profile.dynamic_bound_verified)
+        self.assertEqual(8, operations["integer_multiply_constant"])
+        self.assertEqual(8, operations["integer_divide_modulo_constant"])
+        self.assertEqual(8, operations["branch_evaluation"])
+        self.assertEqual(17, operations["integer_compare"])
+        self.assertEqual(
+            24,
+            operations["integer_add_sub"],
+            "Mutually exclusive branch bodies must not be summed.",
+        )
+
+    def test_float_operations_and_conversion_are_distinguished(self) -> None:
+        source = """
+        float task(unsigned sample)
+        {
+            float value = (float)sample;
+            value = value * 0.5F + 1.0F;
+            if (value > 10.0F) {
+                value /= 2.0F;
+            }
+            return value;
+        }
+        """
+        profile = self._profile(source, "task")
+        operations = profile.inferred_operation_counts
+
+        self.assertEqual(1, operations["numeric_conversion"])
+        self.assertEqual(1, operations["floating_multiply"])
+        self.assertEqual(1, operations["floating_add_sub"])
+        self.assertEqual(1, operations["floating_compare"])
+        self.assertEqual(1, operations["floating_divide"])
+
+    def test_constant_and_variable_integer_costs_are_separate(self) -> None:
+        source = """
+        unsigned task(unsigned value, unsigned divisor)
+        {
+            value = value * 7U;
+            value = value * divisor;
+            value = value % 11U;
+            return value / divisor;
+        }
+        """
+        profile = self._profile(source, "task")
+        operations = profile.inferred_operation_counts
+
+        self.assertEqual(1, operations["integer_multiply_constant"])
+        self.assertEqual(1, operations["integer_multiply_variable"])
+        self.assertEqual(1, operations["integer_divide_modulo_constant"])
+        self.assertEqual(1, operations["integer_divide_modulo_variable"])
+
     @staticmethod
     def _profile(source: str, function_name: str):
         with tempfile.TemporaryDirectory() as directory:

@@ -223,15 +223,18 @@ python -m task_admission_framework.main analyze \
   --hardware-adjustment calibrated
 ```
 
-The single-task result uses the A-H board-calibrated mixed-workload model:
+The single-task result expresses execution estimates directly in microseconds.
+STAR only returns a timing decision when the calibration profile was measured
+against the same AST feature definition. The bundled provisional profile is
+therefore `UNVERIFIED`; the older sweeps varied kernel repetitions rather than
+STAR's inferred feature counts:
 
 ```text
-Measurement-Calibrated Execution Admission
-Result: PASS
-Estimated Cycles: 8915
-Estimated Execution: 185.7 us
-80% Period Budget: 192000 cycles (4000.0 us)
-Budget Used: 4.64%
+Execution Time Model
+Estimated Time: 185.7 us
+Period Limit: 4000.0 us
+Limit Usage: 4.64%
+FINAL DECISION: UNVERIFIED
 ```
 
 The raw structural score and breakdown remain informational. Unvalidated legacy
@@ -266,10 +269,11 @@ For a task set:
 5. Repeat for each task.
 6. Press `Analyze All Tasks`.
 
-The task-set GUI shows the inferred mixed workload, calibrated cycle subtotal
-for each operation class, estimated execution time, 80% period budget, and
-fixed-priority response time. Priority does not multiply complexity; it affects
-the interference term in response-time analysis.
+The task-set GUI shows execution time, whether the static feature model is
+validated, the 80% period limit, limit usage, and fixed-priority response time.
+Cycle values are not part of admission or user-facing reports.
+Priority does not multiply execution time; it affects the interference term in
+response-time analysis.
 
 The GUI also runs a 200 ms scheduler simulation and reports per task: releases,
 completions, total CPU time, maximum wait/response time, preemptions, deadline

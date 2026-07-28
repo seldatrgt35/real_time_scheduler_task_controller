@@ -20,9 +20,11 @@ class WorkloadCostLoader:
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError(f"Could not load workload cost profile: {path}") from exc
 
-        raw_costs = data.get("cycles_per_work_unit")
+        raw_costs = data.get("execution_time_us_per_work_unit")
         if not isinstance(raw_costs, dict) or not raw_costs:
-            raise ValueError("cycles_per_work_unit must be a non-empty object.")
+            raise ValueError(
+                "execution_time_us_per_work_unit must be a non-empty object."
+            )
 
         costs = {
             str(name).strip().lower().replace("-", "_"): float(value)
@@ -31,19 +33,24 @@ class WorkloadCostLoader:
         if any(value <= 0 for value in costs.values()):
             raise ValueError("All workload cost coefficients must be greater than 0.")
 
-        clock = float(data["clock_frequency_mhz"])
         safety_ratio = float(data.get("safety_limit_ratio", 0.8))
-        if clock <= 0:
-            raise ValueError("clock_frequency_mhz must be greater than 0.")
         if not 0 < safety_ratio <= 1:
             raise ValueError("safety_limit_ratio must be in the interval (0, 1].")
-
+        intercept_us = float(data.get("intercept_us", 0.0))
+        if intercept_us < 0:
+            raise ValueError("intercept_us must be greater than or equal to 0.")
+        estimate_margin_ratio = float(data.get("estimate_margin_ratio", 0.0))
+        if estimate_margin_ratio < 0:
+            raise ValueError(
+                "estimate_margin_ratio must be greater than or equal to 0."
+            )
         return WorkloadCostProfile(
             profile_id=str(data["profile_id"]),
             reference_hardware=str(data["reference_hardware"]),
-            clock_frequency_mhz=clock,
             safety_limit_ratio=safety_ratio,
             validated=bool(data.get("validated", False)),
-            cycles_per_work_unit=costs,
+            execution_time_us_per_work_unit=costs,
+            intercept_us=intercept_us,
+            estimate_margin_ratio=estimate_margin_ratio,
             source=str(data.get("source", "")),
         )
