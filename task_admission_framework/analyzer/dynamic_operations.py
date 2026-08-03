@@ -42,7 +42,7 @@ class DynamicOperationAnalyzer(DynamicWorkAnalyzer):
     _DIVIDE = {"/", "/="}
     _MODULO = {"%", "%="}
     _DIVIDE_MODULO = _DIVIDE | _MODULO
-    _BITWISE = {"&", "|", "^", "&=", "|=", "^=", "&&", "||"}
+    _BITWISE = {"&", "|", "^", "&=", "|=", "^="}
     _SHIFT = {"<<", ">>", "<<=", ">>="}
     _OPERATORS = (
         _COMPARISONS

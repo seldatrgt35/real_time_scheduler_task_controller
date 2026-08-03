@@ -33,7 +33,18 @@ def evaluate_execution_admission(
     """Evaluate a mixed task against its measured S32K148 period budget."""
 
     budget_us = period_ms * 1000.0 * profile.safety_limit_ratio
-    counts = dict(task_profile.inferred_workload_counts)
+    supported_costs = profile.execution_time_us_per_work_unit
+    counts = {
+        workload.strip().lower().replace("-", "_"): count
+        for workload, count in task_profile.inferred_workload_counts.items()
+        if workload.strip().lower().replace("-", "_") in supported_costs
+    }
+    for operation, count in getattr(
+        task_profile, "inferred_operation_counts", {}
+    ).items():
+        normalized = operation.strip().lower().replace("-", "_")
+        if normalized in supported_costs:
+            counts[normalized] = max(counts.get(normalized, 0), count)
 
     if not task_profile.dynamic_bound_verified:
         return ExecutionAdmissionResult(

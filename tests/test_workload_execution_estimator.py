@@ -112,6 +112,35 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
         self.assertAlmostEqual(result.estimated_execution_us or 0.0, expected_us)
         self.assertAlmostEqual(result.safety_budget_used or 0.0, expected_us / 4000)
 
+    def test_admission_adds_supported_branch_operation(self) -> None:
+        profile = replace(
+            self.profile,
+            execution_time_us_per_work_unit={
+                **self.profile.execution_time_us_per_work_unit,
+                "branch_evaluation": 0.5,
+            },
+        )
+        result = evaluate_execution_admission(
+            SimpleNamespace(
+                task_name="BranchTask",
+                dynamic_bound_verified=True,
+                dynamic_bound_notes=[],
+                inferred_workload_counts={"integer_control": 10},
+                inferred_operation_counts={
+                    "branch_evaluation": 8,
+                    "integer_compare": 9,
+                },
+            ),
+            period_ms=1,
+            profile=profile,
+        )
+
+        self.assertEqual(
+            result.workload_counts,
+            {"integer_control": 10, "branch_evaluation": 8},
+        )
+        self.assertAlmostEqual(result.estimated_execution_us or 0.0, 34.0)
+
     def test_rejects_unbounded_or_unknown_work(self) -> None:
         with self.assertRaisesRegex(ValueError, "work_units"):
             WorkloadExecutionEstimator().estimate(
@@ -293,6 +322,18 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
         self.assertEqual(
             classify(["value", "=", "value", "+", "basic_integer_add_sub"]),
             "basic_integer_add_sub",
+        )
+        self.assertEqual(
+            classify(["if", "(", "branch_evaluation", "!=", "0", ")"]),
+            "branch_evaluation",
+        )
+        self.assertEqual(
+            classify(["value", "=", "value", "^", "bitwise_logic"]),
+            "bitwise_logic",
+        )
+        self.assertEqual(
+            classify(["value", "=", "value", ">>", "shift_rotate"]),
+            "shift_rotate",
         )
         self.assertEqual(
             classify(["if", "(", "speed", ">", "limit", ")"]),

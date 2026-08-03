@@ -1,11 +1,11 @@
 {
-  "profile_id": "s32k148_automotive_execution_time_us_v5",
+  "profile_id": "s32k148_automotive_execution_time_us_v7",
   "reference_hardware": "S32K148",
   "safety_limit_ratio": 0.8,
   "validated": true,
   "intercept_us": 6.9643831672,
   "estimate_margin_ratio": 0.10,
-  "source": "Resettable isolated S32K148 calibration: existing mixed and automotive validation, a sequential-memory sweep, and isolated integer arithmetic sweeps. The integer add/sub, variable multiply, variable divide, and variable modulo sweeps each use four training sizes and one held-out 640-unit point with zero interpolation error. A 10% engineering margin is applied to admission estimates. This is not a WCET certificate.",
+  "source": "Resettable isolated S32K148 calibration: existing mixed and automotive validation, sequential-memory and integer arithmetic sweeps, true/false branch-evaluation sweeps, and variable bitwise/shift sweeps. AND, OR, and XOR each measured 0.375 us/operation; left and right variable shifts each measured 0.416666667 us/operation. Every sweep uses 16, 64, 256, and 1024 training units plus a held-out 640-unit point with zero interpolation error. A cumulative memory-plus-integer-plus-branch automotive task measured 306.500 us versus a 281.808 us raw prediction and a 309.989 us margin-adjusted admission estimate. A 10% engineering margin is applied to admission estimates. This is not a WCET certificate.",
   "execution_time_us_per_work_unit": {
     "integer_control": 0.9932721680,
     "fixed_point_filter": 0.7832470633,
@@ -15,6 +15,9 @@
     "basic_integer_add_sub": 0.3750000000,
     "integer_multiply_variable": 0.3854166667,
     "integer_divide_variable": 0.4062500000,
-    "integer_modulo_variable": 0.5000000000
+    "integer_modulo_variable": 0.5000000000,
+    "branch_evaluation": 0.5833333333,
+    "bitwise_logic": 0.3750000000,
+    "shift_rotate": 0.4166666667
   }
 }

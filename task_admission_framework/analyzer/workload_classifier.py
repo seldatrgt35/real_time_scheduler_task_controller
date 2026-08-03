@@ -26,6 +26,15 @@ class WorkloadClassifier:
         ):
             return "floating_point_iir"
 
+        if "branch_evaluation" in lowered:
+            return "branch_evaluation"
+
+        if "bitwise_logic" in lowered:
+            return "bitwise_logic"
+
+        if "shift_rotate" in lowered:
+            return "shift_rotate"
+
         if any(
             word in lowered
             for word in (
