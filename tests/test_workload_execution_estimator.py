@@ -336,6 +336,45 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
             "shift_rotate",
         )
         self.assertEqual(
+            classify(["value", "=", "random_indexed_memory", "[", "index", "]"]),
+            "random_indexed_memory_access",
+        )
+        self.assertEqual(
+            classify(["bulk_memory_copy", "[", "index", "]"]),
+            "bulk_memory_copy_bytes",
+        )
+        self.assertEqual(
+            classify(["bulk_memory_set", "[", "index", "]"]),
+            "bulk_memory_set_bytes",
+        )
+        floating_markers = (
+            "float32_add_sub",
+            "float32_multiply",
+            "float32_divide",
+            "float64_add_sub",
+            "float64_multiply",
+            "float64_divide",
+            "int32_to_float32",
+            "float32_to_int32",
+            "int32_to_float64",
+            "float64_to_int32",
+        )
+        for marker in floating_markers:
+            self.assertEqual(
+                classify(["value", "=", marker, "+", "1.0"]),
+                marker,
+            )
+        feature_markers = (
+            "q15_multiply", "q15_mac", "q31_multiply", "q31_mac",
+            "fixed_point_saturation", "sqrtf_call", "fabsf_call",
+            "sinf_call", "cosf_call", "checksum_processed_bytes",
+            "direct_function_call", "indirect_function_call",
+            "switch_case_4", "switch_case_8", "switch_case_16",
+            "volatile_read", "volatile_write", "mmio_read", "mmio_write",
+        )
+        for marker in feature_markers:
+            self.assertEqual(classify([marker, "=", "value"]), marker)
+        self.assertEqual(
             classify(["if", "(", "speed", ">", "limit", ")"]),
             "integer_control",
         )
