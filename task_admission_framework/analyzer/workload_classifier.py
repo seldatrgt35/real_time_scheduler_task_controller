@@ -28,6 +28,30 @@ class WorkloadClassifier:
 
         if any(
             word in lowered
+            for word in (
+                "sequential_memory",
+                "source_buffer",
+                "destination_buffer",
+                "memory_copy",
+                "buffer_copy",
+            )
+        ):
+            return "sequential_memory_access"
+
+        if "integer_modulo_variable" in lowered:
+            return "integer_modulo_variable"
+
+        if "integer_divide_variable" in lowered:
+            return "integer_divide_variable"
+
+        if "integer_multiply_variable" in lowered:
+            return "integer_multiply_variable"
+
+        if "basic_integer_add_sub" in lowered:
+            return "basic_integer_add_sub"
+
+        if any(
+            word in lowered
             for word in ("can", "checksum", "crc", "payload", "frame_id")
         ) or any(token in tokens for token in ("^", "^=")):
             return "can_checksum"

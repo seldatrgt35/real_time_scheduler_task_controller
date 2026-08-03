@@ -52,6 +52,21 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
         self.assertAlmostEqual(estimate.safety_budget_used, 300.0 / 800.0)
         self.assertTrue(estimate.passes_safety_limit)
 
+    def test_s32k148_profile_contains_board_validated_memory_cost(self) -> None:
+        profile_path = (
+            Path(__file__).parents[1]
+            / "task_admission_framework"
+            / "calibration"
+            / "profiles"
+            / "S32K148_workload_costs.json"
+        )
+        profile = WorkloadCostLoader().load(profile_path)
+
+        self.assertAlmostEqual(
+            profile.coefficient_for("sequential_memory_access"),
+            0.8976245990,
+        )
+
     def test_mixed_breakdown_uses_separate_costs(self) -> None:
         estimate = WorkloadExecutionEstimator().estimate_breakdown(
             workload_counts={
@@ -258,6 +273,26 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
         self.assertEqual(
             classify(["result", "=", "input", "*", "gain", ">>", "8"]),
             "fixed_point_filter",
+        )
+        self.assertEqual(
+            classify(["destination_buffer", "[", "i", "]", "=", "source_buffer", "[", "i", "]"]),
+            "sequential_memory_access",
+        )
+        self.assertEqual(
+            classify(["value", "=", "value", "%", "integer_modulo_variable"]),
+            "integer_modulo_variable",
+        )
+        self.assertEqual(
+            classify(["value", "=", "value", "/", "integer_divide_variable"]),
+            "integer_divide_variable",
+        )
+        self.assertEqual(
+            classify(["value", "=", "value", "*", "integer_multiply_variable"]),
+            "integer_multiply_variable",
+        )
+        self.assertEqual(
+            classify(["value", "=", "value", "+", "basic_integer_add_sub"]),
+            "basic_integer_add_sub",
         )
         self.assertEqual(
             classify(["if", "(", "speed", ">", "limit", ")"]),

@@ -118,6 +118,26 @@ class StaticAnalyzerStructureTests(unittest.TestCase):
         self.assertTrue(profile.dynamic_bound_verified)
         self.assertEqual({"can_checksum": 8}, profile.inferred_workload_counts)
 
+    def test_sequential_memory_loop_is_inferred_automatically(self) -> None:
+        source = """
+        static unsigned char source_buffer[256];
+        static unsigned char destination_buffer[256];
+
+        void task(void)
+        {
+            for (unsigned i = 0; i < 256; ++i) {
+                destination_buffer[i] = source_buffer[i];
+            }
+        }
+        """
+        profile = self._profile(source, "task")
+
+        self.assertTrue(profile.dynamic_bound_verified)
+        self.assertEqual(
+            {"sequential_memory_access": 256},
+            profile.inferred_workload_counts,
+        )
+
     def test_primitive_operations_are_scaled_by_loop_bound(self) -> None:
         source = """
         void task(void)
@@ -138,7 +158,7 @@ class StaticAnalyzerStructureTests(unittest.TestCase):
 
         self.assertTrue(profile.dynamic_bound_verified)
         self.assertEqual(8, operations["integer_multiply_constant"])
-        self.assertEqual(8, operations["integer_divide_modulo_constant"])
+        self.assertEqual(8, operations["integer_modulo_constant"])
         self.assertEqual(8, operations["branch_evaluation"])
         self.assertEqual(17, operations["integer_compare"])
         self.assertEqual(
@@ -183,8 +203,8 @@ class StaticAnalyzerStructureTests(unittest.TestCase):
 
         self.assertEqual(1, operations["integer_multiply_constant"])
         self.assertEqual(1, operations["integer_multiply_variable"])
-        self.assertEqual(1, operations["integer_divide_modulo_constant"])
-        self.assertEqual(1, operations["integer_divide_modulo_variable"])
+        self.assertEqual(1, operations["integer_modulo_constant"])
+        self.assertEqual(1, operations["integer_divide_variable"])
 
     @staticmethod
     def _profile(source: str, function_name: str):

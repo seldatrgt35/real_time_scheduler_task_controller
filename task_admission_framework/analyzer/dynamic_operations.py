@@ -39,7 +39,9 @@ class DynamicOperationAnalyzer(DynamicWorkAnalyzer):
     _COMPARISONS = {"<", "<=", ">", ">=", "==", "!="}
     _ADD_SUB = {"+", "-", "+=", "-="}
     _MULTIPLY = {"*", "*="}
-    _DIVIDE_MODULO = {"/", "%", "/=", "%="}
+    _DIVIDE = {"/", "/="}
+    _MODULO = {"%", "%="}
+    _DIVIDE_MODULO = _DIVIDE | _MODULO
     _BITWISE = {"&", "|", "^", "&=", "|=", "^=", "&&", "||"}
     _SHIFT = {"<<", ">>", "<<=", ">>="}
     _OPERATORS = (
@@ -345,7 +347,8 @@ class DynamicOperationAnalyzer(DynamicWorkAnalyzer):
                     )
                     else "variable"
                 )
-                result.add(f"integer_divide_modulo_{suffix}", multiplier)
+                operation = "divide" if operator in self._DIVIDE else "modulo"
+                result.add(f"integer_{operation}_{suffix}", multiplier)
         elif operator in self._BITWISE:
             result.add("bitwise_logic", multiplier)
         elif operator in self._SHIFT:
