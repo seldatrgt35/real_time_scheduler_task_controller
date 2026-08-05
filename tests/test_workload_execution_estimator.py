@@ -190,13 +190,15 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
             profile=profile,
         )
 
+        self.assertAlmostEqual(estimate.nominal_execution_us, 7.0 + 10 * 3.0)
         self.assertAlmostEqual(
-            estimate.estimated_execution_us,
+            estimate.admission_execution_us,
             (7.0 + 10 * 3.0) * 1.1,
         )
+        self.assertEqual(estimate.estimated_execution_us, estimate.nominal_execution_us)
         self.assertIn("10% engineering margin", estimate.note)
 
-    def test_s32k148_profile_reproduces_board_validated_brake_model(self) -> None:
+    def test_s32k148_profile_reproduces_calibration_value_but_is_unvalidated(self) -> None:
         profile_path = (
             Path(__file__).parents[1]
             / "task_admission_framework"
@@ -216,9 +218,24 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
             profile=profile,
         )
 
-        self.assertTrue(profile.validated)
-        self.assertAlmostEqual(estimate.estimated_execution_us, 238.3788, places=3)
+        self.assertFalse(profile.validated)
+        self.assertAlmostEqual(estimate.estimated_execution_us, 209.7436, places=3)
+        self.assertAlmostEqual(estimate.admission_execution_us, 230.7180, places=3)
         self.assertTrue(estimate.passes_safety_limit)
+
+    def test_composite_loop_classes_are_not_primitive_double_counted(self) -> None:
+        from task_admission_framework.analyzer.dynamic_operations import (
+            DynamicOperationAnalyzer,
+        )
+
+        self.assertTrue(
+            {
+                "checksum_processed_bytes",
+                "bulk_memory_copy_bytes",
+                "q15_multiply",
+                "gpio_read",
+            }.issubset(DynamicOperationAnalyzer._COMPOSITE_LOOP_WORKLOADS)
+        )
 
     def test_taskset_uses_automatic_workload_breakdown(self) -> None:
         analyzer = TaskSetAnalyzer(
@@ -246,6 +263,33 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
         self.assertEqual(result[2], "PASS")
         self.assertEqual(result[3], "static_feature_time_model")
         self.assertIn("100 integer_control", result[4] or "")
+
+    def test_taskset_merges_supported_dynamic_operation_counts(self) -> None:
+        analyzer = TaskSetAnalyzer(
+            pipeline=object(),
+            workload_cost_profile=self.profile,
+        )
+        task_profile = SimpleNamespace(
+            task_name="MixedTask",
+            dynamic_bound_verified=True,
+            dynamic_bound_notes=[],
+            inferred_workload_counts={"integer_control": 10},
+            inferred_operation_counts={
+                "floating_point_iir": 2,
+                "unsupported_operation": 999,
+            },
+        )
+
+        result = analyzer._estimate_execution_time(task_profile, 1, 0.0)
+
+        self.assertEqual(result[0], 50.0)
+        self.assertIn("10 integer_control", result[4] or "")
+        self.assertIn("2 floating_point_iir", result[4] or "")
+        self.assertNotIn("unsupported_operation", result[4] or "")
+        self.assertEqual(
+            analyzer._supported_execution_counts(task_profile),
+            {"integer_control": 10, "floating_point_iir": 2},
+        )
 
     def test_taskset_does_not_invent_missing_dynamic_bound(self) -> None:
         analyzer = TaskSetAnalyzer(
@@ -371,6 +415,7 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
             "direct_function_call", "indirect_function_call",
             "switch_case_4", "switch_case_8", "switch_case_16",
             "volatile_read", "volatile_write", "mmio_read", "mmio_write",
+            "gpio_read", "gpio_write",
         )
         for marker in feature_markers:
             self.assertEqual(classify([marker, "=", "value"]), marker)

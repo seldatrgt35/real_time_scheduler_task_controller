@@ -16,6 +16,8 @@ class WorkloadExecutionEstimate:
     workload_class: str
     work_units: int
     execution_time_us_per_work_unit: float
+    nominal_execution_us: float
+    admission_execution_us: float
     estimated_execution_us: float
     safety_budget_us: float
     safety_budget_used: float
@@ -43,9 +45,9 @@ class WorkloadExecutionEstimator:
 
         coefficient = profile.coefficient_for(workload_class)
         model_us = profile.intercept_us + work_units * coefficient
-        estimated_us = model_us * (1.0 + profile.estimate_margin_ratio)
+        admission_us = model_us * (1.0 + profile.estimate_margin_ratio)
         safety_budget = period_ms * 1000.0 * profile.safety_limit_ratio
-        budget_used = estimated_us / safety_budget
+        budget_used = admission_us / safety_budget
 
         validation = "validated" if profile.validated else "unvalidated"
         note = (
@@ -59,16 +61,18 @@ class WorkloadExecutionEstimator:
             workload_class=workload_class.strip().lower().replace("-", "_"),
             work_units=work_units,
             execution_time_us_per_work_unit=coefficient,
-            estimated_execution_us=estimated_us,
+            nominal_execution_us=model_us,
+            admission_execution_us=admission_us,
+            estimated_execution_us=model_us,
             safety_budget_us=safety_budget,
             safety_budget_used=budget_used,
-            passes_safety_limit=estimated_us <= safety_budget,
+            passes_safety_limit=admission_us <= safety_budget,
             note=note,
             workload_breakdown={
                 workload_class.strip().lower().replace("-", "_"): work_units
             },
             time_breakdown_us={
-                workload_class.strip().lower().replace("-", "_"): estimated_us
+                workload_class.strip().lower().replace("-", "_"): work_units * coefficient
             },
         )
 
@@ -104,11 +108,11 @@ class WorkloadExecutionEstimator:
             )
             details.append(f"{count} {workload_class} x {coefficient:g}")
 
-        estimated_us = model_us * (1.0 + profile.estimate_margin_ratio)
+        admission_us = model_us * (1.0 + profile.estimate_margin_ratio)
         safety_budget = period_ms * 1000.0 * profile.safety_limit_ratio
-        budget_used = estimated_us / safety_budget
+        budget_used = admission_us / safety_budget
         total_units = sum(normalized.values())
-        effective_coefficient = estimated_us / total_units
+        effective_coefficient = model_us / total_units
         validation = "validated" if profile.validated else "unvalidated"
         note = (
             f"{validation} automatic workload estimate: "
@@ -123,10 +127,12 @@ class WorkloadExecutionEstimator:
             workload_class="mixed" if len(normalized) > 1 else next(iter(normalized)),
             work_units=total_units,
             execution_time_us_per_work_unit=effective_coefficient,
-            estimated_execution_us=estimated_us,
+            nominal_execution_us=model_us,
+            admission_execution_us=admission_us,
+            estimated_execution_us=model_us,
             safety_budget_us=safety_budget,
             safety_budget_used=budget_used,
-            passes_safety_limit=estimated_us <= safety_budget,
+            passes_safety_limit=admission_us <= safety_budget,
             note=note,
             workload_breakdown=normalized,
             time_breakdown_us=time_breakdown,

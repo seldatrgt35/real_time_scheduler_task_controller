@@ -1,11 +1,11 @@
 {
-  "profile_id": "s32k148_automotive_execution_time_us_v11",
+  "profile_id": "s32k148_automotive_execution_time_us_v12",
   "reference_hardware": "S32K148",
   "safety_limit_ratio": 0.8,
-  "validated": true,
-  "intercept_us": 6.9643831672,
+  "validated": false,
+  "intercept_us": 0.0,
   "estimate_margin_ratio": 0.10,
-  "source": "Resettable isolated S32K148 calibration covering integer/fixed/floating arithmetic, math calls, memory/MMIO, branches/switches, checksum bytes, and direct/indirect calls. Every added category reproduced its held-out 640-unit board measurement. A 10% engineering margin is applied to admission estimates. This is not a WCET certificate.",
+  "source": "Resettable isolated S32K148 feature calibration. Individual feature hold-outs passed, but the 2026-08-04 composed automotive validation under-estimated representative tasks by up to 75.6%; therefore this additive profile is not validated for admission. It may be shown as an engineering estimate only until a mixed composed-task model passes independent validation.",
   "execution_time_us_per_work_unit": {
     "integer_control": 0.9932721680,
     "fixed_point_filter": 0.7832470633,
@@ -50,6 +50,8 @@
     "volatile_read": 0.5000000000,
     "volatile_write": 0.4375000000,
     "mmio_read": 0.4583333333,
-    "mmio_write": 0.3333333333
+    "mmio_write": 0.3333333333,
+    "gpio_read": 0.5208333333,
+    "gpio_write": 0.5625000000
   }
 }

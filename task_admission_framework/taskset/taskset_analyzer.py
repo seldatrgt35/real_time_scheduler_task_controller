@@ -23,6 +23,9 @@ from task_admission_framework.calibration.workload_cost_loader import (
 from task_admission_framework.calibration.workload_execution_estimator import (
     WorkloadExecutionEstimator,
 )
+from task_admission_framework.calibration.execution_admission import (
+    evaluate_execution_admission,
+)
 from task_admission_framework.rules.rule_database import RuleDatabase
 from task_admission_framework.rules.rule_loader import RuleLoader
 from task_admission_framework.scheduling.fixed_priority_analyzer import (
@@ -121,6 +124,9 @@ class TaskSetAnalyzer:
                     entry.period_ms,
                     decision.hardware_adjusted_score,
                 )
+                execution_counts = self._supported_execution_counts(
+                    session.task_profile
+                )
                 task_results.append(
                     TaskSetTaskResult(
                         task_name=entry.name,
@@ -133,6 +139,19 @@ class TaskSetAnalyzer:
                         complexity_score=decision.complexity_score,
                         hardware_adjusted_score=decision.hardware_adjusted_score,
                         estimated_execution_time_us=estimated_execution_time_us,
+                        admission_execution_time_us=(
+                            None
+                            if estimated_execution_time_us is None
+                            else estimated_execution_time_us
+                            * (
+                                1.0
+                                + (
+                                    self._workload_cost_profile.estimate_margin_ratio
+                                    if self._workload_cost_profile is not None
+                                    else 0.0
+                                )
+                            )
+                        ),
                         rule_max_complexity=decision.hardware_adjusted_max_complexity,
                         task_load=task_load,
                         admission_status=decision.status.name,
@@ -143,26 +162,20 @@ class TaskSetAnalyzer:
                         scheduler_status=decision.scheduler_status,
                         scheduler_reason=decision.scheduler_reason,
                         workload_class=(
-                            next(iter(session.task_profile.inferred_workload_counts))
-                            if len(session.task_profile.inferred_workload_counts) == 1
+                            next(iter(execution_counts))
+                            if len(execution_counts) == 1
                             else (
                                 "mixed"
-                                if session.task_profile.inferred_workload_counts
+                                if execution_counts
                                 else None
                             )
                         ),
-                        work_units=sum(
-                            session.task_profile.inferred_workload_counts.values()
-                        ) or None,
+                        work_units=sum(execution_counts.values()) or None,
                         execution_estimate_source=estimate_source,
                         safety_budget_used=safety_budget_used,
                         execution_safety_status=execution_safety_status,
-                        workload_breakdown=dict(
-                            session.task_profile.inferred_workload_counts
-                        ),
-                        time_breakdown_us=self._time_breakdown(
-                            session.task_profile.inferred_workload_counts
-                        ),
+                        workload_breakdown=execution_counts,
+                        time_breakdown_us=self._time_breakdown(execution_counts),
                         safety_budget_us=self._safety_budget_us(entry.period_ms),
                         dynamic_bound_notes=list(
                             session.task_profile.dynamic_bound_notes
@@ -184,7 +197,11 @@ class TaskSetAnalyzer:
                 period_ms=result.period_ms,
                 deadline_ms=result.deadline_ms,
                 priority=result.priority,
-                execution_budget_us=result.estimated_execution_time_us,
+                execution_budget_us=(
+                    result.admission_execution_time_us
+                    if result.admission_execution_time_us is not None
+                    else result.estimated_execution_time_us
+                ),
             )
             for result in task_results
         ]
@@ -233,6 +250,23 @@ class TaskSetAnalyzer:
             simulation_interference_time_us=simulation_result.interference_time_us,
         )
 
+    def _supported_execution_counts(self, task_profile) -> dict[str, int]:
+        """Return the same supported feature set used by single-task admission."""
+
+        if self._workload_cost_profile is None:
+            return dict(task_profile.inferred_workload_counts)
+        supported = self._workload_cost_profile.execution_time_us_per_work_unit
+        counts = {
+            name.strip().lower().replace("-", "_"): count
+            for name, count in task_profile.inferred_workload_counts.items()
+            if name.strip().lower().replace("-", "_") in supported
+        }
+        for name, count in getattr(task_profile, "inferred_operation_counts", {}).items():
+            normalized = name.strip().lower().replace("-", "_")
+            if normalized in supported:
+                counts[normalized] = max(counts.get(normalized, 0), count)
+        return counts
+
     def _estimate_execution_time(
         self,
         task_profile,
@@ -246,43 +280,25 @@ class TaskSetAnalyzer:
         str | None,
     ]:
         if self._workload_cost_profile is not None:
-            if not task_profile.dynamic_bound_verified:
-                return (
-                    None,
-                    None,
-                    "UNVERIFIED",
-                    None,
-                    "Dynamic execution estimate unavailable: "
-                    + " ".join(task_profile.dynamic_bound_notes),
-                )
-            if not task_profile.inferred_workload_counts:
-                return (
-                    None,
-                    None,
-                    "UNVERIFIED",
-                    None,
-                    "Dynamic execution estimate unavailable: no bounded workload "
-                    "could be inferred from the source.",
-                )
-            estimate = self._workload_execution_estimator.estimate_breakdown(
-                workload_counts=task_profile.inferred_workload_counts,
-                period_ms=period_ms,
-                profile=self._workload_cost_profile,
+            admission = evaluate_execution_admission(
+                task_profile,
+                period_ms,
+                self._workload_cost_profile,
             )
             return (
-                estimate.estimated_execution_us,
-                estimate.safety_budget_used,
+                admission.estimated_execution_us,
+                admission.safety_budget_used,
+                admission.status,
                 (
-                    "PASS" if estimate.passes_safety_limit else "FAIL"
-                )
-                if self._workload_cost_profile.validated
-                else "UNVERIFIED",
-                (
-                    "static_feature_time_model"
-                    if self._workload_cost_profile.validated
-                    else "unvalidated_static_feature_time_model"
+                    None
+                    if admission.estimated_execution_us is None
+                    else (
+                        "static_feature_time_model"
+                        if self._workload_cost_profile.validated
+                        else "unvalidated_static_feature_time_model"
+                    )
                 ),
-                estimate.note,
+                " ".join(admission.notes) if admission.notes else None,
             )
 
         if self._calibration_profile is None:

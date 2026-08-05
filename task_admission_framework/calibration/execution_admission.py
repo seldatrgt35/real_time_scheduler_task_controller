@@ -18,6 +18,7 @@ class ExecutionAdmissionResult:
 
     status: str
     estimated_execution_us: float | None
+    admission_execution_us: float | None
     safety_budget_us: float
     safety_budget_used: float | None
     workload_counts: dict[str, int] = field(default_factory=dict)
@@ -50,6 +51,7 @@ def evaluate_execution_admission(
         return ExecutionAdmissionResult(
             status="UNVERIFIED",
             estimated_execution_us=None,
+            admission_execution_us=None,
             safety_budget_us=budget_us,
             safety_budget_used=None,
             workload_counts=counts,
@@ -59,6 +61,7 @@ def evaluate_execution_admission(
         return ExecutionAdmissionResult(
             status="UNVERIFIED",
             estimated_execution_us=None,
+            admission_execution_us=None,
             safety_budget_us=budget_us,
             safety_budget_used=None,
             notes=["No bounded dynamic workload could be inferred from the source."],
@@ -77,6 +80,7 @@ def evaluate_execution_admission(
     return ExecutionAdmissionResult(
         status=status,
         estimated_execution_us=estimate.estimated_execution_us,
+        admission_execution_us=estimate.admission_execution_us,
         safety_budget_us=budget_us,
         safety_budget_used=estimate.safety_budget_used,
         workload_counts=counts,

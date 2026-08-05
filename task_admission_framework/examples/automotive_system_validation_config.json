@@ -1,0 +1,56 @@
+{
+  "workload_cost_profile_file": "task_admission_framework/calibration/profiles/S32K148_workload_costs.json",
+  "simulation_window_ms": 200,
+  "tasks": [
+    {
+      "name": "WheelSpeedSafety5ms",
+      "source_file": "C:/Users/nxg19748/OneDrive - NXP/Desktop/star-execution-validation/star-s32k148-benchmark/calibration/automotive_system_validation_tasks.c",
+      "entry_function": "StarTask_5ms_WheelSpeedSafety",
+      "period_ms": 5,
+      "deadline_ms": 5,
+      "priority": 3,
+      "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
+      "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
+    },
+    {
+      "name": "BrakeTorqueControl10ms",
+      "source_file": "C:/Users/nxg19748/OneDrive - NXP/Desktop/star-execution-validation/star-s32k148-benchmark/calibration/automotive_system_validation_tasks.c",
+      "entry_function": "StarTask_10ms_BrakeTorqueControl",
+      "period_ms": 10,
+      "deadline_ms": 10,
+      "priority": 3,
+      "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
+      "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
+    },
+    {
+      "name": "BatteryThermalMonitor20ms",
+      "source_file": "C:/Users/nxg19748/OneDrive - NXP/Desktop/star-execution-validation/star-s32k148-benchmark/calibration/automotive_system_validation_tasks.c",
+      "entry_function": "StarTask_20ms_BatteryThermalMonitor",
+      "period_ms": 20,
+      "deadline_ms": 20,
+      "priority": 2,
+      "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
+      "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
+    },
+    {
+      "name": "DiagnosticGateway100ms",
+      "source_file": "C:/Users/nxg19748/OneDrive - NXP/Desktop/star-execution-validation/star-s32k148-benchmark/calibration/automotive_system_validation_tasks.c",
+      "entry_function": "StarTask_100ms_DiagnosticGateway",
+      "period_ms": 100,
+      "deadline_ms": 100,
+      "priority": 1,
+      "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
+      "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
+    },
+    {
+      "name": "HealthMonitoring1000ms",
+      "source_file": "C:/Users/nxg19748/OneDrive - NXP/Desktop/star-execution-validation/star-s32k148-benchmark/calibration/automotive_system_validation_tasks.c",
+      "entry_function": "StarTask_1000ms_HealthMonitoring",
+      "period_ms": 1000,
+      "deadline_ms": 1000,
+      "priority": 1,
+      "hardware_profile_file": "task_admission_framework/hardware/profiles/S32K148.json",
+      "rules_file": "task_admission_framework/rules/profiles/S32K148_rules.json"
+    }
+  ]
+}

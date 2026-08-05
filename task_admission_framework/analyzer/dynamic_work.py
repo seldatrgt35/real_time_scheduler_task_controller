@@ -95,6 +95,21 @@ class DynamicWorkAnalyzer:
             result.notes.append(f"Recursive call bound is unknown: {name}")
             return
 
+        explicit_class = WorkloadClassifier.explicit_kernel_class(name)
+        if explicit_class is not None:
+            loop_bound = self._single_kernel_loop_bound(
+                function_cursor,
+                parameter_constants,
+            )
+            if loop_bound is None:
+                result.verified = False
+                result.notes.append(
+                    f"Explicit kernel '{name}' has no single proven loop bound."
+                )
+                return
+            result.add(explicit_class, multiplier * loop_bound)
+            return
+
         children = list(function_cursor.get_children())
         if not self._contains_dynamic_node(children, function_definitions):
             result.add(self.classify_cursor(function_cursor), multiplier)
@@ -110,6 +125,28 @@ class DynamicWorkAnalyzer:
                 parameter_constants=parameter_constants,
                 result=result,
             )
+
+    def _single_kernel_loop_bound(
+        self,
+        function_cursor: Cursor,
+        parameter_constants: dict[str, int],
+    ) -> int | None:
+        """Return the sole loop bound of an explicitly named feature kernel."""
+
+        loops: list[Cursor] = []
+
+        def collect(cursor: Cursor) -> None:
+            if cursor.kind in self._LOOP_KINDS:
+                loops.append(cursor)
+                return
+            for child in cursor.get_children():
+                collect(child)
+
+        for child in function_cursor.get_children():
+            collect(child)
+        if len(loops) != 1:
+            return None
+        return self.extract_loop_bound(loops[0], parameter_constants)
 
     def _walk_cursor(
         self,
@@ -151,6 +188,25 @@ class DynamicWorkAnalyzer:
             call_name = self._extract_call_name(cursor)
             if call_name in function_definitions:
                 callee = function_definitions[call_name]
+                explicit_class = WorkloadClassifier.explicit_kernel_class(
+                    call_name
+                )
+                if explicit_class is not None:
+                    try:
+                        arguments = list(cursor.get_arguments())
+                    except AttributeError:
+                        arguments = []
+                    explicit_units = (
+                        self._evaluate_integer(arguments[0])
+                        if arguments
+                        else None
+                    )
+                    if explicit_units is not None:
+                        result.add(
+                            explicit_class,
+                            multiplier * explicit_units,
+                        )
+                        return
                 self._walk_function(
                     callee,
                     multiplier=multiplier,

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from clang.cindex import Cursor, CursorKind, TypeKind
 
 from task_admission_framework.analyzer.dynamic_work import DynamicWorkAnalyzer
+from task_admission_framework.analyzer.workload_classifier import WorkloadClassifier
 
 
 @dataclass(slots=True)
@@ -76,6 +77,44 @@ class DynamicOperationAnalyzer(DynamicWorkAnalyzer):
         TypeKind.LONG,
         TypeKind.LONGLONG,
     }
+    # These board-calibrated operations are composite kernels: their measured
+    # per-unit costs already include the primitive control/bitwise instructions
+    # inside the loop body. Counting those primitives again would inflate the
+    # estimate (for example, GPIO read XOR accumulation and alternating writes).
+    _COMPOSITE_LOOP_WORKLOADS = {
+        # The board coefficient for each of these classes was measured for the
+        # complete loop kernel.  Its loop-control and primitive instructions
+        # therefore must not be charged again as separate operations.
+        "branch_evaluation",
+        "bitwise_logic",
+        "shift_rotate",
+        "random_indexed_memory_access",
+        "bulk_memory_copy_bytes",
+        "bulk_memory_set_bytes",
+        "sequential_memory_access",
+        "q15_multiply",
+        "q15_mac",
+        "q31_multiply",
+        "q31_mac",
+        "fixed_point_saturation",
+        "float32_add_sub",
+        "float32_multiply",
+        "float32_divide",
+        "float64_add_sub",
+        "float64_multiply",
+        "float64_divide",
+        "int32_to_float32",
+        "float32_to_int32",
+        "int32_to_float64",
+        "float64_to_int32",
+        "checksum_processed_bytes",
+        "volatile_read",
+        "volatile_write",
+        "mmio_read",
+        "mmio_write",
+        "gpio_read",
+        "gpio_write",
+    }
 
     def infer(
         self,
@@ -108,6 +147,11 @@ class DynamicOperationAnalyzer(DynamicWorkAnalyzer):
             result.verified = False
             result.notes.append(f"Recursive operation count is unknown: {name}")
             return
+        # Exact calibrated kernels are already charged once by DynamicWorkAnalyzer.
+        # Their implementation-level arithmetic, branches and bit operations are
+        # part of that measured kernel cost and must not be charged a second time.
+        if WorkloadClassifier.explicit_kernel_class(name) is not None:
+            return
         next_stack = [*call_stack, name]
         for child in function_cursor.get_children():
             self._walk_operation_cursor(
@@ -137,6 +181,8 @@ class DynamicOperationAnalyzer(DynamicWorkAnalyzer):
                 result.notes.append(
                     f"Loop at line {line or '?'} has no statically proven bound."
                 )
+                return
+            if self.classify_cursor(cursor) in self._COMPOSITE_LOOP_WORKLOADS:
                 return
             children = list(cursor.get_children())
             if cursor.kind == CursorKind.FOR_STMT and len(children) >= 4:

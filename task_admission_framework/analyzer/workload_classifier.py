@@ -8,6 +8,31 @@ import re
 class WorkloadClassifier:
     """Classify bounded kernel tokens without user-supplied metadata."""
 
+    EXPLICIT_KERNEL_MARKERS = (
+        "basic_integer_add_sub", "integer_multiply_variable",
+        "integer_divide_variable", "integer_modulo_variable",
+        "branch_evaluation", "bitwise_logic", "shift_rotate",
+        "sequential_memory_access", "random_indexed_memory_access",
+        "bulk_memory_copy_bytes", "bulk_memory_set_bytes",
+        "float32_add_sub", "float32_multiply", "float32_divide",
+        "float64_add_sub", "float64_multiply", "float64_divide",
+        "int32_to_float32", "float32_to_int32", "int32_to_float64",
+        "float64_to_int32", "q15_multiply", "q15_mac",
+        "q31_multiply", "q31_mac", "fixed_point_saturation",
+        "sqrtf_call", "fabsf_call", "sinf_call", "cosf_call",
+        "checksum_processed_bytes", "direct_function_call",
+        "indirect_function_call", "switch_case_4", "switch_case_8",
+        "switch_case_16", "volatile_read", "volatile_write",
+        "mmio_read", "mmio_write", "gpio_read", "gpio_write",
+    )
+
+    @classmethod
+    def explicit_kernel_class(cls, function_name: str) -> str | None:
+        """Return an exact calibrated kernel name, never a substring guess."""
+
+        normalized = function_name.strip().lower()
+        return normalized if normalized in cls.EXPLICIT_KERNEL_MARKERS else None
+
     _FLOAT_LITERAL = re.compile(
         r"(?<![A-Za-z_])(?:\d+\.\d*|\.\d+|\d+[eE][+-]?\d+)[fFlL]?"
     )
@@ -55,6 +80,8 @@ class WorkloadClassifier:
             "volatile_write",
             "mmio_read",
             "mmio_write",
+            "gpio_read",
+            "gpio_write",
         )
         for marker in calibrated_feature_markers:
             if marker in lowered:

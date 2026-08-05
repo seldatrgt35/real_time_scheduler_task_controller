@@ -491,9 +491,15 @@ class StarGui:
             "",
             f"Period Limit: {execution.safety_budget_us:.1f} us",
             (
-                f"Estimated Time: {execution.estimated_execution_us:.1f} us"
+                f"Nominal Time: {execution.estimated_execution_us:.1f} us"
                 if execution.estimated_execution_us is not None
-                else "Estimated Time: UNVERIFIED"
+                else "Nominal Time: UNVERIFIED"
+            ),
+            (
+                f"Admission Time (+ margin): "
+                f"{execution.admission_execution_us:.1f} us"
+                if execution.admission_execution_us is not None
+                else "Admission Time: UNVERIFIED"
             ),
             (
                 f"Limit Usage: {execution.safety_budget_used:.2%}"
@@ -553,8 +559,10 @@ class StarGui:
                 lines.extend(
                     [
                         f"   Time Source       : {source_label}",
-                        f"   Execution Time    : "
+                        f"   Nominal Time      : "
                         f"{task.estimated_execution_time_us:.1f} us",
+                        f"   Admission Time    : "
+                        f"{task.admission_execution_time_us:.1f} us",
                         f"   Period Limit      : "
                         f"{task.safety_budget_us:.1f} us",
                         f"   Limit Usage       : {task.safety_budget_used:.2%}",

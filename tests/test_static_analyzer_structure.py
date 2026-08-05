@@ -206,6 +206,28 @@ class StaticAnalyzerStructureTests(unittest.TestCase):
         self.assertEqual(1, operations["integer_modulo_constant"])
         self.assertEqual(1, operations["integer_divide_variable"])
 
+    def test_explicit_calibrated_kernel_is_not_double_counted(self) -> None:
+        source = """
+        static unsigned int bitwise_logic(unsigned int count)
+        {
+            unsigned int value = 1U;
+            unsigned int index;
+            for (index = 0U; index < count; ++index) {
+                value = (value ^ index) | 1U;
+            }
+            return value;
+        }
+
+        void task(void)
+        {
+            (void)bitwise_logic(128U);
+        }
+        """
+        profile = self._profile(source, "task")
+
+        self.assertEqual({"bitwise_logic": 128}, profile.inferred_workload_counts)
+        self.assertNotIn("bitwise_logic", profile.inferred_operation_counts)
+
     @staticmethod
     def _profile(source: str, function_name: str):
         with tempfile.TemporaryDirectory() as directory:

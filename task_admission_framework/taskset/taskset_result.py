@@ -23,6 +23,7 @@ class TaskSetTaskResult:
     complexity_score: float
     hardware_adjusted_score: float
     estimated_execution_time_us: float | None
+    admission_execution_time_us: float | None
     rule_max_complexity: float
     task_load: float
     admission_status: str

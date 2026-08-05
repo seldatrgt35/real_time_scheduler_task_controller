@@ -636,9 +636,14 @@ def print_taskset_result(result) -> None:
         )
         if task.estimated_execution_time_us is not None:
             print(
-                f"  Estimated Execution: "
+                f"  Nominal Execution: "
                 f"{task.estimated_execution_time_us / 1000.0:.3f} ms"
             )
+            if task.admission_execution_time_us is not None:
+                print(
+                    f"  Admission Execution (with margin): "
+                    f"{task.admission_execution_time_us / 1000.0:.3f} ms"
+                )
             if task.time_breakdown_us:
                 breakdown = "; ".join(
                     f"{name}={count} -> "
