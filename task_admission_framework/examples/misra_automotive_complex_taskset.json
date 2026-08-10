@@ -1,0 +1,10 @@
+{
+  "simulation_window_ms": 100,
+  "tasks": [
+    {"name":"MisraControl5ms","source_file":"misra_automotive_complex_task.c","entry_function":"StarTask_5ms_MisraControl","period_ms":5,"deadline_ms":5,"priority":3,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"MisraMemory10ms","source_file":"misra_automotive_complex_task.c","entry_function":"StarTask_10ms_MisraMemory","period_ms":10,"deadline_ms":10,"priority":3,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"MisraFixedPoint20ms","source_file":"misra_automotive_complex_task.c","entry_function":"StarTask_20ms_MisraFixedPoint","period_ms":20,"deadline_ms":20,"priority":2,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"MisraFloatingPoint50ms","source_file":"misra_automotive_complex_task.c","entry_function":"StarTask_50ms_MisraFloatingPoint","period_ms":50,"deadline_ms":50,"priority":2,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"MisraDiagnostics100ms","source_file":"misra_automotive_complex_task.c","entry_function":"StarTask_100ms_MisraDiagnostics","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"}
+  ]
+}

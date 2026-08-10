@@ -1,0 +1,6 @@
+task_name,entry_function,period_ms,priority,nominal_estimate_us,safe_estimate_us,board_mean_us,error_percent,result
+SensorFusion,StarTask_5ms_SensorFusion,5,3,166.270,191.211,166.270,0.000,PASS
+SignalFilter,StarTask_10ms_SignalFilter,10,3,308.889,355.222,299.833,3.020,PASS
+MotorControl,StarTask_20ms_MotorControl,20,2,130.366,149.921,122.041,6.821,PASS
+StateEstimator,StarTask_50ms_StateEstimator,50,2,527.688,606.841,479.062,10.150,PASS
+Diagnostics,StarTask_100ms_Diagnostics,100,1,134.524,154.703,152.395,-11.727,PASS
