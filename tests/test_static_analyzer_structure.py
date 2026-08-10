@@ -339,6 +339,21 @@ class StaticAnalyzerStructureTests(unittest.TestCase):
         self.assertEqual(32, counts["float32_multiply_u32"])
         self.assertEqual(32, counts["floating_group_loop_iterations"])
 
+    def test_dense_integer_control_correction_is_pattern_based(self) -> None:
+        source = """
+        void task(void) {
+            unsigned v = 1U;
+            for (unsigned i = 0U; i < 8U; ++i) {
+                v *= ((i & 7U) + 1U);
+                v ^= (i | 0x55U);
+                v = (v << 1U) | (v >> 31U);
+                if ((i & 1U) != 0U) { v += i; } else { v ^= i; }
+            }
+        }
+        """
+        counts = self._profile(source, "task").contextual_integer_counts
+        self.assertEqual(8, counts["dense_integer_control_correction_u32"])
+
     @staticmethod
     def _profile(source: str, function_name: str):
         with tempfile.TemporaryDirectory() as directory:

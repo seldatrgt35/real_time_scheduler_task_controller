@@ -83,6 +83,8 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             result.add("loop_iterations", multiplier * bound)
             result.add("loop_invocations", multiplier)
             body = children[-1] if children else cursor
+            if self._is_dense_integer_control_loop(body):
+                result.add("dense_integer_control_correction_u32", multiplier * bound)
             communication_group = self._communication_loop_pattern(body)
             if communication_group is not None:
                 result.add(communication_group, multiplier * bound)
@@ -185,6 +187,22 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
         if operators.count("+") >= 2 and not kinds.intersection({"*", "/", "%"}):
             return "basic_add_expression_u32"
         return None
+
+    def _is_dense_integer_control_loop(self, body: Cursor) -> bool:
+        descendants = self._descendants(body)
+        operators = {
+            self._root_operator(node) for node in descendants
+            if node.kind in self._BINARY_KINDS
+        }
+        return (
+            any(node.kind == CursorKind.IF_STMT for node in descendants)
+            and bool(operators.intersection(self._MULTIPLY))
+            and bool(operators.intersection({"&", "&="}))
+            and bool(operators.intersection({"|", "|="}))
+            and bool(operators.intersection({"^", "^="}))
+            and bool(operators.intersection({"<<", "<<="}))
+            and bool(operators.intersection({">>", ">>="}))
+        )
 
     def _communication_loop_pattern(self, body: Cursor) -> str | None:
         descendants = self._descendants(body)

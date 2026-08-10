@@ -77,6 +77,7 @@
     ,"modulo_masked_index_u32": 0.1875
     ,"bitwise_nested_u32": 0.0625
     ,"shift_rotate_u32": 0.1041666667
+    ,"dense_integer_control_correction_u32": -0.2928611111
   },
   "validation": {
     "contextual_holdout_mape_percent": 4.055386,
@@ -89,6 +90,7 @@
     "control_bitwise_after_correction_mape_percent": 2.2752,
     "mixed_bitwise_context_calibration": "bitwise mix task, 192 iterations",
     "mixed_bitwise_context_holdout": "all control/bitwise task, 160 iterations",
+    "dense_integer_control_calibration": "automotive standard SensorFusion, 144 iterations; single-point correction",
     "note": "The 15 percent margin remains required; raw coefficients are not WCET bounds."
   }
 }
