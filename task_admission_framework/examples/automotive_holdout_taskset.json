@@ -1,0 +1,11 @@
+{
+  "simulation_window_ms": 100,
+  "tasks": [{
+    "name":"AutomotiveHoldout25ms",
+    "source_file":"automotive_holdout_task.c",
+    "entry_function":"StarTask_25ms_AutomotiveHoldout",
+    "period_ms":25,"deadline_ms":25,"priority":2,
+    "hardware_profile_file":"../hardware/profiles/S32K148.json",
+    "rules_file":"../rules/profiles/S32K148_rules.json"
+  }]
+}

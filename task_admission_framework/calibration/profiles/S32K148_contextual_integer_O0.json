@@ -1,5 +1,9 @@
 {
   "schema_version": 1,
+  "model_id": "s32k148-contextual-o0-v1.0",
+  "model_version": "1.0.0",
+  "status": "frozen",
+  "frozen_date": "2026-08-10",
   "target": "S32K148",
   "compiler": "ARM GCC 11.4",
   "optimization": "O0",
@@ -70,14 +74,14 @@
     "shift_left_u32": 0.1041666667,
     "shift_right_u32": 0.1041666667,
     "branch_evaluation_u32": 0.2708333333,
-    "mixed_bitwise_context_u32": 0.1049270833
-    ,"basic_add_expression_u32": 0.0625
-    ,"multiply_masked_index_u32": 0.0729166667
-    ,"divide_masked_index_u32": 0.09375
-    ,"modulo_masked_index_u32": 0.1875
-    ,"bitwise_nested_u32": 0.0625
-    ,"shift_rotate_u32": 0.1041666667
-    ,"dense_integer_control_correction_u32": -0.2928611111
+    "mixed_bitwise_context_u32": 0.1049270833,
+    "basic_add_expression_u32": 0.0625,
+    "multiply_masked_index_u32": 0.0729166667,
+    "divide_masked_index_u32": 0.09375,
+    "modulo_masked_index_u32": 0.1875,
+    "bitwise_nested_u32": 0.0625,
+    "shift_rotate_u32": 0.1041666667,
+    "dense_integer_control_correction_u32": -0.2928611111
   },
   "validation": {
     "contextual_holdout_mape_percent": 4.055386,
@@ -91,6 +95,11 @@
     "mixed_bitwise_context_calibration": "bitwise mix task, 192 iterations",
     "mixed_bitwise_context_holdout": "all control/bitwise task, 160 iterations",
     "dense_integer_control_calibration": "automotive standard SensorFusion, 144 iterations; single-point correction",
+    "automotive_standard_revised_mape_percent": 6.3436,
+    "independent_automotive_holdout_error_percent": 5.9259,
+    "independent_automotive_holdout_safe_result": "PASS",
+    "independent_automotive_holdout_board_mean_us": 420.208,
+    "independent_automotive_holdout_frozen_nominal_us": 445.109,
     "note": "The 15 percent margin remains required; raw coefficients are not WCET bounds."
   }
 }
