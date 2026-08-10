@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "target": "S32K148",
+  "compiler": "ARM GCC 11.4",
+  "optimization": "O0",
+  "value_type": "uint32_t",
+  "loop_invocation_intercept_us": 1.27,
+  "loop_iteration_us": 0.3125,
+  "engineering_margin_percent": 15.0,
+  "memory_group_cost_us_per_work_unit": {
+    "sequential_memory_u32": 0.897624599,
+    "random_indexed_memory_u32": 1.186152769,
+    "bulk_memory_copy_u32": 0.7291666667,
+    "bulk_memory_set_u32": 0.5
+  },
+  "memory_group_correction": {
+    "scale": 0.592113879,
+    "intercept_us": 11.597372,
+    "validated": true
+  },
+  "fixed_group_cost_us_per_work_unit": {
+    "q15_multiply_u32": 0.4583333333,
+    "q15_mac_u32": 0.4583333333,
+    "q31_multiply_u32": 0.7916666667,
+    "q31_mac_u32": 0.8541666667
+  },
+  "fixed_group_correction": {
+    "scale": 0.586393221,
+    "intercept_us": 9.967678,
+    "validated": true
+  },
+  "floating_group_cost_us_per_work_unit": {
+    "float32_add_sub_u32": 1.875,
+    "float32_multiply_u32": 1.375,
+    "float32_divide_u32": 4.2708333333,
+    "float64_add_sub_u32": 2.5208333333,
+    "float64_multiply_u32": 2.2291666667,
+    "float64_divide_u32": 16.5625,
+    "int32_to_float32_u32": 1.5
+  },
+  "communication_group_cost_us_per_work_unit": {
+    "checksum_processed_byte_u32": 0.9166666667,
+    "direct_function_call_u32": 0.7916666667,
+    "indirect_function_call_u32": 0.9791666667,
+    "switch_case_4_u32": 0.6458333333
+  },
+  "communication_group_correction": {
+    "scale": 0.661840938,
+    "intercept_us": 13.296715,
+    "validated": true,
+    "blind_holdout_absolute_error_percent": 6.042
+  },
+  "cost_us_per_occurrence": {
+    "add_constant_u32": 0.0416666667,
+    "add_local_u32": 0.1041666667,
+    "add_index_u32": 0.0625,
+    "add_memory_u32": 0.25,
+    "multiply_local_u32": 0.1041666667,
+    "divide_small_u32": 0.2291666667,
+    "divide_large_u32": 0.375,
+    "modulo_small_u32": 0.3125,
+    "modulo_large_u32": 0.4583333333,
+    "index_before_multiply_u32": 0.0625,
+    "multiply_before_index_u32": 0.0208333333,
+    "mixed_add_context_u32": 0.146921875,
+    "subtract_local_u32": 0.0633697917,
+    "bitwise_and_u32": 0.0625,
+    "bitwise_or_u32": 0.0625,
+    "bitwise_xor_u32": 0.0625,
+    "shift_left_u32": 0.1041666667,
+    "shift_right_u32": 0.1041666667,
+    "branch_evaluation_u32": 0.2708333333,
+    "mixed_bitwise_context_u32": 0.1049270833
+    ,"basic_add_expression_u32": 0.0625
+    ,"multiply_masked_index_u32": 0.0729166667
+    ,"divide_masked_index_u32": 0.09375
+    ,"modulo_masked_index_u32": 0.1875
+    ,"bitwise_nested_u32": 0.0625
+    ,"shift_rotate_u32": 0.1041666667
+  },
+  "validation": {
+    "contextual_holdout_mape_percent": 4.055386,
+    "blind_chain_mape_percent": 4.16125,
+    "bulk_mixed_before_correction_mape_percent": 7.3436,
+    "bulk_mixed_after_correction_mape_percent": 2.6748,
+    "mixed_add_context_calibration": "bulk add-context task, 192 iterations",
+    "mixed_add_context_holdout": "bulk all-context task, 160 iterations",
+    "control_bitwise_before_correction_mape_percent": 9.3248,
+    "control_bitwise_after_correction_mape_percent": 2.2752,
+    "mixed_bitwise_context_calibration": "bitwise mix task, 192 iterations",
+    "mixed_bitwise_context_holdout": "all control/bitwise task, 160 iterations",
+    "note": "The 15 percent margin remains required; raw coefficients are not WCET bounds."
+  }
+}

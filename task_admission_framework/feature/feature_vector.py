@@ -22,3 +22,4 @@ class FeatureVector:
     recursion_detected: bool
     api_call_counts: dict[str, int] = field(default_factory=dict)
     dynamic_operation_counts: dict[str, int] = field(default_factory=dict)
+    contextual_integer_counts: dict[str, int] = field(default_factory=dict)

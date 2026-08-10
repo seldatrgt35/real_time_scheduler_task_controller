@@ -206,6 +206,64 @@ class StaticAnalyzerStructureTests(unittest.TestCase):
         self.assertEqual(1, operations["integer_modulo_constant"])
         self.assertEqual(1, operations["integer_divide_variable"])
 
+    def test_o0_catalog_counts_typed_32_bit_integer_arithmetic(self) -> None:
+        source = """
+        unsigned task(unsigned value, unsigned divisor)
+        {
+            for (unsigned i = 0; i < 4; ++i) {
+                value += 3U;
+                value = value * divisor;
+                value = value / 2U;
+                value = value % divisor;
+            }
+            return value;
+        }
+        """
+        profile = self._profile(source, "task")
+
+        self.assertEqual(
+            {
+                "integer_arithmetic.increment.unsigned32.variable": 4,
+                "integer_arithmetic.add.unsigned32.constant": 4,
+                "integer_arithmetic.multiply.unsigned32.variable": 4,
+                "integer_arithmetic.divide.unsigned32.constant": 4,
+                "integer_arithmetic.modulo.unsigned32.variable": 4,
+            },
+            profile.catalog_operation_counts,
+        )
+
+    def test_contextual_integer_patterns_and_chain_order(self) -> None:
+        source = """
+        static unsigned memory[16];
+        void task(unsigned multiplier, unsigned divisor)
+        {
+            unsigned value = 1U;
+            for (unsigned index = 0U; index < 8U; ++index) {
+                value += 3U;
+                value += index;
+                value += memory[index];
+                value *= multiplier;
+                value += index;
+                value += 31U / divisor;
+                value += 0xf3579bdfU % divisor;
+            }
+        }
+        """
+        profile = self._profile(source, "task")
+        counts = profile.contextual_integer_counts
+
+        self.assertEqual(8, counts["loop_iterations"])
+        self.assertEqual(1, counts["loop_invocations"])
+        self.assertEqual(8, counts["add_constant_u32"])
+        self.assertEqual(16, counts["add_index_u32"])
+        self.assertEqual(8, counts["add_memory_u32"])
+        self.assertEqual(8, counts["multiply_local_u32"])
+        self.assertEqual(8, counts["index_before_multiply_u32"])
+        self.assertEqual(8, counts["multiply_before_index_u32"])
+        self.assertEqual(8, counts["divide_small_u32"])
+        self.assertEqual(8, counts["modulo_large_u32"])
+        self.assertEqual(8, counts["mixed_add_context_u32"])
+
     def test_explicit_calibrated_kernel_is_not_double_counted(self) -> None:
         source = """
         static unsigned int bitwise_logic(unsigned int count)
@@ -227,6 +285,59 @@ class StaticAnalyzerStructureTests(unittest.TestCase):
 
         self.assertEqual({"bitwise_logic": 128}, profile.inferred_workload_counts)
         self.assertNotIn("bitwise_logic", profile.inferred_operation_counts)
+
+    def test_control_and_bitwise_contexts(self) -> None:
+        source = """
+        void task(void) {
+            unsigned value = 7U;
+            unsigned operand = 3U;
+            for (unsigned index = 0U; index < 16U; ++index) {
+                value -= operand;
+                value &= operand;
+                value |= operand;
+                value ^= operand;
+                value <<= 1U;
+                value >>= 1U;
+                if (value != 0U) { value += index; }
+            }
+        }
+        """
+        counts = self._profile(source, "task").contextual_integer_counts
+        self.assertEqual(16, counts["subtract_local_u32"])
+        self.assertEqual(16, counts["bitwise_and_u32"])
+        self.assertEqual(16, counts["bitwise_or_u32"])
+        self.assertEqual(16, counts["bitwise_xor_u32"])
+        self.assertEqual(16, counts["shift_left_u32"])
+        self.assertEqual(16, counts["shift_right_u32"])
+        self.assertEqual(16, counts["branch_evaluation_u32"])
+        self.assertEqual(16, counts["mixed_bitwise_context_u32"])
+
+    def test_nested_expressions_are_grouped_without_double_counting(self) -> None:
+        source = """
+        void task(void) {
+            unsigned v = 1U;
+            for (unsigned i = 0U; i < 32U; ++i) {
+                v = (v << 1U) | (v >> 31U);
+            }
+        }
+        """
+        counts = self._profile(source, "task").contextual_integer_counts
+        self.assertEqual(32, counts["shift_rotate_u32"])
+        self.assertNotIn("shift_left_u32", counts)
+        self.assertNotIn("shift_right_u32", counts)
+
+    def test_floating_loop_is_grouped(self) -> None:
+        source = """
+        void task(void) {
+            float value = 1.0F;
+            for (unsigned index = 0U; index < 32U; ++index) {
+                value = value * 0.875F;
+            }
+        }
+        """
+        counts = self._profile(source, "task").contextual_integer_counts
+        self.assertEqual(32, counts["float32_multiply_u32"])
+        self.assertEqual(32, counts["floating_group_loop_iterations"])
 
     @staticmethod
     def _profile(source: str, function_name: str):

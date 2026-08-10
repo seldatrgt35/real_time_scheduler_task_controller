@@ -15,12 +15,19 @@ class DynamicOperationInference:
     """Primitive operations weighted by statically proven execution counts."""
 
     counts: dict[str, int] = field(default_factory=dict)
+    catalog_counts: dict[str, int] = field(default_factory=dict)
     verified: bool = True
     notes: list[str] = field(default_factory=list)
 
     def add(self, name: str, occurrences: int) -> None:
         if occurrences > 0:
             self.counts[name] = self.counts.get(name, 0) + occurrences
+
+    def add_catalog(self, name: str, occurrences: int) -> None:
+        if occurrences > 0:
+            self.catalog_counts[name] = (
+                self.catalog_counts.get(name, 0) + occurrences
+            )
 
 
 class DynamicOperationAnalyzer(DynamicWorkAnalyzer):
@@ -267,6 +274,14 @@ class DynamicOperationAnalyzer(DynamicWorkAnalyzer):
             tokens = {token.spelling for token in cursor.get_tokens()}
             if "++" in tokens or "--" in tokens:
                 result.add("integer_add_sub", multiplier)
+                operation = "increment" if "++" in tokens else "decrement"
+                self._count_catalog_integer_operation(
+                    cursor,
+                    operation,
+                    "variable",
+                    multiplier,
+                    result,
+                )
             if "*" in tokens:
                 result.add("pointer_dereference", multiplier)
         elif cursor.kind == CursorKind.CSTYLE_CAST_EXPR:
@@ -366,6 +381,20 @@ class DynamicOperationAnalyzer(DynamicWorkAnalyzer):
                 "floating_add_sub" if uses_float else "integer_add_sub",
                 multiplier,
             )
+            if not uses_float:
+                operation = "add" if operator.startswith("+") else "sub"
+                rhs = (
+                    "constant"
+                    if self._has_constant_operand(
+                        cursor,
+                        operator,
+                        allow_constant_left=operation == "add",
+                    )
+                    else "variable"
+                )
+                self._count_catalog_integer_operation(
+                    cursor, operation, rhs, multiplier, result
+                )
         elif operator in self._MULTIPLY:
             if uses_float:
                 result.add("floating_multiply", multiplier)
@@ -380,6 +409,9 @@ class DynamicOperationAnalyzer(DynamicWorkAnalyzer):
                     else "variable"
                 )
                 result.add(f"integer_multiply_{suffix}", multiplier)
+                self._count_catalog_integer_operation(
+                    cursor, "multiply", suffix, multiplier, result
+                )
         elif operator in self._DIVIDE_MODULO:
             if uses_float:
                 result.add("floating_divide", multiplier)
@@ -395,6 +427,9 @@ class DynamicOperationAnalyzer(DynamicWorkAnalyzer):
                 )
                 operation = "divide" if operator in self._DIVIDE else "modulo"
                 result.add(f"integer_{operation}_{suffix}", multiplier)
+                self._count_catalog_integer_operation(
+                    cursor, operation, suffix, multiplier, result
+                )
         elif operator in self._BITWISE:
             result.add("bitwise_logic", multiplier)
         elif operator in self._SHIFT:
@@ -415,6 +450,44 @@ class DynamicOperationAnalyzer(DynamicWorkAnalyzer):
             source in self._INTEGER_TYPES and target in self._FLOAT_TYPES
         ):
             result.add("numeric_conversion", multiplier)
+
+    def _count_catalog_integer_operation(
+        self,
+        cursor: Cursor,
+        operation: str,
+        rhs: str,
+        multiplier: int,
+        result: DynamicOperationInference,
+    ) -> None:
+        """Add the first catalog slice: typed 32-bit integer arithmetic."""
+
+        try:
+            canonical = cursor.type.get_canonical()
+            width_bits = canonical.get_size() * 8
+        except (AttributeError, TypeError):
+            return
+        if width_bits != 32 or canonical.kind not in self._INTEGER_TYPES:
+            return
+        signedness = (
+            "unsigned"
+            if canonical.kind
+            in {
+                TypeKind.BOOL,
+                TypeKind.CHAR_U,
+                TypeKind.UCHAR,
+                TypeKind.CHAR16,
+                TypeKind.CHAR32,
+                TypeKind.USHORT,
+                TypeKind.UINT,
+                TypeKind.ULONG,
+                TypeKind.ULONGLONG,
+            }
+            else "signed"
+        )
+        result.add_catalog(
+            f"integer_arithmetic.{operation}.{signedness}32.{rhs}",
+            multiplier,
+        )
 
     def _root_operator(self, cursor: Cursor) -> str | None:
         child_extents: list[tuple[int, int]] = []

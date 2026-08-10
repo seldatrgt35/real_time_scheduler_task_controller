@@ -74,7 +74,7 @@ def evaluate_execution_admission(
     )
     status = (
         ("PASS" if estimate.passes_safety_limit else "FAIL")
-        if profile.validated
+        if estimate.model_validated
         else "UNVERIFIED"
     )
     return ExecutionAdmissionResult(

@@ -26,6 +26,9 @@ from task_admission_framework.calibration.workload_execution_estimator import (
 from task_admission_framework.calibration.execution_admission import (
     evaluate_execution_admission,
 )
+from task_admission_framework.calibration.contextual_integer_execution import (
+    estimate_contextual_integer,
+)
 from task_admission_framework.rules.rule_database import RuleDatabase
 from task_admission_framework.rules.rule_loader import RuleLoader
 from task_admission_framework.scheduling.fixed_priority_analyzer import (
@@ -127,6 +130,32 @@ class TaskSetAnalyzer:
                 execution_counts = self._supported_execution_counts(
                     session.task_profile
                 )
+                contextual_counts = dict(
+                    getattr(session.task_profile, "contextual_integer_counts", {})
+                )
+                contextual_estimate = (
+                    estimate_contextual_integer(contextual_counts)
+                    if contextual_counts
+                    else None
+                )
+                admission_execution_time_us = (
+                    contextual_estimate.safe_us
+                    if estimate_source == "contextual_integer_o0_board_model"
+                    and contextual_estimate is not None
+                    else (
+                        None
+                        if estimated_execution_time_us is None
+                        else estimated_execution_time_us
+                        * (
+                            1.0
+                            + (
+                                self._workload_cost_profile.estimate_margin_ratio
+                                if self._workload_cost_profile is not None
+                                else 0.0
+                            )
+                        )
+                    )
+                )
                 task_results.append(
                     TaskSetTaskResult(
                         task_name=entry.name,
@@ -139,19 +168,7 @@ class TaskSetAnalyzer:
                         complexity_score=decision.complexity_score,
                         hardware_adjusted_score=decision.hardware_adjusted_score,
                         estimated_execution_time_us=estimated_execution_time_us,
-                        admission_execution_time_us=(
-                            None
-                            if estimated_execution_time_us is None
-                            else estimated_execution_time_us
-                            * (
-                                1.0
-                                + (
-                                    self._workload_cost_profile.estimate_margin_ratio
-                                    if self._workload_cost_profile is not None
-                                    else 0.0
-                                )
-                            )
-                        ),
+                        admission_execution_time_us=admission_execution_time_us,
                         rule_max_complexity=decision.hardware_adjusted_max_complexity,
                         task_load=task_load,
                         admission_status=decision.status.name,
@@ -176,6 +193,12 @@ class TaskSetAnalyzer:
                         execution_safety_status=execution_safety_status,
                         workload_breakdown=execution_counts,
                         time_breakdown_us=self._time_breakdown(execution_counts),
+                        contextual_integer_counts=contextual_counts,
+                        contextual_time_breakdown_us=(
+                            dict(contextual_estimate.breakdown_us)
+                            if contextual_estimate is not None
+                            else {}
+                        ),
                         safety_budget_us=self._safety_budget_us(entry.period_ms),
                         dynamic_bound_notes=list(
                             session.task_profile.dynamic_bound_notes
@@ -279,6 +302,27 @@ class TaskSetAnalyzer:
         str | None,
         str | None,
     ]:
+        contextual_counts = dict(
+            getattr(task_profile, "contextual_integer_counts", {})
+        )
+        if contextual_counts:
+            contextual = estimate_contextual_integer(contextual_counts)
+            if contextual.verified and task_profile.dynamic_bound_verified:
+                safety_budget_us = period_ms * 1000.0 * 0.8
+                safe_us = contextual.safe_us or 0.0
+                status = "PASS" if safe_us <= safety_budget_us else "FAIL"
+                return (
+                    contextual.nominal_us,
+                    safe_us / safety_budget_us,
+                    status,
+                    "contextual_integer_o0_board_model",
+                    contextual.note,
+                )
+            note_parts = [contextual.note]
+            if not task_profile.dynamic_bound_verified:
+                note_parts.append("Contextual loop bound is not statically proven.")
+            return None, None, "UNVERIFIED", None, " ".join(note_parts)
+
         if self._workload_cost_profile is not None:
             admission = evaluate_execution_admission(
                 task_profile,
@@ -294,7 +338,7 @@ class TaskSetAnalyzer:
                     if admission.estimated_execution_us is None
                     else (
                         "static_feature_time_model"
-                        if self._workload_cost_profile.validated
+                        if admission.status in {"PASS", "FAIL"}
                         else "unvalidated_static_feature_time_model"
                     )
                 ),
@@ -361,13 +405,17 @@ class TaskSetAnalyzer:
     def _time_breakdown(self, counts: dict[str, int]) -> dict[str, float]:
         if self._workload_cost_profile is None:
             return {}
-        breakdown = {
-            name: count * self._workload_cost_profile.coefficient_for(name)
-            for name, count in counts.items()
-        }
+        if not counts:
+            return {}
+        estimate = self._workload_execution_estimator.estimate_breakdown(
+            workload_counts=counts,
+            period_ms=1,
+            profile=self._workload_cost_profile,
+        )
+        breakdown = dict(estimate.time_breakdown_us or {})
         breakdown["model_intercept"] = self._workload_cost_profile.intercept_us
         breakdown["engineering_margin"] = (
-            sum(breakdown.values())
+            estimate.nominal_execution_us
             * self._workload_cost_profile.estimate_margin_ratio
         )
         return breakdown

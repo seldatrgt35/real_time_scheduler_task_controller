@@ -223,6 +223,51 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
         self.assertAlmostEqual(estimate.admission_execution_us, 230.7180, places=3)
         self.assertTrue(estimate.passes_safety_limit)
 
+    def test_s32k148_memory_fixed_groups_use_blind_validated_correction(self) -> None:
+        profile_path = (
+            Path(__file__).parents[1]
+            / "task_admission_framework"
+            / "calibration"
+            / "profiles"
+            / "S32K148_workload_costs.json"
+        )
+        profile = WorkloadCostLoader().load(profile_path)
+        estimate = WorkloadExecutionEstimator().estimate_breakdown(
+            workload_counts={
+                "sequential_memory_access": 72,
+                "random_indexed_memory_access": 40,
+                "bulk_memory_copy_bytes": 24,
+                "bulk_memory_set_bytes": 12,
+                "q15_multiply": 80,
+                "q15_mac": 48,
+            },
+            period_ms=5,
+            profile=profile,
+        )
+
+        self.assertTrue(estimate.model_validated)
+        self.assertAlmostEqual(estimate.estimated_execution_us, 136.243, places=3)
+
+    def test_group_correction_does_not_validate_uncovered_feature(self) -> None:
+        profile_path = (
+            Path(__file__).parents[1]
+            / "task_admission_framework"
+            / "calibration"
+            / "profiles"
+            / "S32K148_workload_costs.json"
+        )
+        profile = WorkloadCostLoader().load(profile_path)
+        estimate = WorkloadExecutionEstimator().estimate_breakdown(
+            workload_counts={
+                "sequential_memory_access": 64,
+                "float32_add_sub": 4,
+            },
+            period_ms=5,
+            profile=profile,
+        )
+
+        self.assertFalse(estimate.model_validated)
+
     def test_composite_loop_classes_are_not_primitive_double_counted(self) -> None:
         from task_admission_framework.analyzer.dynamic_operations import (
             DynamicOperationAnalyzer,

@@ -9,6 +9,7 @@ from clang.cindex import Cursor, CursorKind, TranslationUnit
 
 from task_admission_framework.analyzer.ast_parser import ClangAstParser
 from task_admission_framework.analyzer.dynamic_work import DynamicWorkAnalyzer
+from task_admission_framework.analyzer.contextual_integer import ContextualIntegerAnalyzer
 from task_admission_framework.analyzer.dynamic_operations import (
     DynamicOperationAnalyzer,
 )
@@ -125,11 +126,20 @@ class StaticAnalyzer:
         )
         profile.inferred_workload_counts = dict(dynamic_work.counts)
         profile.inferred_operation_counts = dict(dynamic_operations.counts)
+        profile.catalog_operation_counts = dict(dynamic_operations.catalog_counts)
+        contextual_integer = ContextualIntegerAnalyzer().infer_contexts(
+            root_function, function_definitions
+        )
+        profile.contextual_integer_counts = dict(contextual_integer.counts)
         profile.dynamic_bound_verified = (
             dynamic_work.verified and dynamic_operations.verified
+            and contextual_integer.verified
         )
         profile.dynamic_bound_notes = list(
-            dict.fromkeys([*dynamic_work.notes, *dynamic_operations.notes])
+            dict.fromkeys([
+                *dynamic_work.notes, *dynamic_operations.notes,
+                *contextual_integer.notes,
+            ])
         )
         return profile
 

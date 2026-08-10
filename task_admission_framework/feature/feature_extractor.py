@@ -32,6 +32,7 @@ class FeatureExtractor:
                 if occurrences > 0
             },
             dynamic_operation_counts=dict(profile.inferred_operation_counts),
+            contextual_integer_counts=dict(profile.contextual_integer_counts),
         )
 
     @staticmethod

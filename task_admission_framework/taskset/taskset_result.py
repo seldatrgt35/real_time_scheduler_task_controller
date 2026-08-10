@@ -37,6 +37,8 @@ class TaskSetTaskResult:
     execution_safety_status: str = "UNVERIFIED"
     workload_breakdown: dict[str, int] = field(default_factory=dict)
     time_breakdown_us: dict[str, float] = field(default_factory=dict)
+    contextual_integer_counts: dict[str, int] = field(default_factory=dict)
+    contextual_time_breakdown_us: dict[str, float] = field(default_factory=dict)
     safety_budget_us: float | None = None
     response_time_us: float | None = None
     dynamic_bound_notes: list[str] = field(default_factory=list)

@@ -6,6 +6,18 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
+class WorkloadGroupCorrection:
+    """Validated affine correction for one related feature group."""
+
+    name: str
+    workload_classes: frozenset[str]
+    scale: float
+    intercept_us: float
+    validated: bool = False
+    source: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class WorkloadCostProfile:
     """Execution-time costs for bounded dynamic work on one target."""
 
@@ -17,6 +29,7 @@ class WorkloadCostProfile:
     intercept_us: float = 0.0
     estimate_margin_ratio: float = 0.0
     source: str = ""
+    group_corrections: tuple[WorkloadGroupCorrection, ...] = ()
 
     def coefficient_for(self, workload_class: str) -> float:
         """Return the calibrated coefficient for a normalized workload class."""

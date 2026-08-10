@@ -1,11 +1,39 @@
 {
-  "profile_id": "s32k148_automotive_execution_time_us_v12",
+  "profile_id": "s32k148_automotive_execution_time_us_v13",
   "reference_hardware": "S32K148",
   "safety_limit_ratio": 0.8,
   "validated": false,
   "intercept_us": 0.0,
   "estimate_margin_ratio": 0.10,
-  "source": "Resettable isolated S32K148 feature calibration. Individual feature hold-outs passed, but the 2026-08-04 composed automotive validation under-estimated representative tasks by up to 75.6%; therefore this additive profile is not validated for admission. It may be shown as an engineering estimate only until a mixed composed-task model passes independent validation.",
+  "source": "Resettable isolated S32K148 feature calibration. Memory and fixed-point affine group corrections were trained on mixed measurements and independently validated on four blind automotive tasks (MAPE 7.46%, maximum absolute percentage error 9.77%). Other feature families remain unverified.",
+  "group_corrections": [
+    {
+      "name": "memory",
+      "workload_classes": [
+        "sequential_memory_access",
+        "random_indexed_memory_access",
+        "bulk_memory_copy_bytes",
+        "bulk_memory_set_bytes"
+      ],
+      "scale": 0.592113879,
+      "intercept_us": 11.597372,
+      "validated": true,
+      "source": "Mixed S32K148 calibration plus four-task blind automotive validation."
+    },
+    {
+      "name": "fixed_point",
+      "workload_classes": [
+        "q15_multiply",
+        "q15_mac",
+        "q31_multiply",
+        "q31_mac"
+      ],
+      "scale": 0.586393221,
+      "intercept_us": 9.967678,
+      "validated": true,
+      "source": "Mixed S32K148 calibration plus four-task blind automotive validation."
+    }
+  ],
   "execution_time_us_per_work_unit": {
     "integer_control": 0.9932721680,
     "fixed_point_filter": 0.7832470633,

@@ -488,6 +488,11 @@ class StarGui:
                 for name, count in sorted(execution.workload_counts.items())
                 if name in execution.time_breakdown_us
             ],
+            *[
+                f"  {name}: {value:+.1f} us"
+                for name, value in sorted(execution.time_breakdown_us.items())
+                if name.endswith("_group_correction")
+            ],
             "",
             f"Period Limit: {execution.safety_budget_us:.1f} us",
             (
@@ -552,7 +557,7 @@ class StarGui:
                 lines.append(f"   Workload          : {breakdown}")
             if task.estimated_execution_time_us is not None:
                 source_label = (
-                    "STATIC ESTIMATE"
+                    "BOARD-CALIBRATED ESTIMATE"
                     if task.execution_safety_status != "UNVERIFIED"
                     else "UNVERIFIED STATIC ESTIMATE"
                 )
@@ -568,6 +573,17 @@ class StarGui:
                         f"   Limit Usage       : {task.safety_budget_used:.2%}",
                     ]
                 )
+                corrections = [
+                    (name, value)
+                    for name, value in sorted(task.time_breakdown_us.items())
+                    if name.endswith("_group_correction")
+                ]
+                if corrections:
+                    lines.append("   Group Corrections :")
+                    lines.extend(
+                        f"     {name}: {value:+.1f} us"
+                        for name, value in corrections
+                    )
             elif task.dynamic_bound_notes:
                 lines.append("   Complexity        : UNVERIFIED")
                 lines.extend(f"     {note}" for note in task.dynamic_bound_notes)

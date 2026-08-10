@@ -7,6 +7,7 @@ from pathlib import Path
 
 from task_admission_framework.calibration.workload_cost_profile import (
     WorkloadCostProfile,
+    WorkloadGroupCorrection,
 )
 
 
@@ -44,6 +45,30 @@ class WorkloadCostLoader:
             raise ValueError(
                 "estimate_margin_ratio must be greater than or equal to 0."
             )
+        corrections: list[WorkloadGroupCorrection] = []
+        for raw in data.get("group_corrections", []):
+            classes = frozenset(
+                str(name).strip().lower().replace("-", "_")
+                for name in raw.get("workload_classes", [])
+            )
+            scale = float(raw.get("scale", 1.0))
+            group_intercept = float(raw.get("intercept_us", 0.0))
+            if not classes or scale <= 0 or group_intercept < 0:
+                raise ValueError("Invalid workload group correction.")
+            if not classes.issubset(costs):
+                raise ValueError(
+                    "Workload group correction contains an unknown class."
+                )
+            corrections.append(
+                WorkloadGroupCorrection(
+                    name=str(raw["name"]),
+                    workload_classes=classes,
+                    scale=scale,
+                    intercept_us=group_intercept,
+                    validated=bool(raw.get("validated", False)),
+                    source=str(raw.get("source", "")),
+                )
+            )
         return WorkloadCostProfile(
             profile_id=str(data["profile_id"]),
             reference_hardware=str(data["reference_hardware"]),
@@ -53,4 +78,5 @@ class WorkloadCostLoader:
             intercept_us=intercept_us,
             estimate_margin_ratio=estimate_margin_ratio,
             source=str(data.get("source", "")),
+            group_corrections=tuple(corrections),
         )

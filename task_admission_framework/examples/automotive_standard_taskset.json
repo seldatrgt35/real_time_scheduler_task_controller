@@ -1,0 +1,10 @@
+{
+  "simulation_window_ms": 500,
+  "tasks": [
+    {"name":"SensorFusion5ms","source_file":"automotive_standard_tasks.c","entry_function":"StarTask_5ms_SensorFusion","period_ms":5,"deadline_ms":5,"priority":3,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"SignalFilter10ms","source_file":"automotive_standard_tasks.c","entry_function":"StarTask_10ms_SignalFilter","period_ms":10,"deadline_ms":10,"priority":3,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"MotorControl20ms","source_file":"automotive_standard_tasks.c","entry_function":"StarTask_20ms_MotorControl","period_ms":20,"deadline_ms":20,"priority":2,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"StateEstimator50ms","source_file":"automotive_standard_tasks.c","entry_function":"StarTask_50ms_StateEstimator","period_ms":50,"deadline_ms":50,"priority":2,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"Diagnostics100ms","source_file":"automotive_standard_tasks.c","entry_function":"StarTask_100ms_Diagnostics","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"}
+  ]
+}

@@ -644,6 +644,26 @@ def print_taskset_result(result) -> None:
                     f"  Admission Execution (with margin): "
                     f"{task.admission_execution_time_us / 1000.0:.3f} ms"
                 )
+            if task.contextual_integer_counts:
+                counts = "; ".join(
+                    f"{name}={count}"
+                    for name, count in sorted(task.contextual_integer_counts.items())
+                )
+                print(f"  Contextual O0 Features: {counts}")
+                print(
+                    "  Contextual Estimate: "
+                    f"nominal={task.estimated_execution_time_us:.3f} us; "
+                    f"safe={task.admission_execution_time_us:.3f} us; "
+                    f"verified={task.execution_safety_status in {'PASS', 'FAIL'}}"
+                )
+                if task.contextual_time_breakdown_us:
+                    breakdown = "; ".join(
+                        f"{name}={value:.3f} us"
+                        for name, value in sorted(
+                            task.contextual_time_breakdown_us.items()
+                        )
+                    )
+                    print(f"  Contextual Time Breakdown: {breakdown}")
             if task.time_breakdown_us:
                 breakdown = "; ".join(
                     f"{name}={count} -> "
@@ -651,6 +671,13 @@ def print_taskset_result(result) -> None:
                     for name, count in sorted(task.workload_breakdown.items())
                 )
                 print(f"  Static Feature Time Model: {breakdown}")
+                corrections = "; ".join(
+                    f"{name}={value:+.1f} us"
+                    for name, value in sorted(task.time_breakdown_us.items())
+                    if name.endswith("_group_correction")
+                )
+                if corrections:
+                    print(f"  Board-Calibrated Group Correction: {corrections}")
             if task.safety_budget_used is not None:
                 print(
                     f"  80% Safety Budget Used: "

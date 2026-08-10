@@ -25,6 +25,7 @@ class WorkloadExecutionEstimate:
     note: str
     workload_breakdown: dict[str, int] | None = None
     time_breakdown_us: dict[str, float] | None = None
+    model_validated: bool = False
 
 
 class WorkloadExecutionEstimator:
@@ -43,37 +44,10 @@ class WorkloadExecutionEstimator:
         if period_ms <= 0:
             raise ValueError("period_ms must be greater than 0.")
 
-        coefficient = profile.coefficient_for(workload_class)
-        model_us = profile.intercept_us + work_units * coefficient
-        admission_us = model_us * (1.0 + profile.estimate_margin_ratio)
-        safety_budget = period_ms * 1000.0 * profile.safety_limit_ratio
-        budget_used = admission_us / safety_budget
-
-        validation = "validated" if profile.validated else "unvalidated"
-        note = (
-            f"{validation} workload estimate: {work_units} work units x "
-            f"{coefficient:g} us/unit + {profile.intercept_us:g} us intercept "
-            f"with {profile.estimate_margin_ratio:.0%} margin on "
-            f"{profile.reference_hardware}. This is a calibrated engineering "
-            "estimate, not a measured WCET."
-        )
-        return WorkloadExecutionEstimate(
-            workload_class=workload_class.strip().lower().replace("-", "_"),
-            work_units=work_units,
-            execution_time_us_per_work_unit=coefficient,
-            nominal_execution_us=model_us,
-            admission_execution_us=admission_us,
-            estimated_execution_us=model_us,
-            safety_budget_us=safety_budget,
-            safety_budget_used=budget_used,
-            passes_safety_limit=admission_us <= safety_budget,
-            note=note,
-            workload_breakdown={
-                workload_class.strip().lower().replace("-", "_"): work_units
-            },
-            time_breakdown_us={
-                workload_class.strip().lower().replace("-", "_"): work_units * coefficient
-            },
+        return self.estimate_breakdown(
+            workload_counts={workload_class: work_units},
+            period_ms=period_ms,
+            profile=profile,
         )
 
     def estimate_breakdown(
@@ -91,7 +65,7 @@ class WorkloadExecutionEstimator:
             raise ValueError("period_ms must be greater than 0.")
 
         normalized: dict[str, int] = {}
-        model_us = profile.intercept_us
+        raw_model_us = profile.intercept_us
         details: list[str] = []
         time_breakdown: dict[str, float] = {}
         for raw_class, raw_count in workload_counts.items():
@@ -102,22 +76,46 @@ class WorkloadExecutionEstimator:
             coefficient = profile.coefficient_for(workload_class)
             normalized[workload_class] = normalized.get(workload_class, 0) + count
             subtotal = count * coefficient
-            model_us += subtotal
+            raw_model_us += subtotal
             time_breakdown[workload_class] = (
                 time_breakdown.get(workload_class, 0.0) + subtotal
             )
             details.append(f"{count} {workload_class} x {coefficient:g}")
 
+        model_us = raw_model_us
+        covered: set[str] = set()
+        correction_notes: list[str] = []
+        for correction in profile.group_corrections:
+            present = correction.workload_classes.intersection(normalized)
+            if not present:
+                continue
+            raw_group_us = sum(time_breakdown[name] for name in present)
+            corrected_group_us = (
+                correction.intercept_us + correction.scale * raw_group_us
+            )
+            model_us += corrected_group_us - raw_group_us
+            time_breakdown[f"{correction.name}_group_correction"] = (
+                corrected_group_us - raw_group_us
+            )
+            if correction.validated:
+                covered.update(present)
+            correction_notes.append(
+                f"{correction.name}: {raw_group_us:.3f} us -> "
+                f"{corrected_group_us:.3f} us"
+            )
+
+        model_validated = profile.validated or set(normalized).issubset(covered)
         admission_us = model_us * (1.0 + profile.estimate_margin_ratio)
         safety_budget = period_ms * 1000.0 * profile.safety_limit_ratio
         budget_used = admission_us / safety_budget
         total_units = sum(normalized.values())
         effective_coefficient = model_us / total_units
-        validation = "validated" if profile.validated else "unvalidated"
+        validation = "validated" if model_validated else "unvalidated"
         note = (
             f"{validation} automatic workload estimate: "
             + "; ".join(details)
             + f"; {profile.intercept_us:g} us intercept; "
+            + ("; ".join(correction_notes) + "; " if correction_notes else "")
             + f"{profile.estimate_margin_ratio:.0%} engineering margin on "
             + f"{profile.reference_hardware}. "
             "Loop bounds and workload classes were inferred from source. "
@@ -136,4 +134,5 @@ class WorkloadExecutionEstimator:
             note=note,
             workload_breakdown=normalized,
             time_breakdown_us=time_breakdown,
+            model_validated=model_validated,
         )
