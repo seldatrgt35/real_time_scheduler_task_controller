@@ -7,5 +7,6 @@ void StarTask_PowertrainSensorProcessing_10ms(void);
 void StarTask_PowertrainTorqueSafety_20ms(void);
 void StarTask_PowertrainDiagnostics_50ms(void);
 void StarTask_PowertrainCommunication_100ms(void);
+void StarTask_PowertrainCommunicationWithCan_100ms(void);
 
 #endif /* STAR_POWERTRAIN_REFERENCE_APPLICATION_H */

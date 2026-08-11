@@ -5,7 +5,7 @@
   "validated": false,
   "intercept_us": 0.0,
   "estimate_margin_ratio": 0.10,
-  "source": "Resettable isolated S32K148 feature calibration. Memory and fixed-point affine group corrections were trained on mixed measurements and independently validated on four blind automotive tasks (MAPE 7.46%, maximum absolute percentage error 9.77%). Other feature families remain unverified.",
+  "source": "Resettable isolated S32K148 feature calibration. Includes separated Powertrain communication CPU and NXP FlexCAN driver calibration. Network arbitration, retransmission and transceiver latency remain outside the CPU model.",
   "group_corrections": [
     {
       "name": "memory",
@@ -32,6 +32,34 @@
       "intercept_us": 9.967678,
       "validated": true,
       "source": "Mixed S32K148 calibration plus four-task blind automotive validation."
+    },
+    {
+      "name": "communication_compound",
+      "workload_classes": [
+        "bitwise_logic",
+        "can_checksum",
+        "shift_rotate"
+      ],
+      "scale": 0.2976674404,
+      "intercept_us": 0.0,
+      "validated": true,
+      "require_all_classes": false,
+      "required_workload_classes": [
+        "bitwise_logic",
+        "can_checksum"
+      ],
+      "source": "CAN-free Powertrain communication task: 22.020 us board CPU versus 73.975 us raw feature sum. Optional shift/rotate work in the same bounded communication loop was independently validated by the Powertrain CAN holdout task."
+    },
+    {
+      "name": "flexcan_driver",
+      "workload_classes": [
+        "can_send_driver"
+      ],
+      "scale": 1.0,
+      "intercept_us": 0.0,
+      "validated": true,
+      "require_all_classes": true,
+      "source": "S32K148, NXP S32 SDK RTM 4.0.2, ARM GCC 11.4 O0, 48 MHz, 40 loopback samples."
     }
   ],
   "execution_time_us_per_work_unit": {
@@ -80,6 +108,7 @@
     "mmio_read": 0.4583333333,
     "mmio_write": 0.3333333333,
     "gpio_read": 0.5208333333,
-    "gpio_write": 0.5625000000
+    "gpio_write": 0.5625000000,
+    "can_send_driver": 31.8120000000
   }
 }

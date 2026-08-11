@@ -89,6 +89,10 @@ class WorkloadExecutionEstimator:
             present = correction.workload_classes.intersection(normalized)
             if not present:
                 continue
+            if correction.require_all_classes and present != correction.workload_classes:
+                continue
+            if not correction.required_workload_classes.issubset(present):
+                continue
             raw_group_us = sum(time_breakdown[name] for name in present)
             corrected_group_us = (
                 correction.intercept_us + correction.scale * raw_group_us

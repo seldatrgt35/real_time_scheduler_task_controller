@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from task_admission_framework.calibration.workload_cost_profile import (
     WorkloadCostProfile,
@@ -46,6 +46,9 @@ def evaluate_execution_admission(
         normalized = operation.strip().lower().replace("-", "_")
         if normalized in supported_costs:
             counts[normalized] = max(counts.get(normalized, 0), count)
+    can_send_count = getattr(task_profile, "api_usage", {}).get("CAN_Send", 0)
+    if can_send_count > 0 and "can_send_driver" in supported_costs:
+        counts["can_send_driver"] = can_send_count
 
     if not task_profile.dynamic_bound_verified:
         return ExecutionAdmissionResult(
@@ -67,10 +70,15 @@ def evaluate_execution_admission(
             notes=["No bounded dynamic workload could be inferred from the source."],
         )
 
+    effective_profile = (
+        replace(profile, estimate_margin_ratio=0.15)
+        if can_send_count > 0
+        else profile
+    )
     estimate = WorkloadExecutionEstimator().estimate_breakdown(
         workload_counts=counts,
         period_ms=period_ms,
-        profile=profile,
+        profile=effective_profile,
     )
     status = (
         ("PASS" if estimate.passes_safety_limit else "FAIL")

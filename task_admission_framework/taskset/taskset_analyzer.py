@@ -288,6 +288,9 @@ class TaskSetAnalyzer:
             normalized = name.strip().lower().replace("-", "_")
             if normalized in supported:
                 counts[normalized] = max(counts.get(normalized, 0), count)
+        can_send_count = getattr(task_profile, "api_usage", {}).get("CAN_Send", 0)
+        if can_send_count > 0 and "can_send_driver" in supported:
+            counts["can_send_driver"] = can_send_count
         return counts
 
     def _estimate_execution_time(
@@ -310,26 +313,43 @@ class TaskSetAnalyzer:
                 name for name, count in getattr(task_profile, "api_usage", {}).items()
                 if count > 0
             )
-            if external_apis:
+            unsupported_external_apis = [
+                name for name in external_apis if name != "CAN_Send"
+            ]
+            if unsupported_external_apis:
                 return (
                     None,
                     None,
                     "UNVERIFIED",
                     None,
                     "External API execution is not covered by the contextual "
-                    f"board model: {', '.join(external_apis)}.",
+                    f"board model: {', '.join(unsupported_external_apis)}.",
                 )
             contextual = estimate_contextual_integer(contextual_counts)
             if contextual.verified and task_profile.dynamic_bound_verified:
                 safety_budget_us = period_ms * 1000.0 * 0.8
-                safe_us = contextual.safe_us or 0.0
+                can_send_count = getattr(task_profile, "api_usage", {}).get(
+                    "CAN_Send", 0
+                )
+                can_nominal_us = can_send_count * 31.812
+                can_safe_us = can_send_count * 31.812 * 1.15
+                nominal_us = (contextual.nominal_us or 0.0) + can_nominal_us
+                safe_us = (contextual.safe_us or 0.0) + can_safe_us
                 status = "PASS" if safe_us <= safety_budget_us else "FAIL"
+                can_note = (
+                    f" {can_send_count} CAN_Send call(s) use the S32K148 "
+                    "FlexCAN O0 board calibration (31.812 us nominal, 15% "
+                    "CPU margin); arbitration and retransmission are not "
+                    "included."
+                    if can_send_count > 0
+                    else ""
+                )
                 return (
-                    contextual.nominal_us,
+                    nominal_us,
                     safe_us / safety_budget_us,
                     status,
                     "contextual_integer_o0_board_model",
-                    contextual.note,
+                    contextual.note + can_note,
                 )
             note_parts = [contextual.note]
             if not task_profile.dynamic_bound_verified:

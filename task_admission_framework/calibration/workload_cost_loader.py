@@ -59,6 +59,14 @@ class WorkloadCostLoader:
                 raise ValueError(
                     "Workload group correction contains an unknown class."
                 )
+            required_classes = frozenset(
+                str(name).strip().lower().replace("-", "_")
+                for name in raw.get("required_workload_classes", [])
+            )
+            if not required_classes.issubset(classes):
+                raise ValueError(
+                    "Required workload classes must belong to their correction group."
+                )
             corrections.append(
                 WorkloadGroupCorrection(
                     name=str(raw["name"]),
@@ -67,6 +75,8 @@ class WorkloadCostLoader:
                     intercept_us=group_intercept,
                     validated=bool(raw.get("validated", False)),
                     source=str(raw.get("source", "")),
+                    require_all_classes=bool(raw.get("require_all_classes", False)),
+                    required_workload_classes=required_classes,
                 )
             )
         return WorkloadCostProfile(

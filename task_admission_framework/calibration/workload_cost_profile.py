@@ -15,6 +15,8 @@ class WorkloadGroupCorrection:
     intercept_us: float
     validated: bool = False
     source: str = ""
+    require_all_classes: bool = False
+    required_workload_classes: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)

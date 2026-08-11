@@ -21,6 +21,8 @@ typedef __INT64_TYPE__ int64_t;
 #define STAR_MAP_SIZE           (16U)
 #define STAR_CAN_PAYLOAD_LENGTH (8U)
 
+extern void CAN_Send(uint32_t identifier, const void *payload, uint8_t length);
+
 static int32_t g_star_sensor_samples[STAR_SENSOR_COUNT];
 static int32_t g_star_pedal_map[STAR_MAP_SIZE + 1U];
 static int32_t g_star_torque_map[STAR_MAP_SIZE + 1U];
@@ -251,4 +253,10 @@ void StarTask_PowertrainCommunication_100ms(void)
     }
     g_star_can_payload[7U] ^= (uint8_t)checksum;
     g_star_network_state = network_state;
+}
+
+void StarTask_PowertrainCommunicationWithCan_100ms(void)
+{
+    StarTask_PowertrainCommunication_100ms();
+    CAN_Send(0x510U, g_star_can_payload, (uint8_t)STAR_CAN_PAYLOAD_LENGTH);
 }

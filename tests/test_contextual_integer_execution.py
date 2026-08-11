@@ -95,7 +95,7 @@ class ContextualIntegerExecutionTest(unittest.TestCase):
         self.assertIsNone(estimate[0])
         self.assertEqual("UNVERIFIED", estimate[2])
 
-    def test_taskset_rejects_external_api_outside_contextual_board_model(self):
+    def test_taskset_uses_board_calibrated_can_send_cpu_cost(self):
         profile = TaskProfile(
             task_name="can_transmit",
             api_usage={"CAN_Send": 1},
@@ -109,9 +109,9 @@ class ContextualIntegerExecutionTest(unittest.TestCase):
             dynamic_bound_verified=True,
         )
         estimate = TaskSetAnalyzer()._estimate_execution_time(profile, 100, 0.0)
-        self.assertIsNone(estimate[0])
-        self.assertEqual("UNVERIFIED", estimate[2])
-        self.assertIn("CAN_Send", estimate[4])
+        self.assertIsNotNone(estimate[0])
+        self.assertEqual("PASS", estimate[2])
+        self.assertIn("31.812 us nominal", estimate[4])
 
     def test_mixed_memory_communication_is_verified_by_independent_holdout(self):
         estimate = estimate_contextual_integer({

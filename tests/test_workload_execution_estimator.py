@@ -141,6 +141,65 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
         )
         self.assertAlmostEqual(result.estimated_execution_us or 0.0, 34.0)
 
+    def test_powertrain_can_compound_uses_separated_board_calibrations(self) -> None:
+        profile_path = (
+            Path(__file__).parents[1]
+            / "task_admission_framework"
+            / "calibration"
+            / "profiles"
+            / "S32K148_workload_costs.json"
+        )
+        profile = WorkloadCostLoader().load(profile_path)
+        result = evaluate_execution_admission(
+            SimpleNamespace(
+                task_name="PowertrainCommunicationWithCan",
+                dynamic_bound_verified=True,
+                dynamic_bound_notes=[],
+                inferred_workload_counts={
+                    "bitwise_logic": 89,
+                    "can_checksum": 33,
+                },
+                inferred_operation_counts={},
+                api_usage={"CAN_Send": 1},
+            ),
+            period_ms=100,
+            profile=profile,
+        )
+
+        self.assertEqual("PASS", result.status)
+        self.assertAlmostEqual(53.832, result.estimated_execution_us or 0.0, places=3)
+        self.assertAlmostEqual(61.9068, result.admission_execution_us or 0.0, places=3)
+        self.assertEqual(1, result.workload_counts["can_send_driver"])
+
+    def test_communication_compound_absorbs_optional_shift_rotate_work(self) -> None:
+        profile_path = (
+            Path(__file__).parents[1]
+            / "task_admission_framework"
+            / "calibration"
+            / "profiles"
+            / "S32K148_workload_costs.json"
+        )
+        profile = WorkloadCostLoader().load(profile_path)
+        result = evaluate_execution_admission(
+            SimpleNamespace(
+                task_name="PowertrainCanHoldout",
+                dynamic_bound_verified=True,
+                dynamic_bound_notes=[],
+                inferred_workload_counts={"can_checksum": 37},
+                inferred_operation_counts={
+                    "bitwise_logic": 125,
+                    "shift_rotate": 40,
+                },
+                api_usage={"CAN_Send": 1},
+            ),
+            period_ms=100,
+            profile=profile,
+        )
+
+        self.assertEqual("PASS", result.status)
+        self.assertAlmostEqual(64.277, result.estimated_execution_us or 0.0, places=3)
+        self.assertAlmostEqual(73.918, result.admission_execution_us or 0.0, places=3)
+
     def test_rejects_unbounded_or_unknown_work(self) -> None:
         with self.assertRaisesRegex(ValueError, "work_units"):
             WorkloadExecutionEstimator().estimate(
