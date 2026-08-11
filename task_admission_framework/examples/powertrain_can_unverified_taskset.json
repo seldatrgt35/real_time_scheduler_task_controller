@@ -1,0 +1,6 @@
+{
+  "simulation_window_ms": 200,
+  "tasks": [
+    {"name":"PowertrainCanTransmit100ms","source_file":"powertrain_diagnostics_communication_tasks.c","entry_function":"PowertrainCanTransmitTask_100ms","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"}
+  ]
+}

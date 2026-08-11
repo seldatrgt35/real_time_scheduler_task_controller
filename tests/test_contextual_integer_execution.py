@@ -26,6 +26,22 @@ class ContextualIntegerExecutionTest(unittest.TestCase):
         self.assertIsNone(estimate.nominal_us)
         self.assertEqual(("subtract_memory_u32",), estimate.unsupported_features)
 
+    def test_powertrain_numeric_estimate_is_verified_by_independent_holdout(self):
+        estimate = estimate_contextual_integer({
+            "loop_invocations": 4,
+            "loop_iterations": 272,
+            "powertrain_group_loop_invocations": 4,
+            "powertrain_group_loop_iterations": 272,
+            "powertrain_signed_arithmetic_i32": 80,
+            "powertrain_saturation_clamp_i32": 72,
+            "powertrain_lookup_1d_i32": 64,
+            "powertrain_linear_interpolation_i32": 56,
+        })
+        self.assertTrue(estimate.verified)
+        self.assertAlmostEqual(315.83025, estimate.nominal_us, places=5)
+        self.assertAlmostEqual(363.2047875, estimate.safe_us, places=5)
+        self.assertIn("Validated for the S32K148", estimate.note)
+
     def test_mixed_add_context_correction_matches_board_calibration(self):
         estimate = estimate_contextual_integer({
             "loop_invocations": 1,
@@ -78,6 +94,41 @@ class ContextualIntegerExecutionTest(unittest.TestCase):
         estimate = TaskSetAnalyzer()._estimate_execution_time(profile, 1, 0.0)
         self.assertIsNone(estimate[0])
         self.assertEqual("UNVERIFIED", estimate[2])
+
+    def test_taskset_rejects_external_api_outside_contextual_board_model(self):
+        profile = TaskProfile(
+            task_name="can_transmit",
+            api_usage={"CAN_Send": 1},
+            contextual_integer_counts={
+                "loop_invocations": 1,
+                "loop_iterations": 8,
+                "communication_group_loop_invocations": 1,
+                "communication_group_loop_iterations": 8,
+                "checksum_processed_byte_u32": 8,
+            },
+            dynamic_bound_verified=True,
+        )
+        estimate = TaskSetAnalyzer()._estimate_execution_time(profile, 100, 0.0)
+        self.assertIsNone(estimate[0])
+        self.assertEqual("UNVERIFIED", estimate[2])
+        self.assertIn("CAN_Send", estimate[4])
+
+    def test_mixed_memory_communication_is_verified_by_independent_holdout(self):
+        estimate = estimate_contextual_integer({
+            "loop_iterations": 44,
+            "loop_invocations": 3,
+            "memory_group_loop_iterations": 12,
+            "memory_group_loop_invocations": 1,
+            "communication_group_loop_iterations": 32,
+            "communication_group_loop_invocations": 2,
+            "bulk_memory_copy_u32": 12,
+            "checksum_processed_byte_u32": 12,
+            "switch_case_4_u32": 20,
+            "bitwise_xor_u32": 1,
+        })
+        self.assertTrue(estimate.verified)
+        self.assertAlmostEqual(28.7901, estimate.nominal_us, places=3)
+        self.assertIn("Validated for the S32K148", estimate.note)
 
 
 if __name__ == "__main__": unittest.main()

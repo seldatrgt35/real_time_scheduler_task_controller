@@ -1,0 +1,7 @@
+{
+  "simulation_window_ms": 200,
+  "tasks": [
+    {"name":"PowertrainDiagnostics50ms","source_file":"powertrain_diagnostics_communication_tasks.c","entry_function":"PowertrainDiagnosticsTask_50ms","period_ms":50,"deadline_ms":50,"priority":2,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"PowertrainCommunicationCpu100ms","source_file":"powertrain_diagnostics_communication_tasks.c","entry_function":"PowertrainCommunicationCpuTask_100ms","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"}
+  ]
+}

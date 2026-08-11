@@ -354,6 +354,80 @@ class StaticAnalyzerStructureTests(unittest.TestCase):
         counts = self._profile(source, "task").contextual_integer_counts
         self.assertEqual(8, counts["dense_integer_control_correction_u32"])
 
+    def test_powertrain_numeric_groups_are_counted_as_composites(self) -> None:
+        source = """
+        typedef int int32_t;
+        typedef long long int64_t;
+        typedef unsigned uint32_t;
+        static int32_t input[16];
+        static int32_t table[17];
+        static volatile int32_t sink;
+
+        static void signed_group(void) {
+            uint32_t i; int32_t value = sink;
+            for (i = 0U; i < 8U; ++i) {
+                int32_t sample = input[i];
+                value += sample; value -= sample / 4; value += sample * 3;
+            }
+            sink = value;
+        }
+        static void clamp_group(void) {
+            uint32_t i; int32_t total = 0;
+            for (i = 0U; i < 7U; ++i) {
+                int32_t value = input[i] * 4;
+                if (value > 1000) { value = 1000; }
+                else if (value < -1000) { value = -1000; }
+                total += value;
+            }
+            sink = total;
+        }
+        static void lookup_group(void) {
+            uint32_t i; int32_t total = 0;
+            for (i = 0U; i < 6U; ++i) {
+                uint32_t slot = (i * 5U) & 15U;
+                total += table[slot];
+            }
+            sink = total;
+        }
+        static void interpolation_group(void) {
+            uint32_t i; int32_t total = 0;
+            for (i = 0U; i < 5U; ++i) {
+                uint32_t slot = (i * 5U) & 15U;
+                int32_t low = table[slot]; int32_t high = table[slot + 1U];
+                int64_t delta = (int64_t)(high - low) * (int64_t)(i & 255U);
+                total += low + (int32_t)(delta / 256);
+            }
+            sink = total;
+        }
+        void task(void) {
+            signed_group(); clamp_group(); lookup_group(); interpolation_group();
+        }
+        """
+        counts = self._profile(source, "task").contextual_integer_counts
+        self.assertEqual(8, counts["powertrain_signed_arithmetic_i32"])
+        self.assertEqual(7, counts["powertrain_saturation_clamp_i32"])
+        self.assertEqual(6, counts["powertrain_lookup_1d_i32"])
+        self.assertEqual(5, counts["powertrain_linear_interpolation_i32"])
+        self.assertEqual(26, counts["powertrain_group_loop_iterations"])
+        self.assertEqual(4, counts["powertrain_group_loop_invocations"])
+
+    def test_single_sensor_condition_is_not_misclassified_as_saturation(self) -> None:
+        source = """
+        typedef int int32_t;
+        static int32_t samples[8];
+        static volatile int32_t sink;
+        void task(void) {
+            unsigned i; int32_t value = 0;
+            for (i = 0U; i < 8U; ++i) {
+                value += samples[i];
+                if (value > 1000) { value = 0; }
+            }
+            sink = value;
+        }
+        """
+        counts = self._profile(source, "task").contextual_integer_counts
+        self.assertNotIn("powertrain_saturation_clamp_i32", counts)
+
     @staticmethod
     def _profile(source: str, function_name: str):
         with tempfile.TemporaryDirectory() as directory:

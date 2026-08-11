@@ -11,6 +11,22 @@
   "loop_invocation_intercept_us": 1.27,
   "loop_iteration_us": 0.3125,
   "engineering_margin_percent": 15.0,
+  "powertrain_group_cost_us_per_work_unit": {
+    "powertrain_signed_arithmetic_i32": 1.0725859375,
+    "powertrain_saturation_clamp_i32": 0.892578125,
+    "powertrain_lookup_1d_i32": 0.6996458333,
+    "powertrain_linear_interpolation_i32": 2.1603645833
+  },
+  "powertrain_group_validation": {
+    "validated": true,
+    "status": "independent_holdout_passed",
+    "calibration_board_result": "powertrain_numeric_calibration_board.csv",
+    "holdout_board_mean_us": 319.354,
+    "holdout_frozen_nominal_us": 315.830,
+    "holdout_absolute_error_percent": 1.1035,
+    "holdout_safe_limit_us": 363.205,
+    "holdout_safe_result": "PASS"
+  },
   "memory_group_cost_us_per_work_unit": {
     "sequential_memory_u32": 0.897624599,
     "random_indexed_memory_u32": 1.186152769,
@@ -53,6 +69,20 @@
     "intercept_us": 13.296715,
     "validated": true,
     "blind_holdout_absolute_error_percent": 6.042
+  },
+  "mixed_memory_communication_correction": {
+    "scale": 0.8459564754,
+    "intercept_us": 1.0930609124,
+    "maximum_memory_iterations": 16,
+    "maximum_communication_iterations": 40,
+    "validated": true,
+    "status": "independent_holdout_passed",
+    "calibration_mape_percent": 6.9829,
+    "holdout_board_mean_us": 29.895,
+    "holdout_frozen_nominal_us": 28.790,
+    "holdout_absolute_error_percent": 3.6963,
+    "holdout_safe_limit_us": 33.109,
+    "holdout_safe_result": "PASS"
   },
   "cost_us_per_occurrence": {
     "add_constant_u32": 0.0416666667,

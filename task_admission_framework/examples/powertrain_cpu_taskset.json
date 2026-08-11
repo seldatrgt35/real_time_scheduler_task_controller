@@ -1,0 +1,8 @@
+{
+  "simulation_window_ms": 100,
+  "tasks": [
+    {"name":"PowertrainFastControl5ms","source_file":"powertrain_cpu_tasks.c","entry_function":"PowertrainFastControlTask_5ms","period_ms":5,"deadline_ms":5,"priority":3,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"PowertrainSensor10ms","source_file":"powertrain_cpu_tasks.c","entry_function":"PowertrainSensorTask_10ms","period_ms":10,"deadline_ms":10,"priority":2,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"PowertrainTorqueSafety20ms","source_file":"powertrain_cpu_tasks.c","entry_function":"PowertrainTorqueSafetyTask_20ms","period_ms":20,"deadline_ms":20,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"}
+  ]
+}

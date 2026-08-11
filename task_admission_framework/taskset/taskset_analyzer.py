@@ -306,6 +306,19 @@ class TaskSetAnalyzer:
             getattr(task_profile, "contextual_integer_counts", {})
         )
         if contextual_counts:
+            external_apis = sorted(
+                name for name, count in getattr(task_profile, "api_usage", {}).items()
+                if count > 0
+            )
+            if external_apis:
+                return (
+                    None,
+                    None,
+                    "UNVERIFIED",
+                    None,
+                    "External API execution is not covered by the contextual "
+                    f"board model: {', '.join(external_apis)}.",
+                )
             contextual = estimate_contextual_integer(contextual_counts)
             if contextual.verified and task_profile.dynamic_bound_verified:
                 safety_budget_us = period_ms * 1000.0 * 0.8

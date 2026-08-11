@@ -28,6 +28,10 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
         TypeKind.CHAR32, TypeKind.USHORT, TypeKind.UINT, TypeKind.ULONG,
         TypeKind.ULONGLONG,
     }
+    _SIGNED_KINDS = {
+        TypeKind.CHAR_S, TypeKind.SCHAR, TypeKind.SHORT, TypeKind.INT,
+        TypeKind.LONG, TypeKind.LONGLONG,
+    }
 
     def infer_contexts(
         self, root_function: Cursor, function_definitions: dict[str, Cursor]
@@ -85,6 +89,12 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             body = children[-1] if children else cursor
             if self._is_dense_integer_control_loop(body):
                 result.add("dense_integer_control_correction_u32", multiplier * bound)
+            powertrain_group = self._powertrain_numeric_loop_pattern(body)
+            if powertrain_group is not None:
+                result.add(powertrain_group, multiplier * bound)
+                result.add("powertrain_group_loop_iterations", multiplier * bound)
+                result.add("powertrain_group_loop_invocations", multiplier)
+                return
             communication_group = self._communication_loop_pattern(body)
             if communication_group is not None:
                 result.add(communication_group, multiplier * bound)
@@ -186,6 +196,41 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             return "bitwise_nested_u32"
         if operators.count("+") >= 2 and not kinds.intersection({"*", "/", "%"}):
             return "basic_add_expression_u32"
+        return None
+
+    def _powertrain_numeric_loop_pattern(self, body: Cursor) -> str | None:
+        """Recognize the bounded signed Powertrain groups calibrated as units."""
+        descendants = self._descendants(body)
+        operators = {
+            operator
+            for node in descendants
+            if node.kind in self._BINARY_KINDS
+            if (operator := self._root_operator(node)) is not None
+        }
+        signed_nodes = [
+            node for node in descendants
+            if node.kind in self._BINARY_KINDS and self._is_int32(node)
+        ]
+        arrays = [
+            node for node in descendants
+            if node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR
+        ]
+        if not signed_nodes:
+            return None
+        has_int64 = any(self._canonical_size(node) == 8 for node in descendants)
+        if len(arrays) >= 2 and has_int64 and "*" in operators and "/" in operators:
+            return "powertrain_linear_interpolation_i32"
+        conditionals = [node for node in descendants if node.kind == CursorKind.IF_STMT]
+        if len(conditionals) >= 2:
+            has_upper_bound = bool(operators.intersection({">", ">="}))
+            has_lower_bound = bool(operators.intersection({"<", "<="}))
+            if has_upper_bound and has_lower_bound:
+                return "powertrain_saturation_clamp_i32"
+        if arrays and operators.intersection({"&", "%"}):
+            if not operators.intersection({"/", "<<", ">>"}):
+                return "powertrain_lookup_1d_i32"
+        if arrays and "*" in operators and "/" in operators:
+            return "powertrain_signed_arithmetic_i32"
         return None
 
     def _is_dense_integer_control_loop(self, body: Cursor) -> bool:
@@ -379,6 +424,13 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
         try:
             canonical = cursor.type.get_canonical()
             return canonical.kind in self._UNSIGNED_KINDS and canonical.get_size() == 4
+        except (AttributeError, TypeError):
+            return False
+
+    def _is_int32(self, cursor: Cursor) -> bool:
+        try:
+            canonical = cursor.type.get_canonical()
+            return canonical.kind in self._SIGNED_KINDS and canonical.get_size() == 4
         except (AttributeError, TypeError):
             return False
 
