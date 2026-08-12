@@ -46,6 +46,9 @@ class CanTimingTest(unittest.TestCase):
         )
         self.assertAlmostEqual(36.5838, estimate.cpu_driver_safe_us, places=4)
         self.assertAlmostEqual(265.354, estimate.controller_completion_max_us)
+        self.assertAlmostEqual(236.312, estimate.send_return_to_irq_max_us)
+        self.assertAlmostEqual(215.708, estimate.irq_handler_max_us)
+        self.assertAlmostEqual(275.020, estimate.irq_exit_to_task_max_us)
         self.assertTrue(estimate.scheduler_cpu_verified)
         self.assertFalse(estimate.end_to_end_verified)
 

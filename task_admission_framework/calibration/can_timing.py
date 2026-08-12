@@ -37,6 +37,12 @@ class CanDriverCalibration:
     peripheral_enqueue_to_sof_max_us: float | None = None
     controller_completion_mean_us: float | None = None
     controller_completion_max_us: float | None = None
+    send_return_to_irq_mean_us: float | None = None
+    send_return_to_irq_max_us: float | None = None
+    irq_handler_mean_us: float | None = None
+    irq_handler_max_us: float | None = None
+    irq_exit_to_task_mean_us: float | None = None
+    irq_exit_to_task_max_us: float | None = None
     engineering_margin_percent: float = 15.0
 
     def __post_init__(self) -> None:
@@ -46,6 +52,12 @@ class CanDriverCalibration:
             self.peripheral_enqueue_to_sof_max_us,
             self.controller_completion_mean_us,
             self.controller_completion_max_us,
+            self.send_return_to_irq_mean_us,
+            self.send_return_to_irq_max_us,
+            self.irq_handler_mean_us,
+            self.irq_handler_max_us,
+            self.irq_exit_to_task_mean_us,
+            self.irq_exit_to_task_max_us,
         )
         if any(value is not None and value < 0.0 for value in values):
             raise ValueError("CAN calibration times cannot be negative.")
@@ -60,6 +72,9 @@ class CanTimingEstimate:
     peripheral_enqueue_to_sof_max_us: float | None
     controller_completion_mean_us: float | None
     controller_completion_max_us: float | None
+    send_return_to_irq_max_us: float | None
+    irq_handler_max_us: float | None
+    irq_exit_to_task_max_us: float | None
     bus_nominal_bits: int
     bus_worst_case_bits: int
     bus_nominal_us: float
@@ -137,6 +152,9 @@ def estimate_classical_can_timing(
         ),
         controller_completion_mean_us=calibration.controller_completion_mean_us,
         controller_completion_max_us=calibration.controller_completion_max_us,
+        send_return_to_irq_max_us=calibration.send_return_to_irq_max_us,
+        irq_handler_max_us=calibration.irq_handler_max_us,
+        irq_exit_to_task_max_us=calibration.irq_exit_to_task_max_us,
         bus_nominal_bits=nominal_bits,
         bus_worst_case_bits=worst_bits,
         bus_nominal_us=nominal_us,
@@ -155,5 +173,11 @@ S32K148_FLEXCAN_LOOPBACK_O0 = CanDriverCalibration(
     cpu_driver_max_us=31.812,
     controller_completion_mean_us=264.395,
     controller_completion_max_us=265.354,
+    send_return_to_irq_mean_us=236.187,
+    send_return_to_irq_max_us=236.312,
+    irq_handler_mean_us=215.583,
+    irq_handler_max_us=215.708,
+    irq_exit_to_task_mean_us=272.791,
+    irq_exit_to_task_max_us=275.020,
     engineering_margin_percent=15.0,
 )

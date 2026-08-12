@@ -139,7 +139,14 @@ class TaskSetAnalyzer:
                     else None
                 )
                 admission_execution_time_us = (
-                    contextual_estimate.safe_us
+                    (contextual_estimate.safe_us or 0.0)
+                    + (
+                        getattr(session.task_profile, "api_usage", {}).get(
+                            "CAN_Send", 0
+                        )
+                        * 31.812
+                        * 1.15
+                    )
                     if estimate_source == "contextual_integer_o0_board_model"
                     and contextual_estimate is not None
                     else (

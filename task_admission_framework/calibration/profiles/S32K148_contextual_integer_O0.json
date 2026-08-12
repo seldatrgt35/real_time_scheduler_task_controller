@@ -11,6 +11,30 @@
   "loop_invocation_intercept_us": 1.27,
   "loop_iteration_us": 0.3125,
   "engineering_margin_percent": 15.0,
+  "automotive_compound_cost_us_per_work_unit": {
+    "automotive_torque_map_limiter_i32": 2.375,
+    "automotive_plausibility_debounce_u32": 2.6041607143,
+    "automotive_can_crc_pack_u32": 6.0661607143,
+    "automotive_helper_call_u32": 0.7916666667
+  },
+  "automotive_compound_intercept_us": {
+    "automotive_torque_map_limiter_i32": 1.958,
+    "automotive_plausibility_debounce_u32": 1.6035,
+    "automotive_can_crc_pack_u32": 1.5835
+  },
+  "automotive_compound_validation": {
+    "status": "independent_full_stack_holdout_passed",
+    "samples_per_point": 40,
+    "torque_map_work_units": [8, 16, 32],
+    "diagnostics_work_units": [4, 8, 16],
+    "can_crc_work_units": [4, 8, 16],
+    "holdout_board_mean_us": [14.854, 13.083, 26.354, 19.687, 72.833],
+    "holdout_model_nominal_us": [15.663, 12.000, 27.833, 22.437, 76.275],
+    "holdout_mape_percent": 7.606,
+    "engineering_margin_percent": 15.0,
+    "all_holdout_maxima_within_margin": true,
+    "source": "Independent S32K148 ARM GCC 11.4 O0 compound calibration followed by the separate five-task full-stack holdout."
+  },
   "powertrain_group_cost_us_per_work_unit": {
     "powertrain_signed_arithmetic_i32": 1.0725859375,
     "powertrain_saturation_clamp_i32": 0.892578125,

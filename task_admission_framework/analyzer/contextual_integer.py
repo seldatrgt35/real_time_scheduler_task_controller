@@ -87,6 +87,21 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             result.add("loop_iterations", multiplier * bound)
             result.add("loop_invocations", multiplier)
             body = children[-1] if children else cursor
+            compound_group = self._automotive_compound_loop_pattern(body)
+            if compound_group is not None:
+                result.add(compound_group, multiplier * bound)
+                result.add(f"{compound_group}_invocations", multiplier)
+                helper_calls = sum(
+                    node.kind in self._CALL_KINDS
+                    for node in self._descendants(body)
+                )
+                result.add(
+                    "automotive_helper_call_u32",
+                    multiplier * bound * helper_calls,
+                )
+                result.add("compound_group_loop_iterations", multiplier * bound)
+                result.add("compound_group_loop_invocations", multiplier)
+                return
             if self._is_dense_integer_control_loop(body):
                 result.add("dense_integer_control_correction_u32", multiplier * bound)
             powertrain_group = self._powertrain_numeric_loop_pattern(body)
@@ -171,6 +186,38 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 child, multiplier, definitions, call_stack, constants,
                 loop_indices, result
             )
+
+    def _automotive_compound_loop_pattern(self, body: Cursor) -> str | None:
+        """Recognize independently calibrated automotive loop compounds."""
+        descendants = self._descendants(body)
+        operators = [
+            operator
+            for node in descendants
+            if node.kind in self._BINARY_KINDS
+            if (operator := self._root_operator(node)) is not None
+        ]
+        kinds = set(operators)
+        arrays = sum(
+            node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR for node in descendants
+        )
+        conditionals = sum(node.kind == CursorKind.IF_STMT for node in descendants)
+        loops = sum(node.kind in self._LOOP_KINDS for node in descendants)
+        calls = {
+            self._extract_call_name(node)
+            for node in descendants if node.kind in self._CALL_KINDS
+        }
+
+        if loops and "^=" in kinds and "<<" in kinds and conditionals:
+            return "automotive_can_crc_pack_u32"
+        if arrays >= 3 and conditionals >= 3 and "|=" in kinds and "<<" in kinds:
+            return "automotive_plausibility_debounce_u32"
+        has_interpolation = (
+            "StarInterpolateQ8" in calls
+            or (arrays >= 2 and "*" in kinds and "/" in kinds)
+        )
+        if has_interpolation and conditionals and "<" in kinds:
+            return "automotive_torque_map_limiter_i32"
+        return None
 
     def _composite_loop_pattern(self, body: Cursor) -> str | None:
         """Recognize board-calibrated nested expressions as one codegen unit."""
