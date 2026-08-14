@@ -11,6 +11,38 @@
   "loop_invocation_intercept_us": 1.27,
   "loop_iteration_us": 0.3125,
   "engineering_margin_percent": 15.0,
+  "mixed_shape_cost_us_per_work_unit": {
+    "mixed_memory_branch_update_u32": 1.1324241616,
+    "mixed_multiply_shift_branch_u32": 0.9026044207,
+    "mixed_indexed_divide_bitwise_u32": 1.3544207317,
+    "mixed_memory_branch_modulo_u32": 1.0361726372,
+    "mixed_packing_checksum_shift_u32": 1.1953971037
+  },
+  "mixed_shape_intercept_us": {
+    "mixed_memory_branch_update_u32": 0.8548963415,
+    "mixed_multiply_shift_branch_u32": 0.2821829268,
+    "mixed_indexed_divide_bitwise_u32": 0.6199268293,
+    "mixed_memory_branch_modulo_u32": 7.7727987805,
+    "mixed_packing_checksum_shift_u32": 2.2189146341
+  },
+  "mixed_shape_validation": {
+    "validated": true,
+    "work_units_min": 16,
+    "work_units_max": 128,
+    "calibration_points": 25,
+    "samples_per_point": 40,
+    "independent_holdout_points": 5,
+    "holdout_mape_percent": 4.706706,
+    "holdout_max_ape_percent": 6.764271,
+    "all_holdout_nominal_estimates_conservative": true,
+    "all_holdout_board_means_within_15_percent_margin": true,
+    "final_blind_frozen_before_board_measurement": true,
+    "final_blind_points": 5,
+    "final_blind_mape_percent": 0.77422,
+    "final_blind_max_ape_percent": 1.7164,
+    "final_blind_within_10_percent": 5,
+    "final_blind_admission_coverage": "5/5"
+  },
   "automotive_compound_cost_us_per_work_unit": {
     "automotive_torque_map_limiter_i32": 2.375,
     "automotive_plausibility_debounce_u32": 2.6041607143,

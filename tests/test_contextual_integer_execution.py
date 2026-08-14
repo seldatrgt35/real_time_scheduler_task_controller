@@ -130,5 +130,29 @@ class ContextualIntegerExecutionTest(unittest.TestCase):
         self.assertAlmostEqual(28.7901, estimate.nominal_us, places=3)
         self.assertIn("Validated for the S32K148", estimate.note)
 
+    def test_mixed_shape_inside_calibrated_range_is_verified(self):
+        estimate = estimate_contextual_integer({
+            "loop_iterations": 80,
+            "loop_invocations": 1,
+            "mixed_shape_group_loop_iterations": 80,
+            "mixed_shape_group_loop_invocations": 1,
+            "mixed_indexed_divide_bitwise_u32": 80,
+            "mixed_indexed_divide_bitwise_u32_invocations": 1,
+        })
+        self.assertTrue(estimate.verified)
+        self.assertAlmostEqual(108.973585, estimate.nominal_us, places=5)
+
+    def test_mixed_shape_outside_calibrated_range_is_unverified(self):
+        estimate = estimate_contextual_integer({
+            "loop_iterations": 129,
+            "loop_invocations": 1,
+            "mixed_shape_group_loop_iterations": 129,
+            "mixed_shape_group_loop_invocations": 1,
+            "mixed_indexed_divide_bitwise_u32": 129,
+            "mixed_indexed_divide_bitwise_u32_invocations": 1,
+        })
+        self.assertFalse(estimate.verified)
+        self.assertIn("outside the validated 16-128", estimate.note)
+
 
 if __name__ == "__main__": unittest.main()

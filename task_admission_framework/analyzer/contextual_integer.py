@@ -102,16 +102,31 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 result.add("compound_group_loop_iterations", multiplier * bound)
                 result.add("compound_group_loop_invocations", multiplier)
                 return
+            mixed_shape_group = self._mixed_shape_loop_pattern(body)
+            if mixed_shape_group is not None:
+                result.add(mixed_shape_group, multiplier * bound)
+                result.add(f"{mixed_shape_group}_invocations", multiplier)
+                result.add("mixed_shape_group_loop_iterations", multiplier * bound)
+                result.add("mixed_shape_group_loop_invocations", multiplier)
+                return
             if self._is_dense_integer_control_loop(body):
                 result.add("dense_integer_control_correction_u32", multiplier * bound)
             powertrain_group = self._powertrain_numeric_loop_pattern(body)
             if powertrain_group is not None:
+                if not self._validated_group_shape(powertrain_group, body):
+                    self._mark_unvalidated_mixed_loop(
+                        cursor, powertrain_group, result
+                    )
                 result.add(powertrain_group, multiplier * bound)
                 result.add("powertrain_group_loop_iterations", multiplier * bound)
                 result.add("powertrain_group_loop_invocations", multiplier)
                 return
             communication_group = self._communication_loop_pattern(body)
             if communication_group is not None:
+                if not self._validated_group_shape(communication_group, body):
+                    self._mark_unvalidated_mixed_loop(
+                        cursor, communication_group, result
+                    )
                 result.add(communication_group, multiplier * bound)
                 result.add("communication_group_loop_iterations", multiplier * bound)
                 result.add("communication_group_loop_invocations", multiplier)
@@ -136,6 +151,8 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 return
             composite = self._composite_loop_pattern(body)
             if composite is not None:
+                if not self._validated_group_shape(composite, body):
+                    self._mark_unvalidated_mixed_loop(cursor, composite, result)
                 result.add(composite, multiplier * bound)
                 return
             self._count_loop_chains(body, multiplier * bound, new_indices, result)
@@ -187,6 +204,54 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 loop_indices, result
             )
 
+    def _validated_group_shape(self, group: str, body: Cursor) -> bool:
+        """Reject structural extensions not covered by a group calibration."""
+        descendants = self._descendants(body)
+        operators = {
+            operator
+            for node in descendants
+            if node.kind in self._BINARY_KINDS
+            if (operator := self._root_operator(node)) is not None
+        }
+        has_conditional = any(
+            node.kind == CursorKind.IF_STMT for node in descendants
+        )
+        has_array = any(
+            node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR
+            for node in descendants
+        )
+
+        if group == "powertrain_lookup_1d_i32":
+            return (
+                not has_conditional
+                and not operators.intersection({"/", "<<", ">>"})
+            )
+        if group == "checksum_processed_byte_u32":
+            return (
+                not has_conditional
+                and not operators.intersection({"*", "/", "%", "<<", ">>"})
+            )
+        if group in {
+            "shift_rotate_u32", "divide_masked_index_u32",
+            "modulo_masked_index_u32", "multiply_masked_index_u32",
+            "bitwise_nested_u32", "basic_add_expression_u32",
+        }:
+            return not has_array
+        return True
+
+    @staticmethod
+    def _mark_unvalidated_mixed_loop(
+        cursor: Cursor,
+        group: str,
+        result: ContextualIntegerInference,
+    ) -> None:
+        result.verified = False
+        result.notes.append(
+            "Loop at line "
+            f"{getattr(cursor.location, 'line', '?')} resembles {group} "
+            "but contains an uncalibrated mixed operation shape."
+        )
+
     def _automotive_compound_loop_pattern(self, body: Cursor) -> str | None:
         """Recognize independently calibrated automotive loop compounds."""
         descendants = self._descendants(body)
@@ -217,6 +282,40 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
         )
         if has_interpolation and conditionals and "<" in kinds:
             return "automotive_torque_map_limiter_i32"
+        return None
+
+    def _mixed_shape_loop_pattern(self, body: Cursor) -> str | None:
+        """Recognize the independently calibrated mixed O0 loop shapes."""
+        descendants = self._descendants(body)
+        operators = [
+            operator
+            for node in descendants
+            if node.kind in self._BINARY_KINDS
+            if (operator := self._root_operator(node)) is not None
+        ]
+        kinds = set(operators)
+        arrays = sum(
+            node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR
+            for node in descendants
+        )
+        conditionals = sum(
+            node.kind == CursorKind.IF_STMT for node in descendants
+        )
+
+        if arrays >= 2 and not conditionals and {
+            "/", "<<", "^="
+        }.issubset(kinds):
+            return "mixed_indexed_divide_bitwise_u32"
+        if arrays >= 2 and not conditionals and {
+            "<<", ">>", "|", "^="
+        }.issubset(kinds):
+            return "mixed_packing_checksum_shift_u32"
+        if arrays and conditionals >= 2 and "%" in kinds:
+            return "mixed_memory_branch_modulo_u32"
+        if arrays and conditionals and "*" in kinds and ">>=" in kinds:
+            return "mixed_multiply_shift_branch_u32"
+        if arrays >= 2 and conditionals and "&" in kinds:
+            return "mixed_memory_branch_update_u32"
         return None
 
     def _composite_loop_pattern(self, body: Cursor) -> str | None:

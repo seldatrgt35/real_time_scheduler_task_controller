@@ -25,7 +25,7 @@ def estimate_contextual_integer(
 ) -> ContextualIntegerEstimate:
     profile = json.loads(profile_path.read_text(encoding="utf-8"))
     costs = profile["cost_us_per_occurrence"]
-    administrative = {"loop_iterations", "loop_invocations", "memory_group_loop_iterations", "memory_group_loop_invocations", "fixed_group_loop_iterations", "fixed_group_loop_invocations", "floating_group_loop_iterations", "floating_group_loop_invocations", "communication_group_loop_iterations", "communication_group_loop_invocations", "powertrain_group_loop_iterations", "powertrain_group_loop_invocations", "compound_group_loop_iterations", "compound_group_loop_invocations"}
+    administrative = {"loop_iterations", "loop_invocations", "memory_group_loop_iterations", "memory_group_loop_invocations", "fixed_group_loop_iterations", "fixed_group_loop_invocations", "floating_group_loop_iterations", "floating_group_loop_invocations", "communication_group_loop_iterations", "communication_group_loop_invocations", "powertrain_group_loop_iterations", "powertrain_group_loop_invocations", "compound_group_loop_iterations", "compound_group_loop_invocations", "mixed_shape_group_loop_iterations", "mixed_shape_group_loop_invocations"}
     memory_costs = profile.get("memory_group_cost_us_per_work_unit", {})
     fixed_costs = profile.get("fixed_group_cost_us_per_work_unit", {})
     floating_costs = profile.get("floating_group_cost_us_per_work_unit", {})
@@ -33,9 +33,11 @@ def estimate_contextual_integer(
     powertrain_costs = profile.get("powertrain_group_cost_us_per_work_unit", {})
     compound_costs = profile.get("automotive_compound_cost_us_per_work_unit", {})
     compound_intercepts = profile.get("automotive_compound_intercept_us", {})
+    mixed_shape_costs = profile.get("mixed_shape_cost_us_per_work_unit", {})
+    mixed_shape_intercepts = profile.get("mixed_shape_intercept_us", {})
     unsupported = tuple(sorted(
         name for name, count in counts.items()
-        if count > 0 and name not in administrative and name not in costs and name not in memory_costs and name not in fixed_costs and name not in floating_costs and name not in communication_costs and name not in powertrain_costs and name not in compound_costs and not name.endswith("_invocations")
+        if count > 0 and name not in administrative and name not in costs and name not in memory_costs and name not in fixed_costs and name not in floating_costs and name not in communication_costs and name not in powertrain_costs and name not in compound_costs and name not in mixed_shape_costs and not name.endswith("_invocations")
     ))
     if unsupported:
         return ContextualIntegerEstimate(
@@ -57,6 +59,8 @@ def estimate_contextual_integer(
     grouped_invocations += counts.get("powertrain_group_loop_invocations", 0)
     grouped_iterations += counts.get("compound_group_loop_iterations", 0)
     grouped_invocations += counts.get("compound_group_loop_invocations", 0)
+    grouped_iterations += counts.get("mixed_shape_group_loop_iterations", 0)
+    grouped_invocations += counts.get("mixed_shape_group_loop_invocations", 0)
     loop_control = max(0, counts.get("loop_iterations", 0) - grouped_iterations) * profile["loop_iteration_us"]
     loop_setup = max(0, counts.get("loop_invocations", 0) - grouped_invocations) * profile["loop_invocation_intercept_us"]
     memory_raw = sum(count * memory_costs[name] for name, count in counts.items() if name in memory_costs)
@@ -99,7 +103,25 @@ def estimate_contextual_integer(
         counts.get(f"{name}_invocations", 0) * intercept
         for name, intercept in compound_intercepts.items()
     )
-    nominal = operations + loop_control + loop_setup + memory_time + fixed_time + floating_time + communication_time + powertrain_time + compound_time
+    mixed_shape_time = sum(
+        count * mixed_shape_costs[name]
+        for name, count in counts.items() if name in mixed_shape_costs
+    ) + sum(
+        counts.get(f"{name}_invocations", 0) * intercept
+        for name, intercept in mixed_shape_intercepts.items()
+    )
+    mixed_shape_profile = profile.get("mixed_shape_validation", {})
+    mixed_shape_in_range = all(
+        counts.get(name, 0) == 0
+        or (
+            counts.get(f"{name}_invocations", 0) == 1
+            and mixed_shape_profile.get("work_units_min", 0)
+            <= counts[name]
+            <= mixed_shape_profile.get("work_units_max", 0)
+        )
+        for name in mixed_shape_costs
+    )
+    nominal = operations + loop_control + loop_setup + memory_time + fixed_time + floating_time + communication_time + powertrain_time + compound_time + mixed_shape_time
     margin = profile["engineering_margin_percent"] / 100.0
     powertrain_validated = bool(
         profile.get("powertrain_group_validation", {}).get("validated", False)
@@ -112,6 +134,13 @@ def estimate_contextual_integer(
     estimate_verified = (
         (powertrain_time == 0.0 or powertrain_validated)
         and (not mixed_memory_communication or mixed_validated)
+        and (
+            mixed_shape_time == 0.0
+            or (
+                mixed_shape_profile.get("validated", False)
+                and mixed_shape_in_range
+            )
+        )
     )
     note = (
         "Powertrain numeric coefficients are calibration-derived; independent holdout is pending."
@@ -119,7 +148,11 @@ def estimate_contextual_integer(
         else (
             "Mixed memory and communication correction has an independent holdout pending."
             if mixed_memory_communication and not mixed_validated
-            else "Validated for the S32K148 ARM GCC 11.4 O0 contextual subset."
+            else (
+                "Mixed shape is outside the validated 16-128 work-unit range."
+                if mixed_shape_time != 0.0 and not mixed_shape_in_range
+                else "Validated for the S32K148 ARM GCC 11.4 O0 contextual subset."
+            )
         )
     )
     return ContextualIntegerEstimate(
@@ -129,6 +162,7 @@ def estimate_contextual_integer(
          "fixed_point_group": fixed_time, "floating_point_group": floating_time,
          "communication_group": communication_time,
          "powertrain_numeric_group": powertrain_time,
-         "automotive_compound_group": compound_time},
+         "automotive_compound_group": compound_time,
+         "mixed_shape_group": mixed_shape_time},
         (), note,
     )

@@ -428,6 +428,51 @@ class StaticAnalyzerStructureTests(unittest.TestCase):
         counts = self._profile(source, "task").contextual_integer_counts
         self.assertNotIn("powertrain_saturation_clamp_i32", counts)
 
+    def test_calibrated_mixed_array_divide_and_bitwise_loop_is_verified(self) -> None:
+        source = """
+        typedef unsigned uint32_t;
+        static uint32_t samples[128];
+        static uint32_t state[128];
+        static volatile uint32_t sink;
+        void task(void) {
+            uint32_t i; uint32_t value = 1U;
+            for (i = 0U; i < 80U; ++i) {
+                uint32_t slot = (i * 17U) & 127U;
+                value += samples[slot] / ((i & 7U) + 1U);
+                value ^= state[slot] << (i & 3U);
+            }
+            sink = value;
+        }
+        """
+        profile = self._profile(source, "task")
+        self.assertTrue(profile.dynamic_bound_verified)
+        self.assertEqual(
+            80,
+            profile.contextual_integer_counts[
+                "mixed_indexed_divide_bitwise_u32"
+            ],
+        )
+
+    def test_calibrated_powertrain_lookup_shape_remains_verified(self) -> None:
+        source = """
+        typedef int int32_t;
+        static int32_t table[16];
+        static volatile int32_t sink;
+        void task(void) {
+            unsigned i; int32_t total = 0;
+            for (i = 0U; i < 6U; ++i) {
+                unsigned slot = (i * 5U) & 15U;
+                total += table[slot];
+            }
+            sink = total;
+        }
+        """
+        profile = self._profile(source, "task")
+        self.assertTrue(profile.dynamic_bound_verified)
+        self.assertEqual(
+            6, profile.contextual_integer_counts["powertrain_lookup_1d_i32"]
+        )
+
     @staticmethod
     def _profile(source: str, function_name: str):
         with tempfile.TemporaryDirectory() as directory:

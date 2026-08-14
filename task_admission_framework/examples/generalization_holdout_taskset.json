@@ -1,0 +1,9 @@
+{
+  "tasks": [
+    {"name":"SensorAcquisition5ms","source_file":"../../../star-execution-validation/star-s32k148-benchmark/calibration/generalization_holdout_tasks.c","entry_function":"StarHoldout_5ms_SensorAcquisition","period_ms":5,"deadline_ms":5,"priority":3,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"FilterPlausibility10ms","source_file":"../../../star-execution-validation/star-s32k148-benchmark/calibration/generalization_holdout_tasks.c","entry_function":"StarHoldout_10ms_FilterAndPlausibility","period_ms":10,"deadline_ms":10,"priority":3,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"TorqueControl20ms","source_file":"../../../star-execution-validation/star-s32k148-benchmark/calibration/generalization_holdout_tasks.c","entry_function":"StarHoldout_20ms_TorqueControl","period_ms":20,"deadline_ms":20,"priority":3,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"Diagnostics50ms","source_file":"../../../star-execution-validation/star-s32k148-benchmark/calibration/generalization_holdout_tasks.c","entry_function":"StarHoldout_50ms_Diagnostics","period_ms":50,"deadline_ms":50,"priority":2,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"NetworkPacking100ms","source_file":"../../../star-execution-validation/star-s32k148-benchmark/calibration/generalization_holdout_tasks.c","entry_function":"StarHoldout_100ms_NetworkPacking","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"}
+  ]
+}

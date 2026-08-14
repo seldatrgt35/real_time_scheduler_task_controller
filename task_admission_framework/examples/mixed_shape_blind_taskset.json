@@ -1,0 +1,9 @@
+{
+  "tasks": [
+    {"name":"WheelSpeedVote5ms","source_file":"../../../star-execution-validation/star-s32k148-benchmark/calibration/mixed_shape_blind_tasks.c","entry_function":"StarMixedBlind_5ms_WheelSpeedVote","period_ms":5,"deadline_ms":5,"priority":3,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"CurrentFilter10ms","source_file":"../../../star-execution-validation/star-s32k148-benchmark/calibration/mixed_shape_blind_tasks.c","entry_function":"StarMixedBlind_10ms_CurrentFilter","period_ms":10,"deadline_ms":10,"priority":3,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"LoadEstimator20ms","source_file":"../../../star-execution-validation/star-s32k148-benchmark/calibration/mixed_shape_blind_tasks.c","entry_function":"StarMixedBlind_20ms_LoadEstimator","period_ms":20,"deadline_ms":20,"priority":3,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"DtcAging50ms","source_file":"../../../star-execution-validation/star-s32k148-benchmark/calibration/mixed_shape_blind_tasks.c","entry_function":"StarMixedBlind_50ms_DtcAging","period_ms":50,"deadline_ms":50,"priority":2,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"CanSignalPack100ms","source_file":"../../../star-execution-validation/star-s32k148-benchmark/calibration/mixed_shape_blind_tasks.c","entry_function":"StarMixedBlind_100ms_CanSignalPack","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"}
+  ]
+}
