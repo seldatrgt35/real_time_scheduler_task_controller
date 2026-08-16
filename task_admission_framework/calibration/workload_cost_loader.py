@@ -67,6 +67,18 @@ class WorkloadCostLoader:
                 raise ValueError(
                     "Required workload classes must belong to their correction group."
                 )
+            minimum_work_units = raw.get("minimum_work_units")
+            maximum_work_units = raw.get("maximum_work_units")
+            if minimum_work_units is not None:
+                minimum_work_units = int(minimum_work_units)
+            if maximum_work_units is not None:
+                maximum_work_units = int(maximum_work_units)
+            if (
+                minimum_work_units is not None
+                and maximum_work_units is not None
+                and minimum_work_units > maximum_work_units
+            ):
+                raise ValueError("Invalid workload group work-unit range.")
             corrections.append(
                 WorkloadGroupCorrection(
                     name=str(raw["name"]),
@@ -77,6 +89,8 @@ class WorkloadCostLoader:
                     source=str(raw.get("source", "")),
                     require_all_classes=bool(raw.get("require_all_classes", False)),
                     required_workload_classes=required_classes,
+                    minimum_work_units=minimum_work_units,
+                    maximum_work_units=maximum_work_units,
                 )
             )
         return WorkloadCostProfile(

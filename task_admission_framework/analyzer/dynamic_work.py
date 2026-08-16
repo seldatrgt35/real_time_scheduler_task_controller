@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+import operator
 import re
 from dataclasses import dataclass, field
 
@@ -60,6 +62,9 @@ class DynamicWorkAnalyzer:
     _INTEGER_LITERAL = re.compile(
         r"(?<![A-Za-z_])(?:0[xX][0-9A-Fa-f]+|\d+)[uUlL]*"
     )
+
+    def __init__(self, constant_definitions: dict[str, int] | None = None) -> None:
+        self._constant_definitions = dict(constant_definitions or {})
 
     def infer(
         self,
@@ -268,14 +273,16 @@ class DynamicWorkAnalyzer:
 
         initializer = tokens[:first_semicolon]
         condition = tokens[first_semicolon + 1 : second_semicolon]
-        start = self._last_integer(initializer)
-        limit = self._last_integer(condition)
-        if limit is None:
-            constants = parameter_constants or {}
-            limit = next(
-                (constants[token] for token in condition if token in constants),
-                None,
-            )
+        constants = {**self._constant_definitions, **(parameter_constants or {})}
+        start = self._constant_expression_after(initializer, "=", constants)
+        comparator = next(
+            (item for item in ("<=", "<", ">=", ">") if item in condition),
+            None,
+        )
+        limit = (
+            self._constant_expression_after(condition, comparator, constants)
+            if comparator is not None else None
+        )
         if start is None:
             start = 0
         if limit is None:
@@ -291,6 +298,67 @@ class DynamicWorkAnalyzer:
             return max(0, start - limit)
         return None
 
+    @classmethod
+    def _constant_expression_after(
+        cls, tokens: list[str], marker: str | None, constants: dict[str, int]
+    ) -> int | None:
+        if marker is None or marker not in tokens:
+            return None
+        expression = tokens[tokens.index(marker) + 1 :]
+        normalized: list[str] = []
+        for token in expression:
+            if token in constants:
+                normalized.append(str(constants[token]))
+            elif cls._INTEGER_LITERAL.fullmatch(token):
+                normalized.append(token.rstrip("uUlL"))
+            elif token in {"(", ")", "+", "-", "*", "/", "%", "<<", ">>"}:
+                normalized.append("//" if token == "/" else token)
+            else:
+                return None
+        try:
+            return int(cls._evaluate_constant_ast(ast.parse("".join(normalized), mode="eval").body))
+        except (SyntaxError, TypeError, ValueError, ZeroDivisionError):
+            return None
+
+    @classmethod
+    def _evaluate_constant_tokens(
+        cls, tokens: list[str], constants: dict[str, int]
+    ) -> int | None:
+        normalized: list[str] = []
+        for token in tokens:
+            if token in constants:
+                normalized.append(str(constants[token]))
+            elif cls._INTEGER_LITERAL.fullmatch(token):
+                normalized.append(token.rstrip("uUlL"))
+            elif token in {"(", ")", "+", "-", "*", "/", "%", "<<", ">>"}:
+                normalized.append("//" if token == "/" else token)
+            else:
+                return None
+        try:
+            tree = ast.parse("".join(normalized), mode="eval")
+            return int(cls._evaluate_constant_ast(tree.body))
+        except (SyntaxError, TypeError, ValueError, ZeroDivisionError):
+            return None
+
+    @classmethod
+    def _evaluate_constant_ast(cls, node: ast.AST) -> int:
+        binary = {
+            ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+            ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod,
+            ast.LShift: operator.lshift, ast.RShift: operator.rshift,
+        }
+        unary = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+        if isinstance(node, ast.Constant) and isinstance(node.value, int):
+            return int(node.value)
+        if isinstance(node, ast.BinOp) and type(node.op) in binary:
+            return binary[type(node.op)](
+                cls._evaluate_constant_ast(node.left),
+                cls._evaluate_constant_ast(node.right),
+            )
+        if isinstance(node, ast.UnaryOp) and type(node.op) in unary:
+            return unary[type(node.op)](cls._evaluate_constant_ast(node.operand))
+        raise ValueError("unsupported constant expression")
+
     def _bind_constant_arguments(
         self,
         call_cursor: Cursor,
@@ -301,15 +369,45 @@ class DynamicWorkAnalyzer:
         except AttributeError:
             arguments = []
         parameters = list(callee_cursor.get_arguments())
+        token_arguments = self._call_argument_tokens(call_cursor)
         bindings: dict[str, int] = {}
-        for parameter, argument in zip(parameters, arguments):
+        for index, (parameter, argument) in enumerate(zip(parameters, arguments)):
             value = self._evaluate_integer(argument)
+            if value is None and index < len(token_arguments):
+                value = self._evaluate_constant_tokens(
+                    token_arguments[index], self._constant_definitions
+                )
             if value is not None and parameter.spelling:
                 bindings[parameter.spelling] = value
         return bindings
 
-    @classmethod
-    def _evaluate_integer(cls, cursor: Cursor) -> int | None:
+    @staticmethod
+    def _call_argument_tokens(call_cursor: Cursor) -> list[list[str]]:
+        """Return source-level call arguments, avoiding macro extent artifacts."""
+
+        tokens = [token.spelling for token in call_cursor.get_tokens()]
+        try:
+            opening = tokens.index("(")
+        except ValueError:
+            return []
+        groups: list[list[str]] = [[]]
+        depth = 0
+        for token in tokens[opening + 1 :]:
+            if token == "(" :
+                depth += 1
+                groups[-1].append(token)
+            elif token == ")":
+                if depth == 0:
+                    break
+                depth -= 1
+                groups[-1].append(token)
+            elif token == "," and depth == 0:
+                groups.append([])
+            else:
+                groups[-1].append(token)
+        return groups if any(groups) else []
+
+    def _evaluate_integer(self, cursor: Cursor) -> int | None:
         evaluate = getattr(cursor, "evaluate", None)
         if callable(evaluate):
             try:
@@ -321,12 +419,12 @@ class DynamicWorkAnalyzer:
 
         tokens = [token.spelling for token in cursor.get_tokens()]
         if "sizeof" in tokens:
-            sizes = cls._descendant_type_sizes(cursor)
+            sizes = self._descendant_type_sizes(cursor)
             if sizes:
                 return max(sizes)
         if len(tokens) == 1:
-            return cls._last_integer(tokens)
-        return None
+            return self._last_integer(tokens)
+        return self._evaluate_constant_tokens(tokens, self._constant_definitions)
 
     @classmethod
     def _descendant_type_sizes(cls, cursor: Cursor) -> list[int]:

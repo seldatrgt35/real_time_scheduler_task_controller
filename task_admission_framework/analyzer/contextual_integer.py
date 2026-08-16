@@ -67,6 +67,19 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
     ) -> None:
         if cursor.kind == CursorKind.IF_STMT:
             result.add("branch_evaluation_u32", multiplier)
+            descendants = self._descendants(cursor)
+            operators = {
+                self._root_operator(node)
+                for node in descendants
+                if node.kind in self._BINARY_KINDS
+            }
+            if operators.intersection({"<<", ">>", "<<=", ">>=", "*=", "/="}):
+                result.verified = False
+                result.notes.append(
+                    "Branch at line "
+                    f"{getattr(cursor.location, 'line', '?')} has an "
+                    "uncalibrated compound body."
+                )
             # The board branch coefficient already includes condition evaluation
             # and the selected body. Do not sum mutually exclusive bodies or
             # double-count condition operators as separate work.
@@ -121,6 +134,17 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 result.add("powertrain_group_loop_iterations", multiplier * bound)
                 result.add("powertrain_group_loop_invocations", multiplier)
                 return
+            if any(
+                node.kind in self._CALL_KINDS
+                for node in self._descendants(body)
+            ):
+                component_features = self._execution_component_patterns(
+                    body, definitions
+                )
+                if component_features:
+                    for feature in component_features:
+                        result.add(feature, multiplier * bound)
+                    return
             communication_group = self._communication_loop_pattern(body)
             if communication_group is not None:
                 if not self._validated_group_shape(communication_group, body):
@@ -148,6 +172,13 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 result.add(memory_group, multiplier * bound)
                 result.add("memory_group_loop_iterations", multiplier * bound)
                 result.add("memory_group_loop_invocations", multiplier)
+                return
+            component_features = self._execution_component_patterns(
+                body, definitions
+            )
+            if component_features:
+                for feature in component_features:
+                    result.add(feature, multiplier * bound)
                 return
             composite = self._composite_loop_pattern(body)
             if composite is not None:
@@ -220,6 +251,15 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR
             for node in descendants
         )
+        has_call = any(
+            node.kind == CursorKind.CALL_EXPR for node in descendants
+        )
+
+        if group == "powertrain_saturation_clamp_i32":
+            # The calibrated clamp is a self-contained loop body.  A helper
+            # call changes both code shape and call overhead, so the compound
+            # body must remain unverified until separately calibrated.
+            return not has_call
 
         if group == "powertrain_lookup_1d_i32":
             return (
@@ -237,7 +277,122 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             "bitwise_nested_u32", "basic_add_expression_u32",
         }:
             return not has_array
+        if group == "direct_function_call_u32":
+            return not has_conditional and not has_array
+        if group == "indirect_function_call_u32":
+            return (
+                not has_conditional
+                and not operators.intersection({"*", "/", "%", "<<", ">>"})
+            )
         return True
+
+    def _execution_component_patterns(
+        self, body: Cursor, definitions: dict[str, Cursor]
+    ) -> tuple[str, ...]:
+        """Recognize independently holdout-validated loop components."""
+
+        if self._is_dense_integer_control_loop(body):
+            return ()
+        descendants = self._descendants(body)
+        operators = {
+            self._root_operator(node)
+            for node in descendants
+            if node.kind in self._BINARY_KINDS
+        }
+        arrays = [
+            node for node in descendants
+            if node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR
+        ]
+        calls = [node for node in descendants if node.kind in self._CALL_KINDS]
+        conditionals = [
+            node for node in descendants if node.kind == CursorKind.IF_STMT
+        ]
+        switches = [
+            node for node in descendants if node.kind == CursorKind.SWITCH_STMT
+        ]
+        features: list[str] = []
+
+        if switches:
+            complex_case = bool(
+                calls or arrays or operators.intersection({"*", "<<", ">>"})
+            )
+            return ((
+                "component_state_complex_u32"
+                if complex_case else "component_state_simple_u32"
+            ),)
+
+        if calls:
+            indirect = any(
+                call.referenced is None
+                or call.referenced.kind != CursorKind.FUNCTION_DECL
+                for call in calls
+            )
+            if indirect:
+                features.extend((
+                    "component_callback_empty_u32",
+                    "component_callback_rotate_body_u32",
+                ))
+            else:
+                features.append("component_direct_empty_u32")
+                callee_operators: set[str | None] = set()
+                callee_has_array = False
+                callee_has_wide_integer = False
+                for call in calls:
+                    name = self._extract_call_name(call)
+                    callee = definitions.get(name or "")
+                    if callee is None:
+                        continue
+                    nodes = self._descendants(callee)
+                    callee_operators.update(
+                        self._root_operator(node)
+                        for node in nodes if node.kind in self._BINARY_KINDS
+                    )
+                    callee_has_array |= any(
+                        node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR
+                        for node in nodes
+                    )
+                    callee_has_wide_integer |= any(
+                        self._canonical_size(node) == 8 for node in nodes
+                    )
+                if (
+                    callee_has_array or callee_has_wide_integer
+                    or "/" in callee_operators
+                ):
+                    features.append(
+                        "component_direct_interpolation_body_u32"
+                    )
+                elif "*" in callee_operators:
+                    features.append("component_direct_arithmetic_body_u32")
+                elif not conditionals:
+                    return ()
+
+        if conditionals:
+            branch_nodes = [
+                node
+                for conditional in conditionals
+                for node in self._descendants(conditional)
+            ]
+            branch_operators = {
+                self._root_operator(node)
+                for node in branch_nodes if node.kind in self._BINARY_KINDS
+            }
+            assignment_to_array = any(
+                node.kind in self._BINARY_KINDS
+                and self._root_operator(node) == "="
+                and any(
+                    child.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR
+                    for child in node.get_children()
+                )
+                for node in descendants
+            )
+            if assignment_to_array:
+                features.append("component_branch_memory_u32")
+            elif branch_operators.intersection({"<<", ">>", "^=", "|=", "&="}):
+                features.append("component_branch_bitwise_u32")
+            elif features:
+                features.append("component_branch_simple_u32")
+
+        return tuple(dict.fromkeys(features))
 
     @staticmethod
     def _mark_unvalidated_mixed_loop(
@@ -301,6 +456,8 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
         conditionals = sum(
             node.kind == CursorKind.IF_STMT for node in descendants
         )
+        if any(node.kind in self._CALL_KINDS for node in descendants):
+            return None
 
         if arrays >= 2 and not conditionals and {
             "/", "<<", "^="
@@ -424,7 +581,11 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 node for node in descendants
                 if node.kind == CursorKind.CSTYLE_CAST_EXPR
             ]
-            if any(self._canonical_size(node) == 4 for node in casts):
+            if any(
+                self._canonical_size(node) == 4
+                and self._contains_float_type(node)
+                for node in casts
+            ):
                 return "int32_to_float32_u32"
         for node in descendants:
             if node.kind not in self._BINARY_KINDS:

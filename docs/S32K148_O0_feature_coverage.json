@@ -1,0 +1,367 @@
+{
+  "target": "S32K148",
+  "core_frequency_hz": 48000000,
+  "compiler": "ARM GCC 11.4",
+  "optimization": "O0",
+  "engineering_margin_percent": 15.0,
+  "contextual_feature_count": 59,
+  "categories": {
+    "integer_and_control": [
+      {
+        "feature": "add_constant_u32",
+        "cost_us_per_unit": 0.0416666667,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "add_local_u32",
+        "cost_us_per_unit": 0.1041666667,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "add_index_u32",
+        "cost_us_per_unit": 0.0625,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "add_memory_u32",
+        "cost_us_per_unit": 0.25,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "multiply_local_u32",
+        "cost_us_per_unit": 0.1041666667,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "divide_small_u32",
+        "cost_us_per_unit": 0.2291666667,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "divide_large_u32",
+        "cost_us_per_unit": 0.375,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "modulo_small_u32",
+        "cost_us_per_unit": 0.3125,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "modulo_large_u32",
+        "cost_us_per_unit": 0.4583333333,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "index_before_multiply_u32",
+        "cost_us_per_unit": 0.0625,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "multiply_before_index_u32",
+        "cost_us_per_unit": 0.0208333333,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "mixed_add_context_u32",
+        "cost_us_per_unit": 0.146921875,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "subtract_local_u32",
+        "cost_us_per_unit": 0.0633697917,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "bitwise_and_u32",
+        "cost_us_per_unit": 0.0625,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "bitwise_or_u32",
+        "cost_us_per_unit": 0.0625,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "bitwise_xor_u32",
+        "cost_us_per_unit": 0.0625,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "shift_left_u32",
+        "cost_us_per_unit": 0.1041666667,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "shift_right_u32",
+        "cost_us_per_unit": 0.1041666667,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "branch_evaluation_u32",
+        "cost_us_per_unit": 0.2708333333,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "mixed_bitwise_context_u32",
+        "cost_us_per_unit": 0.1049270833,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "basic_add_expression_u32",
+        "cost_us_per_unit": 0.0625,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "multiply_masked_index_u32",
+        "cost_us_per_unit": 0.0729166667,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "divide_masked_index_u32",
+        "cost_us_per_unit": 0.09375,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "modulo_masked_index_u32",
+        "cost_us_per_unit": 0.1875,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "bitwise_nested_u32",
+        "cost_us_per_unit": 0.0625,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "shift_rotate_u32",
+        "cost_us_per_unit": 0.1041666667,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "dense_integer_control_correction_u32",
+        "cost_us_per_unit": -0.2928611111,
+        "recognition": "restricted_structural_signature"
+      }
+    ],
+    "memory": [
+      {
+        "feature": "sequential_memory_u32",
+        "cost_us_per_unit": 0.897624599,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "random_indexed_memory_u32",
+        "cost_us_per_unit": 1.186152769,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "bulk_memory_copy_u32",
+        "cost_us_per_unit": 0.7291666667,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "bulk_memory_set_u32",
+        "cost_us_per_unit": 0.5,
+        "recognition": "name_independent_ast"
+      }
+    ],
+    "fixed_point": [
+      {
+        "feature": "q15_multiply_u32",
+        "cost_us_per_unit": 0.4583333333,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "q15_mac_u32",
+        "cost_us_per_unit": 0.4583333333,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "q31_multiply_u32",
+        "cost_us_per_unit": 0.7916666667,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "q31_mac_u32",
+        "cost_us_per_unit": 0.8541666667,
+        "recognition": "restricted_structural_signature"
+      }
+    ],
+    "floating_point": [
+      {
+        "feature": "float32_add_sub_u32",
+        "cost_us_per_unit": 1.875,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "float32_multiply_u32",
+        "cost_us_per_unit": 1.375,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "float32_divide_u32",
+        "cost_us_per_unit": 4.2708333333,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "float64_add_sub_u32",
+        "cost_us_per_unit": 2.5208333333,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "float64_multiply_u32",
+        "cost_us_per_unit": 2.2291666667,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "float64_divide_u32",
+        "cost_us_per_unit": 16.5625,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "int32_to_float32_u32",
+        "cost_us_per_unit": 1.5,
+        "recognition": "name_independent_ast"
+      }
+    ],
+    "communication": [
+      {
+        "feature": "checksum_processed_byte_u32",
+        "cost_us_per_unit": 0.9166666667,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "direct_function_call_u32",
+        "cost_us_per_unit": 0.7916666667,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "indirect_function_call_u32",
+        "cost_us_per_unit": 0.9791666667,
+        "recognition": "name_independent_ast"
+      },
+      {
+        "feature": "switch_case_4_u32",
+        "cost_us_per_unit": 0.6458333333,
+        "recognition": "name_independent_ast"
+      }
+    ],
+    "powertrain": [
+      {
+        "feature": "powertrain_signed_arithmetic_i32",
+        "cost_us_per_unit": 1.0725859375,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "powertrain_saturation_clamp_i32",
+        "cost_us_per_unit": 0.892578125,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "powertrain_lookup_1d_i32",
+        "cost_us_per_unit": 0.6996458333,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "powertrain_linear_interpolation_i32",
+        "cost_us_per_unit": 2.1603645833,
+        "recognition": "restricted_structural_signature"
+      }
+    ],
+    "automotive_compound": [
+      {
+        "feature": "automotive_torque_map_limiter_i32",
+        "cost_us_per_unit": 2.375,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "automotive_plausibility_debounce_u32",
+        "cost_us_per_unit": 2.6041607143,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "automotive_can_crc_pack_u32",
+        "cost_us_per_unit": 6.0661607143,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "automotive_helper_call_u32",
+        "cost_us_per_unit": 0.7916666667,
+        "recognition": "restricted_structural_signature"
+      }
+    ],
+    "mixed_shape": [
+      {
+        "feature": "mixed_memory_branch_update_u32",
+        "cost_us_per_unit": 1.1324241616,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "mixed_multiply_shift_branch_u32",
+        "cost_us_per_unit": 0.9026044207,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "mixed_indexed_divide_bitwise_u32",
+        "cost_us_per_unit": 1.3544207317,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "mixed_memory_branch_modulo_u32",
+        "cost_us_per_unit": 1.0361726372,
+        "recognition": "restricted_structural_signature"
+      },
+      {
+        "feature": "mixed_packing_checksum_shift_u32",
+        "cost_us_per_unit": 1.1953971037,
+        "recognition": "restricted_structural_signature"
+      }
+    ]
+  },
+  "protocol_runtime_contracts": [
+    {
+      "feature": "bounded_byte_copy",
+      "slope_us_per_unit": 1.041667339,
+      "intercept_us": 1.2285,
+      "minimum_work_units": 8,
+      "maximum_work_units": 128,
+      "recognition": "explicit_contract_pending_structural_promotion"
+    },
+    {
+      "feature": "direct_helper_call",
+      "slope_us_per_unit": 1.189986895,
+      "intercept_us": 0.97625,
+      "minimum_work_units": 8,
+      "maximum_work_units": 128,
+      "recognition": "explicit_contract_pending_structural_promotion"
+    },
+    {
+      "feature": "indirect_callback",
+      "slope_us_per_unit": 1.405366935,
+      "intercept_us": 1.01,
+      "minimum_work_units": 8,
+      "maximum_work_units": 128,
+      "recognition": "explicit_contract_pending_structural_promotion"
+    },
+    {
+      "feature": "isotp_compound",
+      "slope_us_per_unit": 1.410708837,
+      "intercept_us": 1.970041667,
+      "minimum_work_units": 8,
+      "maximum_work_units": 128,
+      "recognition": "explicit_contract_pending_structural_promotion"
+    },
+    {
+      "feature": "switch_dispatch",
+      "slope_us_per_unit": 0.783852655,
+      "intercept_us": 1.228708333,
+      "minimum_work_units": 8,
+      "maximum_work_units": 128,
+      "recognition": "explicit_contract_pending_structural_promotion"
+    }
+  ],
+  "decision_policy": {
+    "accepted": "all reachable execution work is covered by validated contracts",
+    "unverified": "any unknown bound, unresolved callback body, external cost, or unmatched structure"
+  }
+}

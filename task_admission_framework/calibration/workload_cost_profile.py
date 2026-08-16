@@ -17,6 +17,8 @@ class WorkloadGroupCorrection:
     source: str = ""
     require_all_classes: bool = False
     required_workload_classes: frozenset[str] = frozenset()
+    minimum_work_units: int | None = None
+    maximum_work_units: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

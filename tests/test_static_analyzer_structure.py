@@ -59,6 +59,26 @@ class StaticAnalyzerStructureTests(unittest.TestCase):
 
         self.assertEqual(2, features.floating_point_operations)
 
+    def test_integer_width_cast_is_not_classified_as_float_conversion(self) -> None:
+        source = """
+        typedef unsigned short uint16_t;
+        typedef unsigned int uint32_t;
+        static uint16_t samples[16];
+        void task(void)
+        {
+            uint32_t i;
+            uint32_t total = 0U;
+            for (i = 0U; i < 16U; ++i) {
+                total += (uint32_t)samples[i];
+            }
+        }
+        """
+        profile = self._profile(source, "task")
+
+        self.assertNotIn(
+            "int32_to_float32_u32", profile.contextual_integer_counts
+        )
+
     def test_bounded_loop_workload_is_inferred_automatically(self) -> None:
         source = """
         static int fixed_filter_step(int sample, int gain)
@@ -81,6 +101,41 @@ class StaticAnalyzerStructureTests(unittest.TestCase):
             {"fixed_point_filter": 10},
             profile.inferred_workload_counts,
         )
+
+    def test_explicit_protocol_kernel_has_proven_single_loop_units(self) -> None:
+        source = """
+        static unsigned char source[128];
+        static unsigned char destination[128];
+        void bounded_byte_copy(void)
+        {
+            unsigned i;
+            for (i = 0U; i < 12U; ++i) {
+                destination[i] = source[i];
+            }
+        }
+        """
+        profile = self._profile(source, "bounded_byte_copy")
+
+        self.assertTrue(profile.dynamic_bound_verified)
+        self.assertEqual(
+            {"bounded_byte_copy": 12},
+            profile.inferred_workload_counts,
+        )
+
+    def test_protocol_kernel_with_multiple_loops_is_unverified(self) -> None:
+        source = """
+        void direct_helper_call(void)
+        {
+            unsigned i;
+            for (i = 0U; i < 8U; ++i) { }
+            for (i = 0U; i < 8U; ++i) { }
+        }
+        """
+        profile = self._profile(source, "direct_helper_call")
+
+        self.assertFalse(profile.dynamic_bound_verified)
+        self.assertEqual({}, profile.inferred_workload_counts)
+        self.assertIn("no single proven loop bound", profile.dynamic_bound_notes[0])
 
     def test_data_dependent_loop_makes_execution_unverified(self) -> None:
         source = """

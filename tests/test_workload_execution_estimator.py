@@ -67,6 +67,35 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
             0.8976245990,
         )
 
+    def test_protocol_runtime_model_is_validated_only_inside_board_range(self) -> None:
+        profile_path = (
+            Path(__file__).parents[1]
+            / "task_admission_framework"
+            / "calibration"
+            / "profiles"
+            / "S32K148_workload_costs.json"
+        )
+        profile = WorkloadCostLoader().load(profile_path)
+        estimator = WorkloadExecutionEstimator()
+
+        inside = estimator.estimate(
+            workload_class="direct_helper_call",
+            work_units=48,
+            period_ms=10,
+            profile=profile,
+        )
+        outside = estimator.estimate(
+            workload_class="direct_helper_call",
+            work_units=129,
+            period_ms=10,
+            profile=profile,
+        )
+
+        self.assertTrue(inside.model_validated)
+        self.assertAlmostEqual(58.095621, inside.nominal_execution_us, places=5)
+        self.assertFalse(outside.model_validated)
+        self.assertIn("outside validated range 8-128", outside.note)
+
     def test_mixed_breakdown_uses_separate_costs(self) -> None:
         estimate = WorkloadExecutionEstimator().estimate_breakdown(
             workload_counts={
@@ -279,7 +308,7 @@ class WorkloadExecutionEstimatorTests(unittest.TestCase):
 
         self.assertFalse(profile.validated)
         self.assertAlmostEqual(estimate.estimated_execution_us, 209.7436, places=3)
-        self.assertAlmostEqual(estimate.admission_execution_us, 230.7180, places=3)
+        self.assertAlmostEqual(estimate.admission_execution_us, 241.2052, places=3)
         self.assertTrue(estimate.passes_safety_limit)
 
     def test_s32k148_memory_fixed_groups_use_blind_validated_correction(self) -> None:

@@ -11,6 +11,33 @@
   "loop_invocation_intercept_us": 1.27,
   "loop_iteration_us": 0.3125,
   "engineering_margin_percent": 15.0,
+  "component_cost_us_per_work_unit": {
+    "component_branch_simple_u32": 0.3580625,
+    "component_branch_bitwise_u32": 0.5,
+    "component_branch_memory_u32": 0.854604167,
+    "component_direct_empty_u32": 0.8194375,
+    "component_direct_arithmetic_body_u32": 0.083354167,
+    "component_direct_interpolation_body_u32": 1.625,
+    "component_callback_empty_u32": 1.0481875,
+    "component_callback_arithmetic_body_u32": 0.070729167,
+    "component_callback_rotate_body_u32": 0.0625,
+    "component_state_simple_u32": 0.52928125,
+    "component_state_complex_u32": 0.91209375
+  },
+  "component_validation": {
+    "validated": false,
+    "status": "isolated_holdout_passed_compound_holdout_failed",
+    "work_units_min": 16,
+    "work_units_max": 64,
+    "holdout_points": 11,
+    "holdout_mape_percent": 0.805,
+    "holdout_max_ape_percent": 2.3406,
+    "admission_coverage": "11/11",
+    "compound_holdout_points": 5,
+    "compound_holdout_mape_percent": 48.7131,
+    "compound_holdout_max_ape_percent": 89.9509,
+    "compound_holdout_admission_coverage": "2/5"
+  },
   "mixed_shape_cost_us_per_work_unit": {
     "mixed_memory_branch_update_u32": 1.1324241616,
     "mixed_multiply_shift_branch_u32": 0.9026044207,

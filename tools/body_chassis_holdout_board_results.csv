@@ -1,0 +1,6 @@
+task_id,task_name,period_ms,measured_us
+0,BodyChassis_5ms_WheelBrake,5,29.125
+1,BodyChassis_10ms_ThermalActuator,10,23.500
+2,BodyChassis_20ms_StabilityControl,20,33.416
+3,BodyChassis_50ms_FaultManager,50,11.812
+4,BodyChassis_100ms_StatusCommunication,100,41.312

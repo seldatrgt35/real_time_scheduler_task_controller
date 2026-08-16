@@ -24,6 +24,8 @@ class WorkloadClassifier:
         "indirect_function_call", "switch_case_4", "switch_case_8",
         "switch_case_16", "volatile_read", "volatile_write",
         "mmio_read", "mmio_write", "gpio_read", "gpio_write",
+        "bounded_byte_copy", "switch_dispatch", "direct_helper_call",
+        "indirect_callback", "isotp_compound",
     )
 
     @classmethod
@@ -82,6 +84,11 @@ class WorkloadClassifier:
             "mmio_write",
             "gpio_read",
             "gpio_write",
+            "bounded_byte_copy",
+            "switch_dispatch",
+            "direct_helper_call",
+            "indirect_callback",
+            "isotp_compound",
         )
         for marker in calibrated_feature_markers:
             if marker in lowered:

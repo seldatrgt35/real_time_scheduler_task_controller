@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
+import re
 
 from clang.cindex import Cursor, CursorKind, TranslationUnit
 
@@ -91,10 +92,13 @@ class StaticAnalyzer:
         translation_unit = self._parser.parse(source_path)
         self._log_diagnostics(translation_unit)
         function_definitions = self._collect_function_definitions(translation_unit)
+        constant_definitions = self._collect_numeric_defines(Path(source_path))
 
         profiles: list[TaskProfile] = []
         for function_cursor in function_definitions.values():
-            profiles.append(self._analyze_task(function_cursor, function_definitions))
+            profiles.append(self._analyze_task(
+                function_cursor, function_definitions, constant_definitions
+            ))
 
         return profiles
 
@@ -102,12 +106,13 @@ class StaticAnalyzer:
         self,
         root_function: Cursor,
         function_definitions: dict[str, Cursor],
+        constant_definitions: dict[str, int],
     ) -> TaskProfile:
         profile = TaskProfile(
             task_name=root_function.spelling,
             api_usage=self._api_database.empty_usage(),
         )
-        self._dynamic_work_analyzer = DynamicWorkAnalyzer()
+        self._dynamic_work_analyzer = DynamicWorkAnalyzer(constant_definitions)
         self._traverse_function(
             root_function,
             profile,
@@ -120,14 +125,14 @@ class StaticAnalyzer:
             root_function,
             function_definitions,
         )
-        dynamic_operations = DynamicOperationAnalyzer().infer(
+        dynamic_operations = DynamicOperationAnalyzer(constant_definitions).infer(
             root_function,
             function_definitions,
         )
         profile.inferred_workload_counts = dict(dynamic_work.counts)
         profile.inferred_operation_counts = dict(dynamic_operations.counts)
         profile.catalog_operation_counts = dict(dynamic_operations.catalog_counts)
-        contextual_integer = ContextualIntegerAnalyzer().infer_contexts(
+        contextual_integer = ContextualIntegerAnalyzer(constant_definitions).infer_contexts(
             root_function, function_definitions
         )
         profile.contextual_integer_counts = dict(contextual_integer.counts)
@@ -142,6 +147,21 @@ class StaticAnalyzer:
             ])
         )
         return profile
+
+    @staticmethod
+    def _collect_numeric_defines(source_path: Path) -> dict[str, int]:
+        """Collect simple integer object macros used as static loop bounds."""
+
+        source = source_path.read_text(encoding="utf-8")
+        definitions: dict[str, int] = {}
+        pattern = re.compile(
+            r"^\s*#\s*define\s+([A-Za-z_]\w*)\s+\(?\s*"
+            r"(0[xX][0-9A-Fa-f]+|\d+)[uUlL]*\s*\)?\s*$",
+            re.MULTILINE,
+        )
+        for name, value in pattern.findall(source):
+            definitions[name] = int(value, 0)
+        return definitions
 
     def _traverse_function(
         self,

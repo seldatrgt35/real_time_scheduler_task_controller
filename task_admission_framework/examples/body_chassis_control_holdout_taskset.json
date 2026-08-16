@@ -1,0 +1,10 @@
+{
+  "simulation_window_ms": 200,
+  "tasks": [
+    {"name":"WheelSpeedBrake5ms","source_file":"body_chassis_control_holdout.c","entry_function":"BccTask_WheelSpeedAndBrake_5ms","period_ms":5,"deadline_ms":5,"priority":3,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"ThermalActuator10ms","source_file":"body_chassis_control_holdout.c","entry_function":"BccTask_ThermalActuator_10ms","period_ms":10,"deadline_ms":10,"priority":3,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"StabilityRequest20ms","source_file":"body_chassis_control_holdout.c","entry_function":"BccTask_StabilityRequest_20ms","period_ms":20,"deadline_ms":20,"priority":2,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"FaultManager50ms","source_file":"body_chassis_control_holdout.c","entry_function":"BccTask_FaultManager_50ms","period_ms":50,"deadline_ms":50,"priority":2,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"StatusCommunication100ms","source_file":"body_chassis_control_holdout.c","entry_function":"BccTask_StatusCommunication_100ms","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"}
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "simulation_window_ms": 200,
+  "tasks": [
+    {"name":"PowertrainInput5ms","source_file":"automotive_feature_reference.c","entry_function":"AppTask_PowertrainInput_5ms","period_ms":5,"deadline_ms":5,"priority":3,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"SignalConditioning10ms","source_file":"automotive_feature_reference.c","entry_function":"AppTask_SignalConditioning_10ms","period_ms":10,"deadline_ms":10,"priority":3,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"TorqueCoordination20ms","source_file":"automotive_feature_reference.c","entry_function":"AppTask_TorqueCoordination_20ms","period_ms":20,"deadline_ms":20,"priority":2,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"Diagnostics50ms","source_file":"automotive_feature_reference.c","entry_function":"AppTask_Diagnostics_50ms","period_ms":50,"deadline_ms":50,"priority":2,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"NetworkManagement100ms","source_file":"automotive_feature_reference.c","entry_function":"AppTask_NetworkManagement_100ms","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"}
+  ]
+}

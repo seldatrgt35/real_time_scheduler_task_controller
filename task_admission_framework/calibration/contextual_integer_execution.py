@@ -34,10 +34,11 @@ def estimate_contextual_integer(
     compound_costs = profile.get("automotive_compound_cost_us_per_work_unit", {})
     compound_intercepts = profile.get("automotive_compound_intercept_us", {})
     mixed_shape_costs = profile.get("mixed_shape_cost_us_per_work_unit", {})
+    component_costs = profile.get("component_cost_us_per_work_unit", {})
     mixed_shape_intercepts = profile.get("mixed_shape_intercept_us", {})
     unsupported = tuple(sorted(
         name for name, count in counts.items()
-        if count > 0 and name not in administrative and name not in costs and name not in memory_costs and name not in fixed_costs and name not in floating_costs and name not in communication_costs and name not in powertrain_costs and name not in compound_costs and name not in mixed_shape_costs and not name.endswith("_invocations")
+        if count > 0 and name not in administrative and name not in costs and name not in memory_costs and name not in fixed_costs and name not in floating_costs and name not in communication_costs and name not in powertrain_costs and name not in compound_costs and name not in mixed_shape_costs and name not in component_costs and not name.endswith("_invocations")
     ))
     if unsupported:
         return ContextualIntegerEstimate(
@@ -110,6 +111,21 @@ def estimate_contextual_integer(
         counts.get(f"{name}_invocations", 0) * intercept
         for name, intercept in mixed_shape_intercepts.items()
     )
+    component_time = sum(
+        count * component_costs[name]
+        for name, count in counts.items() if name in component_costs
+    )
+    component_profile = profile.get("component_validation", {})
+    component_units = max(
+        (count for name, count in counts.items() if name in component_costs),
+        default=0,
+    )
+    component_in_range = (
+        component_units == 0
+        or component_profile.get("work_units_min", 0)
+        <= component_units
+        <= component_profile.get("work_units_max", 0)
+    )
     mixed_shape_profile = profile.get("mixed_shape_validation", {})
     mixed_shape_in_range = all(
         counts.get(name, 0) == 0
@@ -121,7 +137,7 @@ def estimate_contextual_integer(
         )
         for name in mixed_shape_costs
     )
-    nominal = operations + loop_control + loop_setup + memory_time + fixed_time + floating_time + communication_time + powertrain_time + compound_time + mixed_shape_time
+    nominal = operations + loop_control + loop_setup + memory_time + fixed_time + floating_time + communication_time + powertrain_time + compound_time + mixed_shape_time + component_time
     margin = profile["engineering_margin_percent"] / 100.0
     powertrain_validated = bool(
         profile.get("powertrain_group_validation", {}).get("validated", False)
@@ -141,9 +157,15 @@ def estimate_contextual_integer(
                 and mixed_shape_in_range
             )
         )
+        and (
+            component_time == 0.0
+            or (component_profile.get("validated", False) and component_in_range)
+        )
     )
     note = (
-        "Powertrain numeric coefficients are calibration-derived; independent holdout is pending."
+        "Component costs passed isolated holdout but failed the independent compound holdout; this estimate is advisory only."
+        if component_time != 0.0 and not component_profile.get("validated", False)
+        else "Powertrain numeric coefficients are calibration-derived; independent holdout is pending."
         if powertrain_time != 0.0 and not powertrain_validated
         else (
             "Mixed memory and communication correction has an independent holdout pending."
@@ -163,6 +185,7 @@ def estimate_contextual_integer(
          "communication_group": communication_time,
          "powertrain_numeric_group": powertrain_time,
          "automotive_compound_group": compound_time,
-         "mixed_shape_group": mixed_shape_time},
+         "mixed_shape_group": mixed_shape_time,
+         "component_group": component_time},
         (), note,
     )

@@ -93,6 +93,20 @@ class WorkloadExecutionEstimator:
                 continue
             if not correction.required_workload_classes.issubset(present):
                 continue
+            group_units = sum(normalized[name] for name in present)
+            if (
+                correction.minimum_work_units is not None
+                and group_units < correction.minimum_work_units
+            ) or (
+                correction.maximum_work_units is not None
+                and group_units > correction.maximum_work_units
+            ):
+                correction_notes.append(
+                    f"{correction.name}: {group_units} work units outside "
+                    f"validated range {correction.minimum_work_units}-"
+                    f"{correction.maximum_work_units}"
+                )
+                continue
             raw_group_us = sum(time_breakdown[name] for name in present)
             corrected_group_us = (
                 correction.intercept_us + correction.scale * raw_group_us
