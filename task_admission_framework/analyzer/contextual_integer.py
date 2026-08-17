@@ -217,6 +217,13 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 result.add("memory_group_loop_iterations", multiplier * bound)
                 result.add("memory_group_loop_invocations", multiplier)
                 return
+            relaxed_memory_group = self._relaxed_memory_loop_pattern(body)
+            if relaxed_memory_group is not None:
+                self._record_atomic_fallback_loop(
+                    body, "mixed_memory_update", multiplier, bound, result,
+                    base_group=relaxed_memory_group,
+                )
+                return
             component_features = self._execution_component_patterns(
                 body, definitions
             )
@@ -405,9 +412,17 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 not has_conditional
                 and not operators.intersection({"*", "/", "%", "<<", ">>"})
             )
+        if group == "sequential_memory_u32":
+            return (
+                not has_conditional
+                and not has_call
+                and not operators.intersection(
+                    {"<<", ">>", "|", "|="}
+                )
+            )
         if group in {
             "bulk_memory_copy_u32", "bulk_memory_set_u32",
-            "random_indexed_memory_u32", "sequential_memory_u32",
+            "random_indexed_memory_u32",
         }:
             return not has_conditional and not has_call
         if group == "automotive_plausibility_debounce_u32":
@@ -959,6 +974,41 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
         ):
             return "random_indexed_memory_u32"
         return "sequential_memory_u32"
+
+    def _relaxed_memory_loop_pattern(self, body: Cursor) -> str | None:
+        descendants = self._descendants(body)
+        arrays = [
+            node for node in descendants
+            if node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR
+        ]
+        assignments = [
+            node for node in descendants
+            if node.kind in self._BINARY_KINDS
+            and self._root_operator(node) == "="
+        ]
+        array_bases = {
+            children[0].spelling
+            for array in arrays
+            if (children := list(array.get_children()))
+        }
+        operators = {
+            operator
+            for node in descendants
+            if node.kind in self._BINARY_KINDS
+            if (operator := self._root_operator(node)) is not None
+        }
+        has_control_or_call = any(
+            node.kind in {CursorKind.IF_STMT, CursorKind.CALL_EXPR}
+            for node in descendants
+        )
+        if (
+            len(array_bases) >= 2
+            and assignments
+            and not has_control_or_call
+            and not operators.intersection({"*", "/", "%", "<<", ">>"})
+        ):
+            return "bulk_memory_copy_u32"
+        return None
 
     def _fixed_point_loop_pattern(self, body: Cursor) -> str | None:
         tokens = [token.spelling for token in body.get_tokens()]
