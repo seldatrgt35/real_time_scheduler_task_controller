@@ -44,6 +44,7 @@ def estimate_contextual_integer(
     conditional_write_profile = profile.get(
         "atomic_conditional_memory_write_correction", {}
     )
+    basic_gap_profile = profile.get("basic_gap_family_models", {})
     mixed_shape_intercepts = profile.get("mixed_shape_intercept_us", {})
     unsupported_set = {
         name for name, count in counts.items()
@@ -254,6 +255,62 @@ def estimate_contextual_integer(
         for family in mixed_shapes
     )
     nominal = operations + loop_control + loop_setup + memory_time + fixed_time + floating_time + communication_time + powertrain_time + compound_time + mixed_shape_time + component_time + mixed_region_time + conditional_write_time
+    basic_gap_family = None
+    basic_gap_iterations = counts.get("loop_iterations", 0)
+    basic_gap_payload = {
+        name for name, count in counts.items()
+        if count > 0
+        and name not in administrative
+        and not name.startswith("atomic_region_")
+    }
+    basic_gap_range_ok = (
+        basic_gap_profile.get("iterations_min", 0)
+        <= basic_gap_iterations
+        <= basic_gap_profile.get("iterations_max", -1)
+    )
+    if basic_gap_range_ok and counts.get("loop_invocations", 0) == 1:
+        if (
+            counts.get("add_constant_u32", 0) == basic_gap_iterations
+            and counts.get("add_local_u32", 0) == 2 * basic_gap_iterations
+            and counts.get("multiply_local_u32", 0) == basic_gap_iterations
+            and counts.get("subtract_local_u32", 0) == basic_gap_iterations
+            and counts.get("atomic_fallback_region", 0) == 0
+            and basic_gap_payload == {
+                "add_constant_u32", "add_local_u32",
+                "multiply_local_u32", "subtract_local_u32",
+            }
+        ):
+            basic_gap_family = "arithmetic"
+        elif (
+            counts.get("atomic_region_shape_extended_masked_expression", 0)
+            == 1
+            and counts.get("divide_masked_index_u32", 0)
+            == basic_gap_iterations
+            and counts.get("basic_add_expression_u32", 0)
+            == basic_gap_iterations
+            and basic_gap_payload == {
+                "divide_masked_index_u32", "basic_add_expression_u32",
+            }
+        ):
+            basic_gap_family = "masked_divide"
+        elif (
+            counts.get("atomic_region_shape_extended_masked_expression", 0)
+            == 1
+            and counts.get("modulo_masked_index_u32", 0)
+            == basic_gap_iterations
+            and counts.get("basic_add_expression_u32", 0)
+            == basic_gap_iterations
+            and basic_gap_payload == {
+                "modulo_masked_index_u32", "basic_add_expression_u32",
+            }
+        ):
+            basic_gap_family = "masked_modulo"
+    if basic_gap_family is not None:
+        family_profile = basic_gap_profile[basic_gap_family]
+        nominal = (
+            family_profile["intercept_us"]
+            + basic_gap_iterations * family_profile["iteration_us"]
+        )
     margin = profile["engineering_margin_percent"] / 100.0
     powertrain_validated = bool(
         profile.get("powertrain_group_validation", {}).get("validated", False)
@@ -264,7 +321,13 @@ def estimate_contextual_integer(
         )
     )
     estimate_verified = (
-        counts.get("atomic_fallback_region", 0) == 0
+        (
+            counts.get("atomic_fallback_region", 0) == 0
+            or (
+                basic_gap_family is not None
+                and basic_gap_profile.get("validated", False)
+            )
+        )
         and
         (powertrain_time == 0.0 or powertrain_validated)
         and (not mixed_memory_communication or mixed_validated)
@@ -287,7 +350,9 @@ def estimate_contextual_integer(
         )
     )
     note = (
-        "Data-dependent conditional fallback reports an all-body structural estimate; typical-path occupancy is unknown."
+        "Validated by independent 32-iteration basic-family holdout."
+        if basic_gap_family is not None
+        else "Data-dependent conditional fallback reports an all-body structural estimate; typical-path occupancy is unknown."
         if counts.get("atomic_region_shape_conditional_memory", 0) > 0
         else
         "Atomic fallback preserves all recognized region work; independent holdout validation is pending."
@@ -311,9 +376,7 @@ def estimate_contextual_integer(
             )
         )
     )
-    return ContextualIntegerEstimate(
-        nominal, nominal * (1.0 + margin), estimate_verified,
-        {"loop_setup": loop_setup, "loop_control": loop_control,
+    breakdown = {"loop_setup": loop_setup, "loop_control": loop_control,
          "contextual_operations": operations, "memory_group": memory_time,
          "fixed_point_group": fixed_time, "floating_point_group": floating_time,
          "communication_group": communication_time,
@@ -322,6 +385,14 @@ def estimate_contextual_integer(
          "mixed_shape_group": mixed_shape_time,
          "component_group": component_time,
          "mixed_region_group": mixed_region_time,
-         "conditional_memory_write_correction": conditional_write_time},
+         "conditional_memory_write_correction": conditional_write_time}
+    if basic_gap_family is not None:
+        breakdown = {
+            name: 0.0 for name in breakdown
+        }
+        breakdown["basic_gap_family"] = nominal
+    return ContextualIntegerEstimate(
+        nominal, nominal * (1.0 + margin), estimate_verified,
+        breakdown,
         (), note,
     )

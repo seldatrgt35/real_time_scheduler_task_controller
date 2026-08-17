@@ -108,7 +108,10 @@ class BasicFeatureWcetSuiteTest(unittest.TestCase):
                 counts = self.profiles[task_name].contextual_integer_counts
                 self.assertEqual(1, counts["atomic_fallback_region"])
                 self.assertEqual(32, counts["basic_add_expression_u32"])
-                self.assertFalse(estimate_contextual_integer(counts).verified)
+                estimate = estimate_contextual_integer(counts)
+                self.assertEqual(
+                    task_name != "StarBasic_MaskedMultiply", estimate.verified
+                )
 
     def test_integer_to_float_preserves_float_accumulation(self) -> None:
         counts = self.profiles["StarBasic_IntToFloat"].contextual_integer_counts
@@ -118,6 +121,25 @@ class BasicFeatureWcetSuiteTest(unittest.TestCase):
         self.assertFalse(estimate.verified)
         self.assertAlmostEqual(108.0, estimate.nominal_us)
         self.assertGreaterEqual(estimate.safe_us, 93.770)
+
+    def test_basic_gap_models_pass_unseen_32_iteration_holdouts(self) -> None:
+        expected = {
+            "StarBasic_Arithmetic": (27.812232558139534, 28.479),
+            "StarBasic_MaskedDivide": (20.013267441860467, 21.125),
+            "StarBasic_MaskedModulo": (28.642627906976745, 27.375),
+        }
+        for task_name, (nominal, board_us) in expected.items():
+            with self.subTest(task=task_name):
+                estimate = estimate_contextual_integer(
+                    self.profiles[task_name].contextual_integer_counts
+                )
+                self.assertTrue(estimate.verified)
+                self.assertAlmostEqual(nominal, estimate.nominal_us)
+                self.assertLess(abs(nominal - board_us) / board_us, 0.06)
+                self.assertGreaterEqual(estimate.safe_us, board_us)
+                self.assertAlmostEqual(
+                    nominal, sum(estimate.breakdown_us.values())
+                )
 
 
 if __name__ == "__main__":

@@ -11,6 +11,41 @@
   "loop_invocation_intercept_us": 1.27,
   "loop_iteration_us": 0.3125,
   "engineering_margin_percent": 15.0,
+  "basic_gap_family_models": {
+    "status": "independent_32_iteration_holdouts_passed",
+    "validated": true,
+    "iterations_min": 8,
+    "iterations_max": 64,
+    "training_iterations": [8, 16, 64],
+    "samples_per_point": 40,
+    "arithmetic": {
+      "intercept_us": 1.1454418604651195,
+      "iteration_us": 0.8333372093023255,
+      "training_mape_percent": 0.0009843904296449508,
+      "holdout_iterations": 32,
+      "holdout_board_us": 28.479,
+      "holdout_nominal_us": 27.812232558139534,
+      "holdout_ape_percent": 2.3412600226850127
+    },
+    "masked_divide": {
+      "intercept_us": 1.5140581395348889,
+      "iteration_us": 0.5781002906976743,
+      "training_mape_percent": 3.062380400194966,
+      "holdout_iterations": 32,
+      "holdout_board_us": 21.125,
+      "holdout_nominal_us": 20.013267441860467,
+      "holdout_ape_percent": 5.262639328471161
+    },
+    "masked_modulo": {
+      "intercept_us": 1.2550930232558173,
+      "iteration_us": 0.855860465116279,
+      "training_mape_percent": 0.4166987718109179,
+      "holdout_iterations": 32,
+      "holdout_board_us": 27.375,
+      "holdout_nominal_us": 28.642627906976745,
+      "holdout_ape_percent": 4.630604226399069
+    }
+  },
   "atomic_conditional_memory_write_correction": {
     "status": "calibration_complete_independent_holdouts_passed",
     "validated": true,

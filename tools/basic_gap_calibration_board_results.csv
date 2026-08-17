@@ -1,0 +1,10 @@
+family_id,family,iterations,board_us
+0,arithmetic,8,7.812
+0,arithmetic,16,14.479
+0,arithmetic,64,54.479
+1,masked_divide,8,5.812
+1,masked_divide,16,11.145
+1,masked_divide,64,38.458
+2,masked_modulo,8,8.041
+2,masked_modulo,16,15.020
+2,masked_modulo,64,56.020
