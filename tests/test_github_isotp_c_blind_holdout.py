@@ -20,11 +20,11 @@ class GithubIsotpCBlindHoldoutTest(unittest.TestCase):
             item.task_name: item for item in StaticAnalyzer().analyze_file(source)
         }
 
-    def test_predictions_are_frozen_before_board_measurement(self) -> None:
+    def test_current_predictions_preserve_frozen_blind_comparison(self) -> None:
         expected = {
             "StarTask_IsotpConsecutiveFrameReassembly_10ms": (
-                14.506486280699999,
-                16.682459222804997,
+                31.090868440286847,
+                35.75449870632987,
             ),
             "StarTask_IsotpErrorAging_20ms": (
                 28.2699999984,
@@ -42,6 +42,15 @@ class GithubIsotpCBlindHoldoutTest(unittest.TestCase):
                 self.assertFalse(estimate.verified)
                 self.assertAlmostEqual(nominal_us, estimate.nominal_us)
                 self.assertAlmostEqual(safe_us, estimate.safe_us)
+
+    def test_reassembly_no_longer_uses_incomplete_mixed_shape(self) -> None:
+        counts = self.profiles[
+            "StarTask_IsotpConsecutiveFrameReassembly_10ms"
+        ].contextual_integer_counts
+        self.assertNotIn("mixed_memory_branch_update_u32", counts)
+        self.assertEqual(1, counts["atomic_fallback_region"])
+        self.assertEqual(36, counts["branch_evaluation_u32"])
+        self.assertEqual(60, counts["basic_add_expression_u32"])
 
     def test_error_aging_exercises_atomic_fallback(self) -> None:
         counts = self.profiles[

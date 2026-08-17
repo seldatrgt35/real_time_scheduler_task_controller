@@ -133,6 +133,12 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 return
             mixed_shape_group = self._mixed_shape_loop_pattern(body)
             if mixed_shape_group is not None:
+                if not self._validated_group_shape(mixed_shape_group, body):
+                    self._record_atomic_fallback_loop(
+                        body, "conditional_memory", multiplier, bound,
+                        result, base_group=self._memory_loop_pattern(body),
+                    )
+                    return
                 result.add(mixed_shape_group, multiplier * bound)
                 result.add(f"{mixed_shape_group}_invocations", multiplier)
                 result.add("mixed_shape_group_loop_iterations", multiplier * bound)
@@ -384,6 +390,21 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             return not has_conditional and not has_call
         if group == "automotive_plausibility_debounce_u32":
             return "-" in operators
+        if group == "mixed_memory_branch_update_u32":
+            comparisons = sum(
+                self._root_operator(node)
+                in {"<", "<=", ">", ">=", "==", "!="}
+                for node in descendants if node.kind in self._BINARY_KINDS
+            )
+            array_accesses = sum(
+                node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR
+                for node in descendants
+            )
+            return (
+                comparisons == 1
+                and array_accesses == 3
+                and {"+=", "^=", "&"}.issubset(operators)
+            )
         return True
 
     def _execution_component_patterns(

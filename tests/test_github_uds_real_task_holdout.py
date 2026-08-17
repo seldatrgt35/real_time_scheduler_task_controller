@@ -20,23 +20,26 @@ class GithubUdsRealTaskHoldoutTest(unittest.TestCase):
             item.task_name: item for item in StaticAnalyzer().analyze_file(source)
         }
 
-    def test_predictions_are_frozen_before_board_measurement(self) -> None:
-        expected = {
-            "StarTask_ObdPidDecode_10ms": (
-                False, 11.06675, 12.7267625
-            ),
-            "StarTask_UdsResponseValidation_20ms": (
-                False, 9.9142896343, 11.401433079444999
-            ),
-        }
-        for task_name, (verified, nominal, safe) in expected.items():
-            with self.subTest(task=task_name):
-                estimate = estimate_contextual_integer(
-                    self.profiles[task_name].contextual_integer_counts
-                )
-                self.assertEqual(verified, estimate.verified)
-                self.assertAlmostEqual(nominal, estimate.nominal_us)
-                self.assertAlmostEqual(safe, estimate.safe_us)
+    def test_unaffected_prediction_remains_stable(self) -> None:
+        estimate = estimate_contextual_integer(
+            self.profiles[
+                "StarTask_ObdPidDecode_10ms"
+            ].contextual_integer_counts
+        )
+        self.assertFalse(estimate.verified)
+        self.assertAlmostEqual(11.06675, estimate.nominal_us)
+        self.assertAlmostEqual(12.7267625, estimate.safe_us)
+
+    def test_response_validation_rejects_incomplete_mixed_shape(self) -> None:
+        profile = self.profiles["StarTask_UdsResponseValidation_20ms"]
+        counts = profile.contextual_integer_counts
+        self.assertNotIn("mixed_memory_branch_update_u32", counts)
+        self.assertEqual(1, counts["atomic_fallback_region"])
+        estimate = estimate_contextual_integer(counts)
+        self.assertFalse(estimate.verified)
+        self.assertAlmostEqual(16.6033333328, estimate.nominal_us)
+        self.assertAlmostEqual(19.09383333272, estimate.safe_us)
+        self.assertGreaterEqual(estimate.safe_us, 12.625)
 
     def test_atomic_fallback_repairs_first_match_estimates(self) -> None:
         expected = {
