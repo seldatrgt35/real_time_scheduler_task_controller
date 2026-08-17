@@ -1,0 +1,16 @@
+#ifndef CONDITIONAL_MEMORY_WRITE_CALIBRATION_H
+#define CONDITIONAL_MEMORY_WRITE_CALIBRATION_H
+
+void ConditionalMemoryWriteCalibration_Initialize(void);
+
+void ConditionalMemoryWriteCalibration_Write1_8(void);
+void ConditionalMemoryWriteCalibration_Write1_16(void);
+void ConditionalMemoryWriteCalibration_Write1_32(void);
+void ConditionalMemoryWriteCalibration_Write2_8(void);
+void ConditionalMemoryWriteCalibration_Write2_16(void);
+void ConditionalMemoryWriteCalibration_Write2_32(void);
+void ConditionalMemoryWriteCalibration_Write4_8(void);
+void ConditionalMemoryWriteCalibration_Write4_16(void);
+void ConditionalMemoryWriteCalibration_Write4_32(void);
+
+#endif
