@@ -1,0 +1,13 @@
+family_id,family,iterations,board_us
+0,branch,8,5.208
+0,branch,16,9.375
+0,branch,64,34.375
+1,callback,8,9.625
+1,callback,16,18.104
+1,callback,64,69.125
+2,switch,8,5.770
+2,switch,16,10.520
+2,switch,64,39.020
+3,checksum,8,5.687
+3,checksum,16,9.729
+3,checksum,64,38.354

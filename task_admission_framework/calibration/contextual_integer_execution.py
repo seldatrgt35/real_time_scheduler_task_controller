@@ -46,6 +46,7 @@ def estimate_contextual_integer(
     )
     basic_gap_profile = profile.get("basic_gap_family_models", {})
     basic_memory_profile = profile.get("basic_memory_family_models", {})
+    basic_control_profile = profile.get("basic_control_family_models", {})
     mixed_shape_intercepts = profile.get("mixed_shape_intercept_us", {})
     unsupported_set = {
         name for name, count in counts.items()
@@ -345,6 +346,44 @@ def estimate_contextual_integer(
             family_profile["intercept_us"]
             + basic_memory_iterations * family_profile["iteration_us"]
         )
+    basic_control_family = None
+    control_iterations = counts.get("loop_iterations", 0)
+    if (
+        basic_gap_family is None
+        and basic_memory_family is None
+        and basic_control_profile.get("iterations_min", 0)
+        <= control_iterations
+        <= basic_control_profile.get("iterations_max", -1)
+        and counts.get("loop_invocations", 0) == 1
+    ):
+        if (
+            counts.get("component_branch_bitwise_u32", 0) == control_iterations
+            and basic_gap_payload == {"component_branch_bitwise_u32"}
+        ):
+            basic_control_family = "branch"
+        elif (
+            counts.get("mixed_region_callback_i32", 0) == control_iterations
+            and counts.get("mixed_region_shape_callback", 0) == 1
+            and counts.get("mixed_region_indirect_call", 0) == control_iterations
+            and not counts.get("unsupported_mixed_execution_region", 0)
+        ):
+            basic_control_family = "callback"
+        elif (
+            counts.get("switch_case_4_u32", 0) == control_iterations
+            and basic_gap_payload == {"switch_case_4_u32"}
+        ):
+            basic_control_family = "switch"
+        elif (
+            counts.get("checksum_processed_byte_u32", 0) == control_iterations
+            and basic_gap_payload == {"checksum_processed_byte_u32"}
+        ):
+            basic_control_family = "checksum"
+    if basic_control_family is not None:
+        family_profile = basic_control_profile[basic_control_family]
+        nominal = (
+            family_profile["intercept_us"]
+            + control_iterations * family_profile["iteration_us"]
+        )
     margin = profile["engineering_margin_percent"] / 100.0
     powertrain_validated = bool(
         profile.get("powertrain_group_validation", {}).get("validated", False)
@@ -361,6 +400,11 @@ def estimate_contextual_integer(
                 basic_gap_family is not None
                 and basic_gap_profile.get("validated", False)
             )
+        )
+        and
+        (
+            basic_control_family is None
+            or basic_control_profile.get("validated", False)
         )
         and
         (
@@ -385,11 +429,14 @@ def estimate_contextual_integer(
         )
         and (
             component_time == 0.0
+            or basic_control_family == "branch"
             or (component_profile.get("validated", False) and component_in_range)
         )
     )
     note = (
-        "Validated by independent 32-iteration basic-memory holdout."
+        "Validated by independent 32-iteration basic-control holdout."
+        if basic_control_family is not None
+        else "Validated by independent 32-iteration basic-memory holdout."
         if basic_memory_family is not None
         else "Validated by independent 32-iteration basic-family holdout."
         if basic_gap_family is not None
@@ -427,15 +474,22 @@ def estimate_contextual_integer(
          "component_group": component_time,
          "mixed_region_group": mixed_region_time,
          "conditional_memory_write_correction": conditional_write_time}
-    if basic_gap_family is not None or basic_memory_family is not None:
+    if (
+        basic_gap_family is not None
+        or basic_memory_family is not None
+        or basic_control_family is not None
+    ):
         breakdown = {
             name: 0.0 for name in breakdown
         }
-        breakdown[
-            "basic_memory_family"
+        family_key = (
+            "basic_control_family"
+            if basic_control_family is not None
+            else "basic_memory_family"
             if basic_memory_family is not None
             else "basic_gap_family"
-        ] = nominal
+        )
+        breakdown[family_key] = nominal
     return ContextualIntegerEstimate(
         nominal, nominal * (1.0 + margin), estimate_verified,
         breakdown,

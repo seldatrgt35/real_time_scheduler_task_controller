@@ -2,7 +2,7 @@ task_id,task,current_nominal_ape_percent,safe_coverage,model_verified,project_st
 0,StarBasic_Arithmetic,2.341,PASS,true,READY,retain
 1,StarBasic_DivideModulo,10.874,PASS,true,READY,retain
 2,StarBasic_BitwiseShift,10.661,PASS,false,PROVISIONAL,independent_combined_holdout
-3,StarBasic_Branch,53.461,PASS,false,NOT_READY,calibrate
+3,StarBasic_Branch,0.348,PASS,true,READY,retain
 4,StarBasic_SequentialMemory,0.173,PASS,true,READY,retain
 5,StarBasic_RandomMemory,0.109,PASS,true,READY,retain
 6,StarBasic_MemoryCopy,1.562,PASS,true,READY,retain
@@ -10,13 +10,13 @@ task_id,task,current_nominal_ape_percent,safe_coverage,model_verified,project_st
 8,StarBasic_FixedPoint,23.178,PASS,true,NOT_READY,calibrate
 9,StarBasic_FloatingPoint,20.945,PASS,false,PROVISIONAL,independent_combined_holdout
 10,StarBasic_DirectCall,13.627,PASS,true,READY,retain
-11,StarBasic_IndirectCall,32.121,PASS,true,NOT_READY,calibrate
-12,StarBasic_Switch,26.940,PASS,true,NOT_READY,calibrate
+11,StarBasic_IndirectCall,0.076,PASS,true,READY,retain
+12,StarBasic_Switch,5.788,PASS,true,READY,retain
 13,StarBasic_MaskedMultiply,4.829,PASS,false,PROVISIONAL,independent_holdout
 14,StarBasic_MaskedDivide,5.263,PASS,true,READY,retain
 15,StarBasic_MaskedModulo,4.631,PASS,true,READY,retain
 16,StarBasic_BitwiseNested,1.592,PASS,true,READY,retain
-17,StarBasic_Checksum,77.621,PASS,true,NOT_READY,calibrate
+17,StarBasic_Checksum,5.837,PASS,true,READY,retain
 18,StarBasic_Q15Multiply,57.726,PASS,true,NOT_READY,calibrate
 19,StarBasic_Q31Multiply,123.690,PASS,true,NOT_READY,calibrate
 20,StarBasic_Q31Mac,89.515,PASS,true,NOT_READY,calibrate

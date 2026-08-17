@@ -45,12 +45,12 @@ class BasicFeatureWcetSuiteTest(unittest.TestCase):
                 counts = self.profiles[task_name].contextual_integer_counts
                 self.assertEqual(32, counts[feature])
 
-    def test_branch_limitation_is_explicit(self) -> None:
+    def test_isolated_branch_is_holdout_validated(self) -> None:
         estimate = estimate_contextual_integer(
             self.profiles["StarBasic_Branch"].contextual_integer_counts
         )
-        self.assertFalse(estimate.verified)
-        self.assertIn("failed the independent compound holdout", estimate.note)
+        self.assertTrue(estimate.verified)
+        self.assertIn("basic-control holdout", estimate.note)
 
     def test_extended_rotate_preserves_adjacent_bitwise_work(self) -> None:
         counts = self.profiles["StarBasic_BitwiseShift"].contextual_integer_counts
@@ -156,6 +156,26 @@ class BasicFeatureWcetSuiteTest(unittest.TestCase):
                 self.assertTrue(estimate.verified)
                 self.assertAlmostEqual(nominal, estimate.nominal_us)
                 self.assertLess(abs(nominal - board_us) / board_us, 0.02)
+                self.assertGreaterEqual(estimate.safe_us, board_us)
+                self.assertAlmostEqual(
+                    nominal, sum(estimate.breakdown_us.values())
+                )
+
+    def test_basic_control_models_pass_unseen_32_iteration_holdouts(self) -> None:
+        expected = {
+            "StarBasic_Branch": (17.708232558139535, 17.770),
+            "StarBasic_IndirectCall": (35.11840697674418, 35.145),
+            "StarBasic_Switch": (20.020000000000003, 21.250),
+            "StarBasic_Checksum": (19.491011627906975, 18.416),
+        }
+        for task_name, (nominal, board_us) in expected.items():
+            with self.subTest(task=task_name):
+                estimate = estimate_contextual_integer(
+                    self.profiles[task_name].contextual_integer_counts
+                )
+                self.assertTrue(estimate.verified)
+                self.assertAlmostEqual(nominal, estimate.nominal_us)
+                self.assertLess(abs(nominal - board_us) / board_us, 0.06)
                 self.assertGreaterEqual(estimate.safe_us, board_us)
                 self.assertAlmostEqual(
                     nominal, sum(estimate.breakdown_us.values())

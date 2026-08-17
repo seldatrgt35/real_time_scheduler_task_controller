@@ -1,0 +1,5 @@
+family,holdout_iterations,board_us,fitted_nominal_us,absolute_error_percent,safe_us,safe_coverage
+branch,32,17.770,17.7082325581,0.3475939328,20.3644674419,PASS
+callback,32,35.145,35.1184069767,0.0756665906,40.3861680233,PASS
+switch,32,21.250,20.020,5.7882352941,23.023,PASS
+checksum,32,18.416,19.4910116279,5.8373785182,22.4146633721,PASS

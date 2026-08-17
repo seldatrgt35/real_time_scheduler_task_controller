@@ -58,6 +58,18 @@
     "copy": {"intercept_us": 1.5141395348837214, "iteration_us": 0.5345406976744186, "holdout_ape_percent": 1.5624385559652965},
     "set": {"intercept_us": 1.020441860465116, "iteration_us": 0.3958372093023256, "holdout_ape_percent": 0.1514987004702783}
   },
+  "basic_control_family_models": {
+    "status": "independent_32_iteration_holdouts_passed",
+    "validated": true,
+    "iterations_min": 8,
+    "iterations_max": 64,
+    "training_iterations": [8, 16, 64],
+    "samples_per_point": 40,
+    "branch": {"intercept_us": 1.0414418604651203, "iteration_us": 0.5208372093023255, "holdout_ape_percent": 0.34759393281071665},
+    "callback": {"intercept_us": 1.1135232558139556, "iteration_us": 1.0626526162790697, "holdout_ape_percent": 0.07566659056998283},
+    "switch": {"intercept_us": 1.0200000000000031, "iteration_us": 0.59375, "holdout_ape_percent": 5.788235294117632},
+    "checksum": {"intercept_us": 0.678872093023255, "iteration_us": 0.5878793604651162, "holdout_ape_percent": 5.837378518174274}
+  },
   "atomic_conditional_memory_write_correction": {
     "status": "calibration_complete_independent_holdouts_passed",
     "validated": true,
