@@ -41,6 +41,9 @@ def estimate_contextual_integer(
     mixed_region_intercepts = profile.get(
         "mixed_region_intercept_us", {}
     )
+    conditional_write_profile = profile.get(
+        "atomic_conditional_memory_write_correction", {}
+    )
     mixed_shape_intercepts = profile.get("mixed_shape_intercept_us", {})
     unsupported_set = {
         name for name, count in counts.items()
@@ -160,6 +163,30 @@ def estimate_contextual_integer(
         ) * intercept
         for name, intercept in mixed_region_intercepts.items()
     )
+    conditional_write_time = 0.0
+    conditional_iterations = counts.get("atomic_region_bounded_iterations", 0)
+    conditional_writes = counts.get(
+        "atomic_region_conditional_array_write", 0
+    )
+    if (
+        counts.get("atomic_region_shape_conditional_memory", 0) == 1
+        and conditional_write_profile.get("iterations_min", 0)
+        <= conditional_iterations
+        <= conditional_write_profile.get("iterations_max", -1)
+        and conditional_iterations
+        * conditional_write_profile.get("writes_per_iteration_min", 0)
+        <= conditional_writes
+        <= conditional_iterations
+        * conditional_write_profile.get("writes_per_iteration_max", -1)
+    ):
+        conditional_write_time = (
+            counts["atomic_region_shape_conditional_memory"]
+            * conditional_write_profile.get("region_intercept_us", 0.0)
+            + conditional_iterations
+            * conditional_write_profile.get("iteration_us", 0.0)
+            + conditional_writes
+            * conditional_write_profile.get("write_iteration_us", 0.0)
+        )
     callback_memory_correction = False
     callback_memory_out_of_range = False
     callback_memory_profile = profile.get("mixed_callback_memory_correction", {})
@@ -226,7 +253,7 @@ def estimate_contextual_integer(
         <= mixed_region_profile.get("iterations_max", -1)
         for family in mixed_shapes
     )
-    nominal = operations + loop_control + loop_setup + memory_time + fixed_time + floating_time + communication_time + powertrain_time + compound_time + mixed_shape_time + component_time + mixed_region_time
+    nominal = operations + loop_control + loop_setup + memory_time + fixed_time + floating_time + communication_time + powertrain_time + compound_time + mixed_shape_time + component_time + mixed_region_time + conditional_write_time
     margin = profile["engineering_margin_percent"] / 100.0
     powertrain_validated = bool(
         profile.get("powertrain_group_validation", {}).get("validated", False)
@@ -291,6 +318,7 @@ def estimate_contextual_integer(
          "automotive_compound_group": compound_time,
          "mixed_shape_group": mixed_shape_time,
          "component_group": component_time,
-         "mixed_region_group": mixed_region_time},
+         "mixed_region_group": mixed_region_time,
+         "conditional_memory_write_correction": conditional_write_time},
         (), note,
     )

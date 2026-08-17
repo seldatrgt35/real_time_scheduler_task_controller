@@ -8,6 +8,29 @@ from task_admission_framework.calibration.contextual_integer_execution import (
 
 
 class ContextualIntegerExecutionTest(unittest.TestCase):
+    def test_conditional_write_candidate_is_range_limited_and_unverified(self) -> None:
+        inside = estimate_contextual_integer({
+            "atomic_fallback_region": 1,
+            "atomic_region_shape_conditional_memory": 1,
+            "atomic_region_bounded_iterations": 8,
+            "atomic_region_conditional_array_write": 32,
+        })
+        outside = estimate_contextual_integer({
+            "atomic_fallback_region": 1,
+            "atomic_region_shape_conditional_memory": 1,
+            "atomic_region_bounded_iterations": 4,
+            "atomic_region_conditional_array_write": 16,
+        })
+        self.assertFalse(inside.verified)
+        self.assertNotEqual(
+            0.0,
+            inside.breakdown_us["conditional_memory_write_correction"],
+        )
+        self.assertEqual(
+            0.0,
+            outside.breakdown_us["conditional_memory_write_correction"],
+        )
+
     def test_validated_counts_produce_nominal_and_safe_estimate(self):
         estimate = estimate_contextual_integer({
             "loop_invocations": 1,

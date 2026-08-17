@@ -23,8 +23,8 @@ class GithubIsotpCBlindHoldoutTest(unittest.TestCase):
     def test_current_predictions_preserve_frozen_blind_comparison(self) -> None:
         expected = {
             "StarTask_IsotpConsecutiveFrameReassembly_10ms": (
-                31.090868440286847,
-                35.75449870632987,
+                38.478211722488034,
+                44.24994348086123,
             ),
             "StarTask_IsotpErrorAging_20ms": (
                 28.2699999984,
@@ -51,6 +51,13 @@ class GithubIsotpCBlindHoldoutTest(unittest.TestCase):
         self.assertEqual(1, counts["atomic_fallback_region"])
         self.assertEqual(36, counts["branch_evaluation_u32"])
         self.assertEqual(60, counts["basic_add_expression_u32"])
+        self.assertEqual(48, counts["atomic_region_conditional_array_write"])
+        estimate = estimate_contextual_integer(counts)
+        self.assertFalse(estimate.verified)
+        self.assertLess(
+            abs(estimate.nominal_us - 37.645) / 37.645,
+            0.03,
+        )
 
     def test_error_aging_exercises_atomic_fallback(self) -> None:
         counts = self.profiles[

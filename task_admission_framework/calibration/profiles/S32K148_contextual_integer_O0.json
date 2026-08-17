@@ -11,6 +11,27 @@
   "loop_invocation_intercept_us": 1.27,
   "loop_iteration_us": 0.3125,
   "engineering_margin_percent": 15.0,
+  "atomic_conditional_memory_write_correction": {
+    "status": "candidate_pending_32x4_training_endpoint",
+    "validated": false,
+    "region_intercept_us": -10.387771521531107,
+    "iteration_us": 0.00960150135909954,
+    "write_iteration_us": 0.3679145164046479,
+    "iterations_min": 8,
+    "iterations_max": 32,
+    "writes_per_iteration_min": 1,
+    "writes_per_iteration_max": 4,
+    "training_write_counts": [1, 2, 4],
+    "training_iterations": [8, 16, 32],
+    "completed_training_points": 8,
+    "required_training_points": 9,
+    "samples_per_point": 40,
+    "fit_source": "conditional_memory_write_calibration_8_byte_stride",
+    "holdouts_excluded_from_fit": [
+      "github_isotp_c_blind_holdout.c",
+      "body_chassis_control_holdout.c"
+    ]
+  },
   "mixed_region_cost_us_per_iteration": {
     "mixed_region_actuator_i32": 1.7827410714285714,
     "mixed_region_accumulator_i32": 1.6249999999999996,

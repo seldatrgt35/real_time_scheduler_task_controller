@@ -303,6 +303,14 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             "atomic_region_branch",
             scale * sum(node.kind == CursorKind.IF_STMT for node in nodes),
         )
+        if shape == "conditional_memory":
+            writes_per_iteration = sum(
+                self._is_array_write(node) for node in nodes
+            )
+            result.add(
+                "atomic_region_conditional_array_write",
+                scale * writes_per_iteration,
+            )
 
         operators = [
             self._root_operator(node)
@@ -332,6 +340,20 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
         result.notes.append(
             f"The {shape} loop was decomposed into existing atomic costs; "
             "the nominal estimate is advisory pending independent holdout."
+        )
+
+    def _is_array_write(self, node: Cursor) -> bool:
+        if node.kind not in self._BINARY_KINDS:
+            return False
+        if self._root_operator(node) not in {"=", "+=", "-=", "&=", "|=", "^="}:
+            return False
+        children = list(node.get_children())
+        if not children:
+            return False
+        target = children[0]
+        return target.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR or any(
+            item.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR
+            for item in self._descendants(target)
         )
 
     def _validated_group_shape(self, group: str, body: Cursor) -> bool:

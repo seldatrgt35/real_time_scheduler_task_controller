@@ -44,7 +44,7 @@ class GithubUdsRealTaskHoldoutTest(unittest.TestCase):
     def test_atomic_fallback_repairs_first_match_estimates(self) -> None:
         expected = {
             "StarTask_UdsCanRxDispatch_5ms": (
-                "conditional_memory", 23.884702960457897, 26.145
+                "conditional_memory", 25.34700797474832, 26.145
             ),
             "StarTask_DtcAndSessionMaintenance_50ms": (
                 "debounce_state", 14.2699999992, 14.770
@@ -63,6 +63,15 @@ class GithubUdsRealTaskHoldoutTest(unittest.TestCase):
                 self.assertFalse(estimate.verified)
                 self.assertAlmostEqual(nominal, estimate.nominal_us)
                 self.assertGreaterEqual(estimate.safe_us, board_us)
+                if shape == "conditional_memory":
+                    self.assertEqual(
+                        32,
+                        counts["atomic_region_conditional_array_write"],
+                    )
+                    self.assertLess(
+                        abs(estimate.nominal_us - board_us) / board_us,
+                        0.04,
+                    )
 
     def test_unsupported_real_mixed_task_has_no_partial_estimate(self) -> None:
         profile = self.profiles["StarTask_ObdRequestAndCanTx_100ms"]
