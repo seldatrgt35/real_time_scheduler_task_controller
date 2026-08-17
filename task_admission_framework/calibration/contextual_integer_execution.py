@@ -287,6 +287,9 @@ def estimate_contextual_integer(
         )
     )
     note = (
+        "Data-dependent conditional fallback reports an all-body structural estimate; typical-path occupancy is unknown."
+        if counts.get("atomic_region_shape_conditional_memory", 0) > 0
+        else
         "Atomic fallback preserves all recognized region work; independent holdout validation is pending."
         if counts.get("atomic_fallback_region", 0) > 0
         else

@@ -64,6 +64,19 @@ class AutomotiveDtcSnapshotBlindHoldoutTest(unittest.TestCase):
             "{StarAutomotiveDtcSnapshot_Initialize, 3U}",
             self.harness_text,
         )
+
+    def test_dense_path_validates_static_all_body_estimate(self) -> None:
+        dense_board_us = 37.875
+        estimate = estimate_contextual_integer(
+            self.profile.contextual_integer_counts
+        )
+        self.assertLess(
+            abs(estimate.nominal_us - dense_board_us) / dense_board_us,
+            0.08,
+        )
+        self.assertGreaterEqual(estimate.safe_us, dense_board_us)
+        self.assertFalse(estimate.verified)
+        self.assertIn("all-body structural estimate", estimate.note)
         self.assertIn(
             "{StarAutomotiveDtcSnapshot_InitializeDense, 16U}",
             self.harness_text,
