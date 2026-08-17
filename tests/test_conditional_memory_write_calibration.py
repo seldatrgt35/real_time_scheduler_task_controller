@@ -24,6 +24,9 @@ class ConditionalMemoryWriteCalibrationTest(unittest.TestCase):
             r'#include\s+"(?:github_isotp_c_blind|body_chassis_control)_holdout',
         )
 
+    def test_frame_stride_matches_holdout_power_of_two_layout(self) -> None:
+        self.assertIn("uint8_t payload[5U];", self.kernel_source)
+
     def test_matrix_has_three_write_counts_and_three_iteration_counts(self) -> None:
         descriptors = re.findall(
             r"\{ConditionalMemoryWriteCalibration_Write(\d+)_(\d+),"

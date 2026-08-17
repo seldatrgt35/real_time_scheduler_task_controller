@@ -1,0 +1,10 @@
+writes_per_iteration,iterations,mean_execution_us_x1000,max_execution_us_x1000,experiment_status,rejection_reason
+1,8,18145,18145,REJECTED_FOR_MODEL_FIT,frame_struct_stride_was_7_bytes
+1,16,34812,34812,REJECTED_FOR_MODEL_FIT,frame_struct_stride_was_7_bytes
+1,32,68166,68166,REJECTED_FOR_MODEL_FIT,frame_struct_stride_was_7_bytes
+2,8,21958,21958,REJECTED_FOR_MODEL_FIT,frame_struct_stride_was_7_bytes
+2,16,42458,42458,REJECTED_FOR_MODEL_FIT,frame_struct_stride_was_7_bytes
+2,32,83458,83458,REJECTED_FOR_MODEL_FIT,frame_struct_stride_was_7_bytes
+4,8,31125,31125,REJECTED_FOR_MODEL_FIT,frame_struct_stride_was_7_bytes
+4,16,60791,60791,REJECTED_FOR_MODEL_FIT,frame_struct_stride_was_7_bytes
+4,32,120125,120125,REJECTED_FOR_MODEL_FIT,frame_struct_stride_was_7_bytes

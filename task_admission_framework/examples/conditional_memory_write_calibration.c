@@ -18,7 +18,8 @@ typedef struct
     uint8_t frame_type;
     uint8_t sequence_number;
     uint8_t length;
-    uint8_t payload[4U];
+    /* Five payload bytes keep the frame stride at the holdout's 8 bytes. */
+    uint8_t payload[5U];
 } ConditionalMemoryFrame;
 
 static ConditionalMemoryFrame s_frames[STAR_CALIBRATION_MAX_ITERATIONS];
