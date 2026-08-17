@@ -1,0 +1,6 @@
+task_id,task,model_status,frozen_nominal_us,frozen_safe_us,board_mean_us,board_max_us,nominal_ape_percent,safe_coverage,result,dataset_role
+0,StarTask_UdsCanRxDispatch_5ms,VERIFIED,15.051369627657897,17.30907507180658,26.145,26.145,42.431173732423424,FAIL,FAIL,independent_real_code_holdout
+1,StarTask_ObdPidDecode_10ms,UNVERIFIED,11.06675,12.7267625,14.020,14.020,21.064550641940077,FAIL,DIAGNOSTIC_ONLY,independent_real_code_holdout
+2,StarTask_UdsResponseValidation_20ms,UNVERIFIED,9.9142896343,11.401433079444999,12.625,12.625,21.470973193663372,FAIL,DIAGNOSTIC_ONLY,independent_real_code_holdout
+3,StarTask_DtcAndSessionMaintenance_50ms,VERIFIED,22.4367857144,25.802303571559996,14.770,14.770,51.90782474204468,PASS,FAIL_ACCURACY,independent_real_code_holdout
+4,StarTask_ObdRequestAndCanTx_100ms,UNSUPPORTED,,,12.458,12.458,,,CORRECTLY_REJECTED,independent_real_code_holdout
