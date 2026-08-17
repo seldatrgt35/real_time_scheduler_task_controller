@@ -1,0 +1,2 @@
+task,board_mean_us,board_max_us,frozen_nominal_us,nominal_absolute_error_percent,frozen_wcet_us,wcet_coverage,wcet_headroom_us,deadline_us,wcet_deadline_usage_percent
+AppTask_TorqueCoordination_20ms,48.041,48.041,48.937,1.865073583,56.27755,PASS,8.23655,20000,0.28138775

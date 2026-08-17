@@ -23,6 +23,16 @@ class TorqueCoordinationWcetTest(unittest.TestCase):
         self.assertAlmostEqual(48.937, estimate.nominal_us)
         self.assertAlmostEqual(56.27755, estimate.safe_us)
 
+    def test_blind_board_result_is_covered(self) -> None:
+        board_max_us = 48.041
+        frozen_nominal_us = 48.937
+        frozen_wcet_us = 56.27755
+        self.assertLess(
+            abs(frozen_nominal_us - board_max_us) / board_max_us,
+            0.02,
+        )
+        self.assertGreaterEqual(frozen_wcet_us, board_max_us)
+
 
 if __name__ == "__main__":
     unittest.main()
