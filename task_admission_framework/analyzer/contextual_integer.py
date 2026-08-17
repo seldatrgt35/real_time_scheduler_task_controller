@@ -24,7 +24,7 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
     """Extract the board-validated uint32 patterns used by the O0 model."""
 
     _VALIDATED_MIXED_REGION_SHAPES = {
-        "actuator", "accumulator", "interpolation",
+        "actuator", "accumulator", "interpolation", "plausibility",
     }
 
     _UNSIGNED_KINDS = {
@@ -139,6 +139,12 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 result.add(powertrain_group, multiplier * bound)
                 result.add("powertrain_group_loop_iterations", multiplier * bound)
                 result.add("powertrain_group_loop_invocations", multiplier)
+                return
+            if self._mixed_plausibility_loop(body):
+                self._record_unsupported_mixed_loop(
+                    cursor, body, "mixed plausibility control", multiplier,
+                    bound, definitions, result,
+                )
                 return
             if any(
                 node.kind in self._CALL_KINDS
@@ -520,8 +526,6 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
         callees: list[list[Cursor]],
     ) -> str | None:
         """Assign a measurement family without implying calibration support."""
-        if not callees:
-            return None
         body_operators = {
             self._root_operator(node) for node in body_nodes
             if node.kind in self._BINARY_KINDS
@@ -550,7 +554,27 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             and "/" in callee_operators
         ):
             return "interpolation"
+        if not callees:
+            return "plausibility" if self._mixed_plausibility_nodes(
+                body_nodes
+            ) else None
         return "actuator" if writes_array else "accumulator"
+
+    def _mixed_plausibility_loop(self, body: Cursor) -> bool:
+        return self._mixed_plausibility_nodes(self._descendants(body))
+
+    def _mixed_plausibility_nodes(self, nodes: list[Cursor]) -> bool:
+        operators = {
+            self._root_operator(node) for node in nodes
+            if node.kind in self._BINARY_KINDS
+        }
+        return (
+            any(node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR for node in nodes)
+            and any(node.kind == CursorKind.IF_STMT for node in nodes)
+            and bool(operators.intersection({"|=", "&="}))
+            and bool(operators.intersection({"<<", ">>"}))
+            and bool(operators.intersection({"+=", "-="}))
+        )
 
     def _automotive_compound_loop_pattern(self, body: Cursor) -> str | None:
         """Recognize independently calibrated automotive loop compounds."""

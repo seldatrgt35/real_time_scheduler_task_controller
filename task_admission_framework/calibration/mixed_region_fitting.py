@@ -12,6 +12,7 @@ EXPECTED_POINTS = {
     "actuator": (8, 16, 32),
     "accumulator": (8, 16, 32),
     "interpolation": (8, 16, 32),
+    "plausibility": (8, 16, 32),
 }
 
 
@@ -55,7 +56,9 @@ def fit_mixed_region_families(
     """Fit an affine mean-time model independently for each structural family."""
     _validate_matrix(points)
     families: dict[str, object] = {}
-    for family, expected in EXPECTED_POINTS.items():
+    measured_families = sorted({point.family for point in points})
+    for family in measured_families:
+        expected = EXPECTED_POINTS[family]
         family_points = sorted(
             (point for point in points if point.family == family),
             key=lambda point: point.iterations,
@@ -106,14 +109,13 @@ def _validate_matrix(points: list[MixedRegionPoint] | tuple[MixedRegionPoint, ..
         family: tuple(sorted(
             point.iterations for point in points if point.family == family
         ))
-        for family in EXPECTED_POINTS
+        for family in {point.family for point in points}
     }
-    if actual != EXPECTED_POINTS:
+    if not actual or any(
+        iterations != EXPECTED_POINTS.get(family)
+        for family, iterations in actual.items()
+    ):
         raise ValueError(
-            f"Calibration matrix must contain exactly {EXPECTED_TEXT}; got {actual}"
+            "Each measured family must contain exactly 8/16/32; "
+            f"got {actual}"
         )
-
-
-EXPECTED_TEXT = ", ".join(
-    f"{family}=8/16/32" for family in EXPECTED_POINTS
-)

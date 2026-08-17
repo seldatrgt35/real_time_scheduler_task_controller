@@ -1,4 +1,4 @@
-# S32K148 Contextual O0 Model v1.1
+# S32K148 Contextual O0 Model v1.2
 
 This is the frozen board-calibrated model for ARM GCC 11.4, S32K148 at
 48 MHz, `-O0`. It produces a nominal execution estimate and a required 15%
@@ -77,3 +77,17 @@ This extension verifies the execution-time model for TorqueCoordination,
 ThermalActuator and StabilityRequest. It does not make the complete example
 task sets schedulable: unrelated tasks with unsupported shapes still keep the
 system result `UNVERIFIED`.
+
+## Plausibility extension (v1.2)
+
+Version 1.2 adds the mixed array-read, accumulation, branch, comparison,
+bitwise-mask and shift family used by PowertrainInput and WheelSpeedBrake.
+Calibration used independent 8/16/32-iteration kernels measured 40 times each.
+The fitted model is `1.812 + 1.125 n` microseconds for the complete calibration
+function. The production group intercept is 1.7495 us because the final
+0.0625 us XOR remains separately represented by `bitwise_xor_u32`.
+
+The frozen 24-iteration WheelSpeedBrake prediction was 28.812 us nominal and
+33.1338 us with margin. Its previously frozen board result is 29.125 us, an
+absolute error of 1.075%; the holdout passes. PowertrainInput is therefore
+estimated at 19.812 us nominal and 22.784 us with margin.

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "model_kind": "mixed_region_affine_candidate",
+  "dataset_role": "calibration_only",
+  "families": {
+    "plausibility": {
+      "iteration_us": 1.1249999999999998,
+      "intercept_us": 1.8120000000000012,
+      "training_iterations": [
+        8,
+        16,
+        32
+      ],
+      "training_mape_percent": 5.977376806650011e-15,
+      "training_max_ape_percent": 1.7932130419950034e-14,
+      "training_maximum_us": 37.812,
+      "validated": false,
+      "status": "fitted_training_only_independent_holdout_pending"
+    }
+  }
+}

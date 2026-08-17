@@ -135,6 +135,34 @@ class AutomotiveMixedRegionRegressionTest(unittest.TestCase):
         self.assertAlmostEqual(72.708, estimate.nominal_us)
         self.assertAlmostEqual(83.6142, estimate.safe_us)
 
+    def test_plausibility_tasks_use_validated_mixed_family(self) -> None:
+        expected = {
+            "AppTask_PowertrainInput_5ms": (16, 19.812),
+            "BccTask_WheelSpeedAndBrake_5ms": (24, 28.812),
+        }
+        for task_name, (iterations, nominal_us) in expected.items():
+            with self.subTest(task=task_name):
+                profile = self.profiles[task_name]
+                counts = profile.contextual_integer_counts
+                self.assertTrue(profile.dynamic_bound_verified)
+                self.assertNotIn("component_branch_bitwise_u32", counts)
+                self.assertEqual(
+                    iterations, counts["mixed_region_bounded_iterations"]
+                )
+                self.assertEqual(1, counts["mixed_region_shape_plausibility"])
+                self.assertNotIn("unsupported_mixed_execution_region", counts)
+                self.assertEqual(
+                    iterations, counts["mixed_region_plausibility_i32"]
+                )
+                self.assertGreater(counts["mixed_region_array_access"], 0)
+                self.assertGreater(counts["mixed_region_branch"], 0)
+                self.assertGreater(counts["mixed_region_body_add_sub"], 0)
+                self.assertGreater(counts["mixed_region_body_bitwise"], 0)
+                self.assertGreater(counts["mixed_region_body_shift"], 0)
+                estimate = estimate_contextual_integer(counts)
+                self.assertTrue(estimate.verified)
+                self.assertAlmostEqual(nominal_us, estimate.nominal_us)
+
 
 if __name__ == "__main__":
     unittest.main()
