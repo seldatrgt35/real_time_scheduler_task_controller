@@ -1,0 +1,6 @@
+task_id,task,model_status,frozen_nominal_us,frozen_safe_us,dataset_role
+0,StarTask_UdsCanRxDispatch_5ms,VERIFIED,15.051369627657897,17.30907507180658,independent_real_code_holdout
+1,StarTask_ObdPidDecode_10ms,UNVERIFIED,11.06675,12.7267625,diagnostic_only_not_for_admission
+2,StarTask_UdsResponseValidation_20ms,UNVERIFIED,9.9142896343,11.401433079444999,diagnostic_only_outside_validated_range
+3,StarTask_DtcAndSessionMaintenance_50ms,VERIFIED,22.4367857144,25.802303571559996,independent_real_code_holdout
+4,StarTask_ObdRequestAndCanTx_100ms,UNSUPPORTED,,,diagnostic_only_no_partial_estimate
