@@ -52,6 +52,19 @@ class BasicFeatureWcetSuiteTest(unittest.TestCase):
         self.assertFalse(estimate.verified)
         self.assertIn("failed the independent compound holdout", estimate.note)
 
+    def test_extended_rotate_preserves_adjacent_bitwise_work(self) -> None:
+        counts = self.profiles["StarBasic_BitwiseShift"].contextual_integer_counts
+        self.assertEqual(1, counts["atomic_region_shape_extended_shift_rotate"])
+        self.assertEqual(32, counts["shift_rotate_u32"])
+        self.assertEqual(32, counts["bitwise_and_u32"])
+        self.assertEqual(32, counts["bitwise_or_u32"])
+        self.assertEqual(32, counts["bitwise_xor_u32"])
+        estimate = estimate_contextual_integer(counts)
+        self.assertFalse(estimate.verified)
+        self.assertAlmostEqual(20.6033333344, estimate.nominal_us)
+        self.assertLess(abs(estimate.nominal_us - 22.395) / 22.395, 0.09)
+        self.assertGreaterEqual(estimate.safe_us, 22.395)
+
 
 if __name__ == "__main__":
     unittest.main()

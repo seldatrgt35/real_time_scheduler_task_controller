@@ -234,6 +234,22 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             composite = self._composite_loop_pattern(body)
             if composite is not None:
                 if not self._validated_group_shape(composite, body):
+                    if (
+                        composite == "shift_rotate_u32"
+                        and not any(
+                            node.kind in {
+                                CursorKind.ARRAY_SUBSCRIPT_EXPR,
+                                CursorKind.CALL_EXPR,
+                                CursorKind.IF_STMT,
+                                CursorKind.SWITCH_STMT,
+                            }
+                            for node in self._descendants(body)
+                        )
+                    ):
+                        self._record_extended_shift_rotate_loop(
+                            body, multiplier, bound, result
+                        )
+                        return
                     self._record_unsupported_mixed_loop(
                         cursor, body, composite, multiplier, bound,
                         definitions, result,
@@ -349,6 +365,40 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             "the nominal estimate is advisory pending independent holdout."
         )
 
+    def _record_extended_shift_rotate_loop(
+        self, body: Cursor, multiplier: int, bound: int,
+        result: ContextualIntegerInference,
+    ) -> None:
+        """Keep a calibrated rotate and adjacent bitwise statements together."""
+        nodes = self._descendants(body)
+        operators = [
+            self._root_operator(node)
+            for node in nodes if node.kind in self._BINARY_KINDS
+        ]
+        scale = multiplier * bound
+        result.add("atomic_fallback_region", multiplier)
+        result.add("atomic_region_shape_extended_shift_rotate", multiplier)
+        result.add("atomic_region_bounded_iterations", scale)
+        result.add("shift_rotate_u32", scale)
+        result.add(
+            "bitwise_and_u32",
+            scale * sum(operator in {"&", "&="} for operator in operators),
+        )
+        # One plain OR belongs to the calibrated `(x << n) | (x >> m)` unit.
+        extra_or = max(
+            0,
+            sum(operator in {"|", "|="} for operator in operators) - 1,
+        )
+        result.add("bitwise_or_u32", scale * extra_or)
+        result.add(
+            "bitwise_xor_u32",
+            scale * sum(operator in {"^", "^="} for operator in operators),
+        )
+        result.notes.append(
+            "The calibrated rotate and its adjacent bitwise statements were "
+            "preserved; the combined estimate is advisory pending holdout."
+        )
+
     def _is_array_write(self, node: Cursor) -> bool:
         if node.kind not in self._BINARY_KINDS:
             return False
@@ -400,11 +450,19 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 and not operators.intersection({"*", "/", "%", "<<", ">>"})
             )
         if group in {
-            "shift_rotate_u32", "divide_masked_index_u32",
+            "divide_masked_index_u32",
             "modulo_masked_index_u32", "multiply_masked_index_u32",
             "bitwise_nested_u32", "basic_add_expression_u32",
         }:
             return not has_array
+        if group == "shift_rotate_u32":
+            return (
+                not has_array
+                and sum(operator in {"<<", "<<="} for operator in operators) == 1
+                and sum(operator in {">>", ">>="} for operator in operators) == 1
+                and sum(operator in {"|", "|="} for operator in operators) == 1
+                and not operators.intersection({"&=", "^="})
+            )
         if group == "direct_function_call_u32":
             return not has_conditional and not has_array
         if group == "indirect_function_call_u32":
