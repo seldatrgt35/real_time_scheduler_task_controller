@@ -17,6 +17,9 @@ class AutomotiveDtcSnapshotBlindHoldoutTest(unittest.TestCase):
             / "automotive_dtc_snapshot_blind_holdout.c"
         )
         cls.source_text = source.read_text(encoding="utf-8")
+        cls.harness_text = (
+            source.with_name("s32k148_automotive_dtc_path_scenarios_main.c")
+        ).read_text(encoding="utf-8")
         cls.profile = {
             item.task_name: item for item in StaticAnalyzer().analyze_file(source)
         }["StarTask_DtcSnapshotPack_20ms"]
@@ -55,6 +58,16 @@ class AutomotiveDtcSnapshotBlindHoldoutTest(unittest.TestCase):
             1.0,
         )
         self.assertGreaterEqual(estimate.safe_us, board_us)
+
+    def test_followup_harness_compares_sparse_and_dense_paths(self) -> None:
+        self.assertIn(
+            "{StarAutomotiveDtcSnapshot_Initialize, 3U}",
+            self.harness_text,
+        )
+        self.assertIn(
+            "{StarAutomotiveDtcSnapshot_InitializeDense, 16U}",
+            self.harness_text,
+        )
 
 
 if __name__ == "__main__":

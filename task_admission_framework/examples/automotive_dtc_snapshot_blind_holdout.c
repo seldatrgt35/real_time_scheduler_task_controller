@@ -48,6 +48,26 @@ void StarAutomotiveDtcSnapshot_Initialize(void)
     s_snapshot_result = 0U;
 }
 
+void StarAutomotiveDtcSnapshot_InitializeDense(void)
+{
+    uint32_t index;
+
+    for (index = 0U; index < STAR_DTC_ENTRY_COUNT; ++index)
+    {
+        s_dtc_entries[index].code = 0x010000UL + (index * 0x101UL);
+        s_dtc_entries[index].status = STAR_DTC_CONFIRMED_MASK;
+        s_dtc_entries[index].occurrence_count = STAR_DTC_MIN_OCCURRENCES;
+        s_dtc_entries[index].age_cycles = 0U;
+        s_dtc_entries[index].reserved = 0U;
+    }
+
+    for (index = 0U; index < STAR_DTC_RESPONSE_SIZE; ++index)
+    {
+        s_uds_response[index] = 0U;
+    }
+    s_snapshot_result = 0U;
+}
+
 void StarTask_DtcSnapshotPack_20ms(void)
 {
     uint32_t index;

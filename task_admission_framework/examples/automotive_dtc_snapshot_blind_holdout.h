@@ -2,6 +2,7 @@
 #define AUTOMOTIVE_DTC_SNAPSHOT_BLIND_HOLDOUT_H
 
 void StarAutomotiveDtcSnapshot_Initialize(void);
+void StarAutomotiveDtcSnapshot_InitializeDense(void);
 void StarTask_DtcSnapshotPack_20ms(void);
 
 #endif
