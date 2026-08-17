@@ -1,0 +1,3 @@
+task_id,task,frozen_nominal_us,frozen_safe_us,board_mean_us,board_max_us,nominal_ape_percent,safe_coverage,result,dataset_role
+0,StarTask_IsotpConsecutiveFrameReassembly_10ms,14.506486280699999,16.682459222804997,37.645,37.645,61.46503843618011,FAIL,FAIL,independent_blind_holdout
+1,StarTask_IsotpErrorAging_20ms,28.2699999984,32.51049999816,26.770,26.770,5.603287255883451,PASS,PASS,independent_blind_holdout
