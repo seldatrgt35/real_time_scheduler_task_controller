@@ -1,0 +1,2 @@
+task,nominal_us,wcet_us,deadline_us,prediction_frozen_before_board
+AppTask_TorqueCoordination_20ms,48.937,56.27755,20000,true
