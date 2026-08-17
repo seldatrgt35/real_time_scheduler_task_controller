@@ -1,0 +1,14 @@
+{
+  "task_set_name": "S32K148 mixed helper saturation calibration",
+  "tasks": [
+    {"name":"Actuator8","source_file":"mixed_helper_saturation_calibration.c","entry_function":"MixedCalibration_Actuator_8","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"Actuator16","source_file":"mixed_helper_saturation_calibration.c","entry_function":"MixedCalibration_Actuator_16","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"Actuator32","source_file":"mixed_helper_saturation_calibration.c","entry_function":"MixedCalibration_Actuator_32","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"Accumulator8","source_file":"mixed_helper_saturation_calibration.c","entry_function":"MixedCalibration_Accumulator_8","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"Accumulator16","source_file":"mixed_helper_saturation_calibration.c","entry_function":"MixedCalibration_Accumulator_16","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"Accumulator32","source_file":"mixed_helper_saturation_calibration.c","entry_function":"MixedCalibration_Accumulator_32","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"Interpolation8","source_file":"mixed_helper_saturation_calibration.c","entry_function":"MixedCalibration_Interpolation_8","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"Interpolation16","source_file":"mixed_helper_saturation_calibration.c","entry_function":"MixedCalibration_Interpolation_16","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"},
+    {"name":"Interpolation32","source_file":"mixed_helper_saturation_calibration.c","entry_function":"MixedCalibration_Interpolation_32","period_ms":100,"deadline_ms":100,"priority":1,"hardware_profile_file":"../hardware/profiles/S32K148.json","rules_file":"../rules/profiles/S32K148_rules.json"}
+  ]
+}

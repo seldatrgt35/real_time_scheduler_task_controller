@@ -1,0 +1,10 @@
+dataset_role,source_file,family,iterations,mean_us,maximum_us
+calibration,mixed_helper_saturation_calibration.c,actuator,8,15.229,15.229
+calibration,mixed_helper_saturation_calibration.c,actuator,16,29.312,29.312
+calibration,mixed_helper_saturation_calibration.c,actuator,32,57.979,57.979
+calibration,mixed_helper_saturation_calibration.c,accumulator,8,14.458,14.458
+calibration,mixed_helper_saturation_calibration.c,accumulator,16,27.458,27.458
+calibration,mixed_helper_saturation_calibration.c,accumulator,32,53.458,53.458
+calibration,mixed_helper_saturation_calibration.c,interpolation,8,25.166,25.166
+calibration,mixed_helper_saturation_calibration.c,interpolation,16,48.937,48.937
+calibration,mixed_helper_saturation_calibration.c,interpolation,32,96.479,96.479

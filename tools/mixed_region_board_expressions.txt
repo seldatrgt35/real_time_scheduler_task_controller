@@ -1,0 +1,7 @@
+g_star_mixed_region_complete
+g_star_mixed_region_current
+g_star_mixed_region_results.point_count
+g_star_mixed_region_results.sample_count
+g_star_mixed_region_results.measurement_overhead_cycles
+g_star_mixed_region_results.error_flags
+g_star_mixed_region_results.points

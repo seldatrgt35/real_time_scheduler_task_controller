@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "model_kind": "mixed_region_affine_candidate",
+  "dataset_role": "calibration_only",
+  "families": {
+    "actuator": {
+      "iteration_us": 1.7827410714285714,
+      "intercept_us": 0.8954999999999984,
+      "training_iterations": [
+        8,
+        16,
+        32
+      ],
+      "training_mape_percent": 0.29931549843724053,
+      "training_max_ape_percent": 0.4699680121572626,
+      "training_maximum_us": 57.979,
+      "validated": false,
+      "status": "fitted_training_only_independent_holdout_pending"
+    },
+    "accumulator": {
+      "iteration_us": 1.6249999999999996,
+      "intercept_us": 1.458000000000002,
+      "training_iterations": [
+        8,
+        16,
+        32
+      ],
+      "training_mape_percent": 1.7269419637366286e-14,
+      "training_max_ape_percent": 2.6583214327513194e-14,
+      "training_maximum_us": 53.458,
+      "validated": false,
+      "status": "fitted_training_only_independent_holdout_pending"
+    },
+    "interpolation": {
+      "iteration_us": 2.9713749999999997,
+      "intercept_us": 1.3950000000000031,
+      "training_iterations": [
+        8,
+        16,
+        32
+      ],
+      "training_mape_percent": 4.909826565090849e-15,
+      "training_max_ape_percent": 1.472947969527255e-14,
+      "training_maximum_us": 96.479,
+      "validated": false,
+      "status": "fitted_training_only_independent_holdout_pending"
+    }
+  }
+}

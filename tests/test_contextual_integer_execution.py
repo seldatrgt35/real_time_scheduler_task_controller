@@ -26,6 +26,43 @@ class ContextualIntegerExecutionTest(unittest.TestCase):
         self.assertIsNone(estimate.nominal_us)
         self.assertEqual(("subtract_memory_u32",), estimate.unsupported_features)
 
+    def test_unsupported_mixed_region_cannot_produce_partial_estimate(self):
+        estimate = estimate_contextual_integer({
+            "loop_invocations": 1,
+            "loop_iterations": 16,
+            "unsupported_mixed_execution_region": 1,
+            "mixed_region_bounded_iterations": 16,
+            "mixed_region_array_access": 32,
+            "mixed_region_branch": 32,
+            "mixed_region_direct_call": 16,
+            "mixed_region_body_add_sub": 32,
+            "mixed_region_callee_multiply": 16,
+        })
+
+        self.assertFalse(estimate.verified)
+        self.assertIsNone(estimate.nominal_us)
+        self.assertIsNone(estimate.safe_us)
+        self.assertIn(
+            "unsupported_mixed_execution_region",
+            estimate.unsupported_features,
+        )
+
+    def test_incomplete_mixed_region_cannot_bypass_marker(self):
+        estimate = estimate_contextual_integer({
+            "loop_invocations": 1,
+            "loop_iterations": 12,
+            "mixed_region_bounded_iterations": 12,
+            "mixed_region_shape_actuator": 1,
+            "mixed_region_array_access": 24,
+        })
+
+        self.assertFalse(estimate.verified)
+        self.assertIsNone(estimate.nominal_us)
+        self.assertIn(
+            "inconsistent_mixed_execution_region",
+            estimate.unsupported_features,
+        )
+
     def test_powertrain_numeric_estimate_is_verified_by_independent_holdout(self):
         estimate = estimate_contextual_integer({
             "loop_invocations": 4,

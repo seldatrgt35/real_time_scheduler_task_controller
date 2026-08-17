@@ -1,4 +1,4 @@
-# S32K148 Contextual O0 Model v1.0
+# S32K148 Contextual O0 Model v1.1
 
 This is the frozen board-calibrated model for ARM GCC 11.4, S32K148 at
 48 MHz, `-O0`. It produces a nominal execution estimate and a required 15%
@@ -52,3 +52,28 @@ eligible for admission only when the estimate is verified.
 - Independent mixed automotive holdout error: +5.926%.
 - Independent holdout safe result: PASS.
 - Engineering margin: 15%.
+
+## Mixed execution-region extension (v1.1)
+
+Version 1.1 prevents realistic helper/memory/branch loops from being reduced
+to the first matching single-family pattern. It retains bounded iterations,
+array accesses, branches, direct and indirect calls, body operator classes and
+callee operator classes.
+
+Three independently measured structural families are supported:
+
+| Family | Training points | Independent holdout | Holdout APE | Admission |
+|---|---|---:|---:|:---:|
+| actuator | 8, 16, 32 | body/chassis, 12 iterations | 5.156% | PASS |
+| accumulator | 8, 16, 32 | body/chassis, 20 iterations | 1.622% | PASS |
+| interpolation | 8, 16, 32 | blind, 24 iterations | 1.365% | PASS |
+
+Every calibration and holdout point contains 40 board samples. Body/chassis
+and blind holdout measurements were not used to fit coefficients. The
+interpolation prediction was frozen at 72.708 us nominal and 83.6142 us with
+margin before its 71.729 us board result was collected.
+
+This extension verifies the execution-time model for TorqueCoordination,
+ThermalActuator and StabilityRequest. It does not make the complete example
+task sets schedulable: unrelated tasks with unsupported shapes still keep the
+system result `UNVERIFIED`.

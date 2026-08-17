@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "model_id": "s32k148-contextual-o0-v1.0",
-  "model_version": "1.0.0",
+  "model_id": "s32k148-contextual-o0-v1.1",
+  "model_version": "1.1.0",
   "status": "frozen",
-  "frozen_date": "2026-08-10",
+  "frozen_date": "2026-08-17",
   "target": "S32K148",
   "compiler": "ARM GCC 11.4",
   "optimization": "O0",
@@ -11,6 +11,38 @@
   "loop_invocation_intercept_us": 1.27,
   "loop_iteration_us": 0.3125,
   "engineering_margin_percent": 15.0,
+  "mixed_region_cost_us_per_iteration": {
+    "mixed_region_actuator_i32": 1.7827410714285714,
+    "mixed_region_accumulator_i32": 1.6249999999999996,
+    "mixed_region_interpolation_i32": 2.9713749999999997
+  },
+  "mixed_region_intercept_us": {
+    "mixed_region_actuator_i32": 0.8954999999999984,
+    "mixed_region_accumulator_i32": 1.458000000000002,
+    "mixed_region_interpolation_i32": 1.3950000000000031
+  },
+  "mixed_region_validation": {
+    "validated": true,
+    "status": "independent_body_chassis_holdout_passed",
+    "training_iterations": [8, 16, 32],
+    "samples_per_point": 40,
+    "actuator_holdout_iterations": 12,
+    "actuator_holdout_board_us": 23.5,
+    "actuator_holdout_nominal_us": 22.288392857142854,
+    "actuator_holdout_ape_percent": 5.155775075987856,
+    "accumulator_holdout_iterations": 20,
+    "accumulator_holdout_board_us": 33.416,
+    "accumulator_holdout_nominal_us": 33.958,
+    "accumulator_holdout_ape_percent": 1.622216902082827,
+    "engineering_margin_percent": 15.0,
+    "interpolation_holdout_iterations": 24,
+    "interpolation_holdout_board_us": 71.729,
+    "interpolation_holdout_nominal_us": 72.708,
+    "interpolation_holdout_ape_percent": 1.364858,
+    "interpolation_holdout_safe_us": 83.6142,
+    "admission_coverage": "3/3",
+    "interpolation_status": "independent_blind_holdout_passed"
+  },
   "component_cost_us_per_work_unit": {
     "component_branch_simple_u32": 0.3580625,
     "component_branch_bitwise_u32": 0.5,

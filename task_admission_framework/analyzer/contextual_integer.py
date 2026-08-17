@@ -23,6 +23,10 @@ class ContextualIntegerInference:
 class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
     """Extract the board-validated uint32 patterns used by the O0 model."""
 
+    _VALIDATED_MIXED_REGION_SHAPES = {
+        "actuator", "accumulator", "interpolation",
+    }
+
     _UNSIGNED_KINDS = {
         TypeKind.BOOL, TypeKind.CHAR_U, TypeKind.UCHAR, TypeKind.CHAR16,
         TypeKind.CHAR32, TypeKind.USHORT, TypeKind.UINT, TypeKind.ULONG,
@@ -127,9 +131,11 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             powertrain_group = self._powertrain_numeric_loop_pattern(body)
             if powertrain_group is not None:
                 if not self._validated_group_shape(powertrain_group, body):
-                    self._mark_unvalidated_mixed_loop(
-                        cursor, powertrain_group, result
+                    self._record_unsupported_mixed_loop(
+                        cursor, body, powertrain_group, multiplier, bound,
+                        definitions, result,
                     )
+                    return
                 result.add(powertrain_group, multiplier * bound)
                 result.add("powertrain_group_loop_iterations", multiplier * bound)
                 result.add("powertrain_group_loop_invocations", multiplier)
@@ -148,9 +154,11 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             communication_group = self._communication_loop_pattern(body)
             if communication_group is not None:
                 if not self._validated_group_shape(communication_group, body):
-                    self._mark_unvalidated_mixed_loop(
-                        cursor, communication_group, result
+                    self._record_unsupported_mixed_loop(
+                        cursor, body, communication_group, multiplier, bound,
+                        definitions, result,
                     )
+                    return
                 result.add(communication_group, multiplier * bound)
                 result.add("communication_group_loop_iterations", multiplier * bound)
                 result.add("communication_group_loop_invocations", multiplier)
@@ -183,7 +191,11 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             composite = self._composite_loop_pattern(body)
             if composite is not None:
                 if not self._validated_group_shape(composite, body):
-                    self._mark_unvalidated_mixed_loop(cursor, composite, result)
+                    self._record_unsupported_mixed_loop(
+                        cursor, body, composite, multiplier, bound,
+                        definitions, result,
+                    )
+                    return
                 result.add(composite, multiplier * bound)
                 return
             self._count_loop_chains(body, multiplier * bound, new_indices, result)
@@ -394,18 +406,151 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
 
         return tuple(dict.fromkeys(features))
 
-    @staticmethod
-    def _mark_unvalidated_mixed_loop(
-        cursor: Cursor,
-        group: str,
+    def _record_unsupported_mixed_loop(
+        self, cursor: Cursor, body: Cursor, group: str, multiplier: int,
+        bound: int, definitions: dict[str, Cursor],
         result: ContextualIntegerInference,
     ) -> None:
+        """Describe a mixed loop without assigning a calibrated family cost.
+
+        These counters deliberately have no board coefficients.  Keeping the
+        unsupported marker in the same feature map prevents a caller from
+        obtaining a nominal estimate while retaining useful structural data.
+        """
+        result.add("mixed_region_bounded_iterations", multiplier * bound)
+
+        descendants = self._descendants(body)
+        scale = multiplier * bound
+        result.add(
+            "mixed_region_array_access", scale * sum(
+                node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR
+                for node in descendants
+            ),
+        )
+        result.add(
+            "mixed_region_branch", scale * sum(
+                node.kind in {CursorKind.IF_STMT, CursorKind.SWITCH_STMT}
+                for node in descendants
+            ),
+        )
+
+        calls = [node for node in descendants if node.kind in self._CALL_KINDS]
+        direct_calls: list[Cursor] = []
+        indirect_calls: list[Cursor] = []
+        for call in calls:
+            referenced = getattr(call, "referenced", None)
+            if referenced is not None and referenced.kind == CursorKind.FUNCTION_DECL:
+                direct_calls.append(call)
+            else:
+                indirect_calls.append(call)
+        result.add("mixed_region_direct_call", scale * len(direct_calls))
+        result.add("mixed_region_indirect_call", scale * len(indirect_calls))
+
+        self._record_mixed_operator_classes(
+            descendants, "mixed_region_body", scale, result
+        )
+        callee_nodes_by_call: list[list[Cursor]] = []
+        for call in direct_calls:
+            callee = definitions.get(self._extract_call_name(call) or "")
+            if callee is None:
+                continue
+            callee_nodes = self._descendants(callee)
+            callee_nodes_by_call.append(callee_nodes)
+            self._record_mixed_operator_classes(
+                callee_nodes, "mixed_region_callee", scale, result
+            )
+            result.add(
+                "mixed_region_callee_array_access", scale * sum(
+                    node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR
+                    for node in callee_nodes
+                ),
+            )
+
+        shape = self._mixed_region_candidate_shape(
+            descendants, callee_nodes_by_call
+        )
+        if shape is not None:
+            result.add(f"mixed_region_shape_{shape}", multiplier)
+
+        if shape in self._VALIDATED_MIXED_REGION_SHAPES:
+            result.add(f"mixed_region_{shape}_i32", scale)
+            result.add("mixed_region_group_loop_iterations", scale)
+            result.add("mixed_region_group_loop_invocations", multiplier)
+            result.notes.append(
+                "Loop at line "
+                f"{getattr(cursor.location, 'line', '?')} is a board-validated "
+                f"mixed-region {shape} shape."
+            )
+            return
+
         result.verified = False
+        result.add("unsupported_mixed_execution_region", multiplier)
+
         result.notes.append(
             "Loop at line "
             f"{getattr(cursor.location, 'line', '?')} resembles {group} "
-            "but contains an uncalibrated mixed operation shape."
+            "but is retained as an unsupported/uncalibrated mixed execution "
+            "region; no calibrated family cost was assigned."
         )
+
+    def _record_mixed_operator_classes(
+        self, nodes: list[Cursor], prefix: str, scale: int,
+        result: ContextualIntegerInference,
+    ) -> None:
+        classes = {
+            "add_sub": self._ADD_SUB,
+            "multiply": self._MULTIPLY,
+            "divide_modulo": self._DIVIDE | self._MODULO,
+            "bitwise": {"&", "&=", "|", "|=", "^", "^="},
+            "shift": {"<<", "<<=", ">>", ">>="},
+            "compare": {"<", "<=", ">", ">=", "==", "!="},
+        }
+        operators = [
+            self._root_operator(node) for node in nodes
+            if node.kind in self._BINARY_KINDS
+        ]
+        for class_name, members in classes.items():
+            result.add(
+                f"{prefix}_{class_name}",
+                scale * sum(operator in members for operator in operators),
+            )
+
+    def _mixed_region_candidate_shape(
+        self, body_nodes: list[Cursor],
+        callees: list[list[Cursor]],
+    ) -> str | None:
+        """Assign a measurement family without implying calibration support."""
+        if not callees:
+            return None
+        body_operators = {
+            self._root_operator(node) for node in body_nodes
+            if node.kind in self._BINARY_KINDS
+        }
+        callee_operators = {
+            self._root_operator(node)
+            for nodes in callees for node in nodes
+            if node.kind in self._BINARY_KINDS
+        }
+        writes_array = any(
+            node.kind in self._BINARY_KINDS
+            and self._root_operator(node) == "="
+            and any(
+                child.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR
+                for child in node.get_children()
+            )
+            for node in body_nodes
+        )
+        has_wide_callee = any(
+            self._canonical_size(node) == 8
+            for nodes in callees for node in nodes
+        )
+        if (
+            has_wide_callee
+            and body_operators.intersection({"&", "%"})
+            and "/" in callee_operators
+        ):
+            return "interpolation"
+        return "actuator" if writes_array else "accumulator"
 
     def _automotive_compound_loop_pattern(self, body: Cursor) -> str | None:
         """Recognize independently calibrated automotive loop compounds."""

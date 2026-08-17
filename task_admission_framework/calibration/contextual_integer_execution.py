@@ -35,11 +35,43 @@ def estimate_contextual_integer(
     compound_intercepts = profile.get("automotive_compound_intercept_us", {})
     mixed_shape_costs = profile.get("mixed_shape_cost_us_per_work_unit", {})
     component_costs = profile.get("component_cost_us_per_work_unit", {})
+    mixed_region_costs = profile.get(
+        "mixed_region_cost_us_per_iteration", {}
+    )
+    mixed_region_intercepts = profile.get(
+        "mixed_region_intercept_us", {}
+    )
     mixed_shape_intercepts = profile.get("mixed_shape_intercept_us", {})
-    unsupported = tuple(sorted(
+    unsupported_set = {
         name for name, count in counts.items()
-        if count > 0 and name not in administrative and name not in costs and name not in memory_costs and name not in fixed_costs and name not in floating_costs and name not in communication_costs and name not in powertrain_costs and name not in compound_costs and name not in mixed_shape_costs and name not in component_costs and not name.endswith("_invocations")
-    ))
+        if count > 0 and name not in administrative and name not in costs and name not in memory_costs and name not in fixed_costs and name not in floating_costs and name not in communication_costs and name not in powertrain_costs and name not in compound_costs and name not in mixed_shape_costs and name not in component_costs and name not in mixed_region_costs and not name.startswith("mixed_region_") and not name.endswith("_invocations")
+    }
+    mixed_shapes = {
+        name.removeprefix("mixed_region_shape_")
+        for name, count in counts.items()
+        if count > 0 and name.startswith("mixed_region_shape_")
+    }
+    calibrated_mixed = {
+        name.removeprefix("mixed_region_").removesuffix("_i32")
+        for name, count in counts.items()
+        if count > 0 and name in mixed_region_costs
+    }
+    has_mixed_description = any(
+        count > 0 and name.startswith("mixed_region_")
+        for name, count in counts.items()
+    )
+    if (
+        has_mixed_description
+        and "unsupported_mixed_execution_region" not in counts
+        and (
+            len(mixed_shapes) != 1
+            or calibrated_mixed != mixed_shapes
+            or counts.get("mixed_region_group_loop_iterations", 0)
+            != counts.get("mixed_region_bounded_iterations", 0)
+        )
+    ):
+        unsupported_set.add("inconsistent_mixed_execution_region")
+    unsupported = tuple(sorted(unsupported_set))
     if unsupported:
         return ContextualIntegerEstimate(
             None, None, False, {}, unsupported,
@@ -62,6 +94,8 @@ def estimate_contextual_integer(
     grouped_invocations += counts.get("compound_group_loop_invocations", 0)
     grouped_iterations += counts.get("mixed_shape_group_loop_iterations", 0)
     grouped_invocations += counts.get("mixed_shape_group_loop_invocations", 0)
+    grouped_iterations += counts.get("mixed_region_group_loop_iterations", 0)
+    grouped_invocations += counts.get("mixed_region_group_loop_invocations", 0)
     loop_control = max(0, counts.get("loop_iterations", 0) - grouped_iterations) * profile["loop_iteration_us"]
     loop_setup = max(0, counts.get("loop_invocations", 0) - grouped_invocations) * profile["loop_invocation_intercept_us"]
     memory_raw = sum(count * memory_costs[name] for name, count in counts.items() if name in memory_costs)
@@ -115,6 +149,17 @@ def estimate_contextual_integer(
         count * component_costs[name]
         for name, count in counts.items() if name in component_costs
     )
+    mixed_region_time = sum(
+        count * mixed_region_costs[name]
+        for name, count in counts.items() if name in mixed_region_costs
+    ) + sum(
+        counts.get(
+            "mixed_region_shape_"
+            + name.removeprefix("mixed_region_").removesuffix("_i32"),
+            0,
+        ) * intercept
+        for name, intercept in mixed_region_intercepts.items()
+    )
     component_profile = profile.get("component_validation", {})
     component_units = max(
         (count for name, count in counts.items() if name in component_costs),
@@ -137,7 +182,7 @@ def estimate_contextual_integer(
         )
         for name in mixed_shape_costs
     )
-    nominal = operations + loop_control + loop_setup + memory_time + fixed_time + floating_time + communication_time + powertrain_time + compound_time + mixed_shape_time + component_time
+    nominal = operations + loop_control + loop_setup + memory_time + fixed_time + floating_time + communication_time + powertrain_time + compound_time + mixed_shape_time + component_time + mixed_region_time
     margin = profile["engineering_margin_percent"] / 100.0
     powertrain_validated = bool(
         profile.get("powertrain_group_validation", {}).get("validated", False)
@@ -186,6 +231,7 @@ def estimate_contextual_integer(
          "powertrain_numeric_group": powertrain_time,
          "automotive_compound_group": compound_time,
          "mixed_shape_group": mixed_shape_time,
-         "component_group": component_time},
+         "component_group": component_time,
+         "mixed_region_group": mixed_region_time},
         (), note,
     )
