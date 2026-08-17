@@ -46,6 +46,18 @@
       "holdout_ape_percent": 4.630604226399069
     }
   },
+  "basic_memory_family_models": {
+    "status": "independent_32_iteration_holdouts_passed",
+    "validated": true,
+    "iterations_min": 8,
+    "iterations_max": 64,
+    "training_iterations": [8, 16, 64],
+    "samples_per_point": 40,
+    "sequential": {"intercept_us": 1.153627906976748, "iteration_us": 0.4980581395348836, "holdout_ape_percent": 0.17283068862398127},
+    "random": {"intercept_us": 1.062116279069766, "iteration_us": 0.583325581395349, "holdout_ape_percent": 0.10868413305856876},
+    "copy": {"intercept_us": 1.5141395348837214, "iteration_us": 0.5345406976744186, "holdout_ape_percent": 1.5624385559652965},
+    "set": {"intercept_us": 1.020441860465116, "iteration_us": 0.3958372093023256, "holdout_ape_percent": 0.1514987004702783}
+  },
   "atomic_conditional_memory_write_correction": {
     "status": "calibration_complete_independent_holdouts_passed",
     "validated": true,

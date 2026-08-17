@@ -141,6 +141,26 @@ class BasicFeatureWcetSuiteTest(unittest.TestCase):
                     nominal, sum(estimate.breakdown_us.values())
                 )
 
+    def test_basic_memory_models_pass_unseen_32_iteration_holdouts(self) -> None:
+        expected = {
+            "StarBasic_SequentialMemory": (17.091488372093025, 17.062),
+            "StarBasic_RandomMemory": (19.728534883720933, 19.750),
+            "StarBasic_MemoryCopy": (18.619441860465116, 18.333),
+            "StarBasic_MemorySet": (13.687232558139534, 13.708),
+        }
+        for task_name, (nominal, board_us) in expected.items():
+            with self.subTest(task=task_name):
+                estimate = estimate_contextual_integer(
+                    self.profiles[task_name].contextual_integer_counts
+                )
+                self.assertTrue(estimate.verified)
+                self.assertAlmostEqual(nominal, estimate.nominal_us)
+                self.assertLess(abs(nominal - board_us) / board_us, 0.02)
+                self.assertGreaterEqual(estimate.safe_us, board_us)
+                self.assertAlmostEqual(
+                    nominal, sum(estimate.breakdown_us.values())
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

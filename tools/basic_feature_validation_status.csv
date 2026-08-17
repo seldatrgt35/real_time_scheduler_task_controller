@@ -3,10 +3,10 @@ task_id,task,current_nominal_ape_percent,safe_coverage,model_verified,project_st
 1,StarBasic_DivideModulo,10.874,PASS,true,READY,retain
 2,StarBasic_BitwiseShift,10.661,PASS,false,PROVISIONAL,independent_combined_holdout
 3,StarBasic_Branch,53.461,PASS,false,NOT_READY,calibrate
-4,StarBasic_SequentialMemory,67.655,PASS,true,NOT_READY,calibrate_now
-5,StarBasic_RandomMemory,72.517,PASS,true,NOT_READY,calibrate_now
-6,StarBasic_MemoryCopy,39.189,PASS,true,NOT_READY,calibrate_now
-7,StarBasic_MemorySet,54.474,PASS,true,NOT_READY,calibrate_now
+4,StarBasic_SequentialMemory,0.173,PASS,true,READY,retain
+5,StarBasic_RandomMemory,0.109,PASS,true,READY,retain
+6,StarBasic_MemoryCopy,1.562,PASS,true,READY,retain
+7,StarBasic_MemorySet,0.151,PASS,true,READY,retain
 8,StarBasic_FixedPoint,23.178,PASS,true,NOT_READY,calibrate
 9,StarBasic_FloatingPoint,20.945,PASS,false,PROVISIONAL,independent_combined_holdout
 10,StarBasic_DirectCall,13.627,PASS,true,READY,retain

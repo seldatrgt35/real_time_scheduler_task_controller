@@ -1,0 +1,13 @@
+family_id,family,iterations,board_us
+0,sequential,8,5.208
+0,sequential,16,9.041
+0,sequential,64,33.041
+1,random,8,5.729
+1,random,16,10.395
+1,random,64,38.395
+2,copy,8,5.312
+2,copy,16,10.625
+2,copy,64,35.645
+3,set,8,4.187
+3,set,16,7.354
+3,set,64,26.354

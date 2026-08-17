@@ -45,6 +45,7 @@ def estimate_contextual_integer(
         "atomic_conditional_memory_write_correction", {}
     )
     basic_gap_profile = profile.get("basic_gap_family_models", {})
+    basic_memory_profile = profile.get("basic_memory_family_models", {})
     mixed_shape_intercepts = profile.get("mixed_shape_intercept_us", {})
     unsupported_set = {
         name for name, count in counts.items()
@@ -311,6 +312,39 @@ def estimate_contextual_integer(
             family_profile["intercept_us"]
             + basic_gap_iterations * family_profile["iteration_us"]
         )
+    basic_memory_family = None
+    basic_memory_iterations = counts.get("memory_group_loop_iterations", 0)
+    if (
+        basic_gap_family is None
+        and basic_memory_profile.get("iterations_min", 0)
+        <= basic_memory_iterations
+        <= basic_memory_profile.get("iterations_max", -1)
+        and counts.get("loop_iterations", 0) == basic_memory_iterations
+        and counts.get("loop_invocations", 0) == 1
+        and counts.get("memory_group_loop_invocations", 0) == 1
+    ):
+        for family, feature in {
+            "sequential": "sequential_memory_u32",
+            "random": "random_indexed_memory_u32",
+            "copy": "bulk_memory_copy_u32",
+            "set": "bulk_memory_set_u32",
+        }.items():
+            allowed = {feature}
+            if family in {"copy", "set"}:
+                allowed.add("multiply_local_u32")
+            if (
+                counts.get(feature, 0) == basic_memory_iterations
+                and basic_gap_payload
+                and basic_gap_payload.issubset(allowed)
+            ):
+                basic_memory_family = family
+                break
+    if basic_memory_family is not None:
+        family_profile = basic_memory_profile[basic_memory_family]
+        nominal = (
+            family_profile["intercept_us"]
+            + basic_memory_iterations * family_profile["iteration_us"]
+        )
     margin = profile["engineering_margin_percent"] / 100.0
     powertrain_validated = bool(
         profile.get("powertrain_group_validation", {}).get("validated", False)
@@ -327,6 +361,11 @@ def estimate_contextual_integer(
                 basic_gap_family is not None
                 and basic_gap_profile.get("validated", False)
             )
+        )
+        and
+        (
+            basic_memory_family is None
+            or basic_memory_profile.get("validated", False)
         )
         and
         (powertrain_time == 0.0 or powertrain_validated)
@@ -350,7 +389,9 @@ def estimate_contextual_integer(
         )
     )
     note = (
-        "Validated by independent 32-iteration basic-family holdout."
+        "Validated by independent 32-iteration basic-memory holdout."
+        if basic_memory_family is not None
+        else "Validated by independent 32-iteration basic-family holdout."
         if basic_gap_family is not None
         else "Data-dependent conditional fallback reports an all-body structural estimate; typical-path occupancy is unknown."
         if counts.get("atomic_region_shape_conditional_memory", 0) > 0
@@ -386,11 +427,15 @@ def estimate_contextual_integer(
          "component_group": component_time,
          "mixed_region_group": mixed_region_time,
          "conditional_memory_write_correction": conditional_write_time}
-    if basic_gap_family is not None:
+    if basic_gap_family is not None or basic_memory_family is not None:
         breakdown = {
             name: 0.0 for name in breakdown
         }
-        breakdown["basic_gap_family"] = nominal
+        breakdown[
+            "basic_memory_family"
+            if basic_memory_family is not None
+            else "basic_gap_family"
+        ] = nominal
     return ContextualIntegerEstimate(
         nominal, nominal * (1.0 + margin), estimate_verified,
         breakdown,
