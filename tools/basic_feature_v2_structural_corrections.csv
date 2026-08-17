@@ -1,0 +1,5 @@
+task,board_us,frozen_nominal_us,frozen_safe_coverage,corrected_nominal_us,corrected_absolute_error_percent,corrected_safe_us,corrected_safe_coverage,corrected_verified
+StarBasic_MaskedMultiply,16.395,13.6033333344,FAIL,15.6033333344,4.82748804819,17.9438333346,PASS,false
+StarBasic_MaskedDivide,21.125,14.27,FAIL,16.27,22.9822485207,18.7105,FAIL,false
+StarBasic_MaskedModulo,27.375,17.27,FAIL,19.27,29.6073059361,22.1605,FAIL,false
+StarBasic_IntToFloat,93.770,48.0,FAIL,108.0,15.1754292418,124.2,PASS,false

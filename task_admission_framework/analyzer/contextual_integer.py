@@ -264,6 +264,15 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                             body, multiplier, bound, result
                         )
                         return
+                    if composite in {
+                        "multiply_masked_index_u32",
+                        "divide_masked_index_u32",
+                        "modulo_masked_index_u32",
+                    }:
+                        self._record_extended_masked_loop(
+                            body, composite, multiplier, bound, result
+                        )
+                        return
                     self._record_unsupported_mixed_loop(
                         cursor, body, composite, multiplier, bound,
                         definitions, result,
@@ -413,6 +422,30 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             "preserved; the combined estimate is advisory pending holdout."
         )
 
+    def _record_extended_masked_loop(
+        self, body: Cursor, base_group: str, multiplier: int, bound: int,
+        result: ContextualIntegerInference,
+    ) -> None:
+        """Preserve accumulation around a calibrated masked expression."""
+        operators = [
+            self._root_operator(node)
+            for node in self._descendants(body)
+            if node.kind in self._BINARY_KINDS
+        ]
+        scale = multiplier * bound
+        result.add("atomic_fallback_region", multiplier)
+        result.add("atomic_region_shape_extended_masked_expression", multiplier)
+        result.add("atomic_region_bounded_iterations", scale)
+        result.add(base_group, scale)
+        result.add(
+            "basic_add_expression_u32",
+            scale * sum(operator == "+=" for operator in operators),
+        )
+        result.notes.append(
+            "The calibrated masked expression and its outer accumulation were "
+            "preserved; the combined estimate is advisory pending holdout."
+        )
+
     def _is_array_write(self, node: Cursor) -> bool:
         if node.kind not in self._BINARY_KINDS:
             return False
@@ -464,11 +497,14 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 and not operators.intersection({"*", "/", "%", "<<", ">>"})
             )
         if group in {
-            "divide_masked_index_u32",
-            "modulo_masked_index_u32", "multiply_masked_index_u32",
             "bitwise_nested_u32", "basic_add_expression_u32",
         }:
             return not has_array
+        if group in {
+            "divide_masked_index_u32", "modulo_masked_index_u32",
+            "multiply_masked_index_u32",
+        }:
+            return not has_array and "+=" not in operators
         if group == "shift_rotate_u32":
             return (
                 not has_array
@@ -979,6 +1015,7 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
 
     def _floating_loop_patterns(self, body: Cursor) -> tuple[str, ...]:
         descendants = self._descendants(body)
+        features: list[str] = []
         if any(node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR for node in descendants):
             casts = [
                 node for node in descendants
@@ -989,8 +1026,7 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 and self._contains_float_type(node)
                 for node in casts
             ):
-                return ("int32_to_float32_u32",)
-        features: list[str] = []
+                features.append("int32_to_float32_u32")
         for node in descendants:
             if node.kind not in self._BINARY_KINDS:
                 continue

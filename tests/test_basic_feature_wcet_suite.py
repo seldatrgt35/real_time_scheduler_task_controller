@@ -98,6 +98,27 @@ class BasicFeatureWcetSuiteTest(unittest.TestCase):
                     32, self.profiles[task_name].contextual_integer_counts[feature]
                 )
 
+    def test_masked_expressions_preserve_outer_accumulation(self) -> None:
+        for task_name in (
+            "StarBasic_MaskedMultiply",
+            "StarBasic_MaskedDivide",
+            "StarBasic_MaskedModulo",
+        ):
+            with self.subTest(task=task_name):
+                counts = self.profiles[task_name].contextual_integer_counts
+                self.assertEqual(1, counts["atomic_fallback_region"])
+                self.assertEqual(32, counts["basic_add_expression_u32"])
+                self.assertFalse(estimate_contextual_integer(counts).verified)
+
+    def test_integer_to_float_preserves_float_accumulation(self) -> None:
+        counts = self.profiles["StarBasic_IntToFloat"].contextual_integer_counts
+        self.assertEqual(32, counts["int32_to_float32_u32"])
+        self.assertEqual(32, counts["float32_add_sub_u32"])
+        estimate = estimate_contextual_integer(counts)
+        self.assertFalse(estimate.verified)
+        self.assertAlmostEqual(108.0, estimate.nominal_us)
+        self.assertGreaterEqual(estimate.safe_us, 93.770)
+
 
 if __name__ == "__main__":
     unittest.main()
