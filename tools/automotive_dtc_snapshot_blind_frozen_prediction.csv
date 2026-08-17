@@ -1,0 +1,2 @@
+task,iterations,conditional_array_writes,nominal_us,safe_us,verified,freeze_status,fit_role
+StarTask_DtcSnapshotPack_20ms,16,64,40.67722685005926,46.77881087756815,false,FROZEN_BEFORE_BOARD,HOLDOUT_EXCLUDED_FROM_FIT
