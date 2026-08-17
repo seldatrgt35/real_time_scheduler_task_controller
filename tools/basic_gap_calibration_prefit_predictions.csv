@@ -1,0 +1,10 @@
+point_id,family_id,family,iterations,prefit_nominal_us,prefit_safe_us,prefit_verified
+0,0,arithmetic,8,7.110291668,8.1768354182,true
+1,0,arithmetic,16,12.950583336,14.8931708364,true
+2,0,arithmetic,64,47.992333344,55.1911833456,true
+3,1,masked_divide,8,5.02,5.773,false
+4,1,masked_divide,16,8.77,10.0855,false
+5,1,masked_divide,64,31.27,35.9605,false
+6,2,masked_modulo,8,5.77,6.6355,false
+7,2,masked_modulo,16,10.27,11.8105,false
+8,2,masked_modulo,64,37.27,42.8605,false
