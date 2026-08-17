@@ -163,6 +163,44 @@ class AutomotiveMixedRegionRegressionTest(unittest.TestCase):
                 self.assertTrue(estimate.verified)
                 self.assertAlmostEqual(nominal_us, estimate.nominal_us)
 
+    def test_callback_loops_retain_mixed_region_structure(self) -> None:
+        expected = {
+            "AppTask_NetworkManagement_100ms": (7, "callback_pack", True),
+            "BccTask_StatusCommunication_100ms": (24, "callback", True),
+        }
+        for task_name, (iterations, shape, verified) in expected.items():
+            with self.subTest(task=task_name):
+                profile = self.profiles[task_name]
+                counts = profile.contextual_integer_counts
+                self.assertEqual(verified, profile.dynamic_bound_verified)
+                self.assertNotIn("component_callback_empty_u32", counts)
+                self.assertNotIn("component_callback_rotate_body_u32", counts)
+                self.assertEqual(1, counts[f"mixed_region_shape_{shape}"])
+                self.assertEqual(
+                    iterations, counts["mixed_region_bounded_iterations"]
+                )
+                self.assertEqual(
+                    iterations, counts["mixed_region_indirect_call"]
+                )
+                self.assertGreater(counts["mixed_region_array_access"], 0)
+                estimate = estimate_contextual_integer(counts)
+                self.assertEqual(verified, estimate.verified)
+                if verified:
+                    self.assertNotIn("unsupported_mixed_execution_region", counts)
+                    self.assertEqual(
+                        iterations, counts[f"mixed_region_{shape}_i32"]
+                    )
+                    expected_nominal = {
+                        "callback": 36.78997228277601,
+                        "callback_pack": 19.177550928323203,
+                    }[shape]
+                    board_us = {"callback": 41.312, "callback_pack": 18.854}[shape]
+                    self.assertAlmostEqual(expected_nominal, estimate.nominal_us)
+                    self.assertGreaterEqual(estimate.safe_us, board_us)
+                else:
+                    self.assertEqual(1, counts["unsupported_mixed_execution_region"])
+                    self.assertIsNone(estimate.nominal_us)
+
 
 if __name__ == "__main__":
     unittest.main()

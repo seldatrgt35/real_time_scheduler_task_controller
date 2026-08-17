@@ -13,6 +13,8 @@ EXPECTED_POINTS = {
     "accumulator": (8, 16, 32),
     "interpolation": (8, 16, 32),
     "plausibility": (8, 16, 32),
+    "callback": (8, 16, 32),
+    "callback_pack": (8, 16, 32),
 }
 
 

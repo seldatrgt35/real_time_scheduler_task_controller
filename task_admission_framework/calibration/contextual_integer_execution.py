@@ -160,6 +160,39 @@ def estimate_contextual_integer(
         ) * intercept
         for name, intercept in mixed_region_intercepts.items()
     )
+    callback_memory_correction = False
+    callback_memory_out_of_range = False
+    callback_memory_profile = profile.get("mixed_callback_memory_correction", {})
+    callback_family = next(
+        (
+            family for family in ("callback", "callback_pack")
+            if counts.get(f"mixed_region_{family}_i32", 0) > 0
+        ),
+        None,
+    )
+    callback_iterations = (
+        counts.get(f"mixed_region_{callback_family}_i32", 0)
+        if callback_family is not None else 0
+    )
+    if callback_iterations > 0 and memory_raw > 0.0:
+        callback_memory_correction = (
+            counts.get(f"mixed_region_shape_{callback_family}", 0) == 1
+            and callback_memory_profile.get("memory_iterations_min", 0)
+            <= counts.get("memory_group_loop_iterations", 0)
+            <= callback_memory_profile.get("memory_iterations_max", -1)
+            and callback_memory_profile.get("callback_iterations_min", 0)
+            <= callback_iterations
+            <= callback_memory_profile.get("callback_iterations_max", -1)
+        )
+        if callback_memory_correction:
+            mixed_region_time = (
+                (mixed_region_time + memory_raw)
+                * callback_memory_profile["scale"]
+                + callback_memory_profile["intercept_us"]
+            )
+            memory_time = 0.0
+        else:
+            callback_memory_out_of_range = True
     component_profile = profile.get("component_validation", {})
     component_units = max(
         (count for name, count in counts.items() if name in component_costs),
@@ -182,6 +215,17 @@ def estimate_contextual_integer(
         )
         for name in mixed_shape_costs
     )
+    mixed_region_profile = profile.get("mixed_region_validation", {})
+    validated_mixed_families = set(
+        mixed_region_profile.get("validated_families", ())
+    )
+    mixed_region_in_range = all(
+        family in validated_mixed_families
+        and mixed_region_profile.get("iterations_min", 0)
+        <= counts.get(f"mixed_region_{family}_i32", 0)
+        <= mixed_region_profile.get("iterations_max", -1)
+        for family in mixed_shapes
+    )
     nominal = operations + loop_control + loop_setup + memory_time + fixed_time + floating_time + communication_time + powertrain_time + compound_time + mixed_shape_time + component_time + mixed_region_time
     margin = profile["engineering_margin_percent"] / 100.0
     powertrain_validated = bool(
@@ -195,6 +239,12 @@ def estimate_contextual_integer(
     estimate_verified = (
         (powertrain_time == 0.0 or powertrain_validated)
         and (not mixed_memory_communication or mixed_validated)
+        and (not mixed_shapes or mixed_region_in_range)
+        and not callback_memory_out_of_range
+        and (
+            not callback_memory_correction
+            or callback_memory_profile.get("validated", False)
+        )
         and (
             mixed_shape_time == 0.0
             or (
@@ -218,7 +268,11 @@ def estimate_contextual_integer(
             else (
                 "Mixed shape is outside the validated 16-128 work-unit range."
                 if mixed_shape_time != 0.0 and not mixed_shape_in_range
-                else "Validated for the S32K148 ARM GCC 11.4 O0 contextual subset."
+                else (
+                    "Mixed execution region is outside its validated family or iteration range."
+                    if mixed_shapes and not mixed_region_in_range
+                    else "Validated for the S32K148 ARM GCC 11.4 O0 contextual subset."
+                )
             )
         )
     )

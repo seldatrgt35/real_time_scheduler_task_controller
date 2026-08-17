@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "model_kind": "mixed_region_affine_candidate",
+  "dataset_role": "calibration_only",
+  "families": {
+    "callback": {
+      "iteration_us": 1.395080357142857,
+      "intercept_us": 1.7914999999999992,
+      "training_iterations": [
+        8,
+        16,
+        32
+      ],
+      "training_mape_percent": 0.029318907584506646,
+      "training_max_ape_percent": 0.045200978987077076,
+      "training_maximum_us": 46.437,
+      "validated": false,
+      "status": "fitted_training_only_independent_holdout_pending"
+    },
+    "callback_pack": {
+      "iteration_us": 1.895830357142857,
+      "intercept_us": 1.7494999999999976,
+      "training_iterations": [
+        8,
+        16,
+        32
+      ],
+      "training_mape_percent": 0.0005422863292744684,
+      "training_max_ape_percent": 0.0008445090024309948,
+      "training_maximum_us": 62.416,
+      "validated": false,
+      "status": "fitted_training_only_independent_holdout_pending"
+    }
+  }
+}

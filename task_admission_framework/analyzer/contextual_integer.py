@@ -25,6 +25,7 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
 
     _VALIDATED_MIXED_REGION_SHAPES = {
         "actuator", "accumulator", "interpolation", "plausibility",
+        "callback", "callback_pack",
     }
 
     _UNSIGNED_KINDS = {
@@ -143,6 +144,12 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             if self._mixed_plausibility_loop(body):
                 self._record_unsupported_mixed_loop(
                     cursor, body, "mixed plausibility control", multiplier,
+                    bound, definitions, result,
+                )
+                return
+            if self._mixed_callback_loop(body):
+                self._record_unsupported_mixed_loop(
+                    cursor, body, "mixed callback encoding", multiplier,
                     bound, definitions, result,
                 )
                 return
@@ -555,6 +562,12 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
         ):
             return "interpolation"
         if not callees:
+            if any(node.kind in self._CALL_KINDS for node in body_nodes):
+                return (
+                    "callback_pack"
+                    if body_operators.intersection({"<<", ">>"})
+                    else "callback"
+                )
             return "plausibility" if self._mixed_plausibility_nodes(
                 body_nodes
             ) else None
@@ -574,6 +587,21 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             and bool(operators.intersection({"|=", "&="}))
             and bool(operators.intersection({"<<", ">>"}))
             and bool(operators.intersection({"+=", "-="}))
+        )
+
+    def _mixed_callback_loop(self, body: Cursor) -> bool:
+        nodes = self._descendants(body)
+        calls = [node for node in nodes if node.kind in self._CALL_KINDS]
+        return (
+            bool(calls)
+            and any(
+                getattr(call, "referenced", None) is None
+                or call.referenced.kind != CursorKind.FUNCTION_DECL
+                for call in calls
+            )
+            and any(
+                node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR for node in nodes
+            )
         )
 
     def _automotive_compound_loop_pattern(self, body: Cursor) -> str | None:

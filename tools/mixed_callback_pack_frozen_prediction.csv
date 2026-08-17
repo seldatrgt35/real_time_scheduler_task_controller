@@ -1,0 +1,2 @@
+family,task,iterations,frozen_nominal_us,safe_us,board_mean_us,board_max_us,absolute_error_percent,dataset_role,status
+callback_pack,AppTask_NetworkManagement_100ms,7,19.177550928323203,22.05418356757168,18.854,18.854,1.7160863918701819,independent_holdout,PASS

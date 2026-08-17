@@ -1,0 +1,2 @@
+family,task,iterations,board_mean_us,frozen_nominal_us,safe_us,absolute_error_percent,result,dataset_role
+callback,BccTask_StatusCommunication_100ms,24,41.312,36.78997228277601,42.30846812519241,10.94362252753334,PASS,independent_holdout

@@ -191,5 +191,24 @@ class ContextualIntegerExecutionTest(unittest.TestCase):
         self.assertFalse(estimate.verified)
         self.assertIn("outside the validated 16-128", estimate.note)
 
+    def test_mixed_callback_holdout_uses_validated_memory_interaction(self):
+        estimate = estimate_contextual_integer({
+            "loop_invocations": 2,
+            "loop_iterations": 31,
+            "memory_group_loop_invocations": 1,
+            "memory_group_loop_iterations": 7,
+            "sequential_memory_u32": 7,
+            "mixed_region_group_loop_invocations": 1,
+            "mixed_region_group_loop_iterations": 24,
+            "mixed_region_bounded_iterations": 24,
+            "mixed_region_shape_callback": 1,
+            "mixed_region_callback_i32": 24,
+            "bitwise_xor_u32": 2,
+            "shift_right_u32": 4,
+        })
+        self.assertTrue(estimate.verified)
+        self.assertAlmostEqual(36.78997228277601, estimate.nominal_us)
+        self.assertGreaterEqual(estimate.safe_us, 41.312)
+
 
 if __name__ == "__main__": unittest.main()
