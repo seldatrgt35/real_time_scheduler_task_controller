@@ -2,6 +2,11 @@ from pathlib import Path
 import re
 import unittest
 
+from task_admission_framework.analyzer.analyzer import StaticAnalyzer
+from task_admission_framework.calibration.contextual_integer_execution import (
+    estimate_contextual_integer,
+)
+
 
 class ConditionalMemoryWriteCalibrationTest(unittest.TestCase):
     @classmethod
@@ -17,6 +22,12 @@ class ConditionalMemoryWriteCalibrationTest(unittest.TestCase):
         cls.harness_source = (
             examples / "s32k148_conditional_memory_write_calibration_main.c"
         ).read_text(encoding="utf-8")
+        cls.profiles = {
+            profile.task_name: profile
+            for profile in StaticAnalyzer().analyze_file(
+                examples / "conditional_memory_write_calibration.c"
+            )
+        }
 
     def test_training_source_does_not_import_holdouts(self) -> None:
         self.assertNotRegex(
@@ -58,6 +69,33 @@ class ConditionalMemoryWriteCalibrationTest(unittest.TestCase):
             },
             exported,
         )
+
+    def test_final_fit_covers_all_nine_training_points(self) -> None:
+        board_us = {
+            (1, 8): 15.770,
+            (1, 16): 30.083,
+            (1, 32): 58.750,
+            (2, 8): 19.437,
+            (2, 16): 37.437,
+            (2, 32): 73.437,
+            (4, 8): 25.958,
+            (4, 16): 50.458,
+            (4, 32): 99.479,
+        }
+        for (writes, iterations), measured_us in board_us.items():
+            with self.subTest(writes=writes, iterations=iterations):
+                task_name = (
+                    "ConditionalMemoryWriteCalibration_"
+                    f"Write{writes}_{iterations}"
+                )
+                estimate = estimate_contextual_integer(
+                    self.profiles[task_name].contextual_integer_counts
+                )
+                self.assertFalse(estimate.verified)
+                self.assertLess(
+                    abs(estimate.nominal_us - measured_us) / measured_us,
+                    0.01,
+                )
 
 
 if __name__ == "__main__":

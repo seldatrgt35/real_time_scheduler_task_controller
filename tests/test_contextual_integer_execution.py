@@ -8,7 +8,7 @@ from task_admission_framework.calibration.contextual_integer_execution import (
 
 
 class ContextualIntegerExecutionTest(unittest.TestCase):
-    def test_conditional_write_candidate_is_range_limited_and_unverified(self) -> None:
+    def test_conditional_write_correction_is_range_limited_and_unverified(self) -> None:
         inside = estimate_contextual_integer({
             "atomic_fallback_region": 1,
             "atomic_region_shape_conditional_memory": 1,

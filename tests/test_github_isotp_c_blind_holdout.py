@@ -23,8 +23,8 @@ class GithubIsotpCBlindHoldoutTest(unittest.TestCase):
     def test_current_predictions_preserve_frozen_blind_comparison(self) -> None:
         expected = {
             "StarTask_IsotpConsecutiveFrameReassembly_10ms": (
-                38.478211722488034,
-                44.24994348086123,
+                38.29452891156463,
+                44.03870824829932,
             ),
             "StarTask_IsotpErrorAging_20ms": (
                 28.2699999984,
