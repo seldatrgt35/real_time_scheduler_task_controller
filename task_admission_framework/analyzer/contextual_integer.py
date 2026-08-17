@@ -114,10 +114,8 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                         == "automotive_plausibility_debounce_u32"
                         else "automotive_compound"
                     )
-                    self._record_unsupported_mixed_loop(
-                        cursor, body, compound_group, multiplier, bound,
-                        definitions, result, shape_hint=shape_hint,
-                        allow_calibrated_shape=False,
+                    self._record_atomic_fallback_loop(
+                        body, shape_hint, multiplier, bound, result,
                     )
                     return
                 result.add(compound_group, multiplier * bound)
@@ -204,10 +202,9 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             memory_group = self._memory_loop_pattern(body)
             if memory_group is not None:
                 if not self._validated_group_shape(memory_group, body):
-                    self._record_unsupported_mixed_loop(
-                        cursor, body, memory_group, multiplier, bound,
-                        definitions, result, shape_hint="conditional_memory",
-                        allow_calibrated_shape=False,
+                    self._record_atomic_fallback_loop(
+                        body, "conditional_memory", multiplier, bound,
+                        result, base_group=memory_group,
                     )
                     return
                 result.add(memory_group, multiplier * bound)
@@ -279,6 +276,57 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 child, multiplier, definitions, call_stack, constants,
                 loop_indices, result
             )
+
+    def _record_atomic_fallback_loop(
+        self, body: Cursor, shape: str, multiplier: int, bound: int,
+        result: ContextualIntegerInference, *, base_group: str | None = None,
+    ) -> None:
+        """Decompose a non-exact composite without losing covered work."""
+        nodes = self._descendants(body)
+        scale = multiplier * bound
+        result.add("atomic_fallback_region", multiplier)
+        result.add(f"atomic_region_shape_{shape}", multiplier)
+        result.add("atomic_region_bounded_iterations", scale)
+        result.add(
+            "atomic_region_array_access",
+            scale * sum(
+                node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR for node in nodes
+            ),
+        )
+        result.add(
+            "atomic_region_branch",
+            scale * sum(node.kind == CursorKind.IF_STMT for node in nodes),
+        )
+
+        operators = [
+            self._root_operator(node)
+            for node in nodes if node.kind in self._BINARY_KINDS
+        ]
+        mappings = (
+            ("branch_evaluation_u32", {"<", "<=", ">", ">=", "==", "!="}),
+            ("basic_add_expression_u32", self._ADD_SUB),
+            ("multiply_local_u32", self._MULTIPLY),
+            ("bitwise_and_u32", {"&", "&="}),
+            ("bitwise_or_u32", {"|", "|="}),
+            ("bitwise_xor_u32", {"^", "^="}),
+            ("shift_left_u32", {"<<", "<<="}),
+            ("shift_right_u32", {">>", ">>="}),
+        )
+        for feature, members in mappings:
+            result.add(
+                feature,
+                scale * sum(operator in members for operator in operators),
+            )
+
+        if base_group is not None:
+            result.add(base_group, scale)
+            result.add("memory_group_loop_iterations", scale)
+            result.add("memory_group_loop_invocations", multiplier)
+
+        result.notes.append(
+            f"The {shape} loop was decomposed into existing atomic costs; "
+            "the nominal estimate is advisory pending independent holdout."
+        )
 
     def _validated_group_shape(self, group: str, body: Cursor) -> bool:
         """Reject structural extensions not covered by a group calibration."""

@@ -38,26 +38,38 @@ class GithubUdsRealTaskHoldoutTest(unittest.TestCase):
                 self.assertAlmostEqual(nominal, estimate.nominal_us)
                 self.assertAlmostEqual(safe, estimate.safe_us)
 
-    def test_unsupported_real_mixed_task_has_no_partial_estimate(self) -> None:
-        expected_shapes = {
-            "StarTask_UdsCanRxDispatch_5ms": "conditional_memory",
-            "StarTask_DtcAndSessionMaintenance_50ms": "debounce_state",
-            "StarTask_ObdRequestAndCanTx_100ms": None,
+    def test_atomic_fallback_repairs_first_match_estimates(self) -> None:
+        expected = {
+            "StarTask_UdsCanRxDispatch_5ms": (
+                "conditional_memory", 23.884702960457897, 26.145
+            ),
+            "StarTask_DtcAndSessionMaintenance_50ms": (
+                "debounce_state", 14.2699999992, 14.770
+            ),
         }
-        for task_name, shape in expected_shapes.items():
+        for task_name, (shape, nominal, board_us) in expected.items():
             with self.subTest(task=task_name):
                 profile = self.profiles[task_name]
                 counts = profile.contextual_integer_counts
-                self.assertFalse(profile.dynamic_bound_verified)
-                self.assertEqual(1, counts["unsupported_mixed_execution_region"])
-                if shape is not None:
-                    self.assertEqual(1, counts[f"mixed_region_shape_{shape}"])
-                    self.assertGreater(counts.get("mixed_region_branch", 0), 0)
-                self.assertGreater(counts["mixed_region_array_access"], 0)
+                self.assertTrue(profile.dynamic_bound_verified)
+                self.assertEqual(1, counts["atomic_fallback_region"])
+                self.assertEqual(1, counts[f"atomic_region_shape_{shape}"])
+                self.assertGreater(counts["atomic_region_array_access"], 0)
+                self.assertGreater(counts["atomic_region_branch"], 0)
                 estimate = estimate_contextual_integer(counts)
                 self.assertFalse(estimate.verified)
-                self.assertIsNone(estimate.nominal_us)
-                self.assertIsNone(estimate.safe_us)
+                self.assertAlmostEqual(nominal, estimate.nominal_us)
+                self.assertGreaterEqual(estimate.safe_us, board_us)
+
+    def test_unsupported_real_mixed_task_has_no_partial_estimate(self) -> None:
+        profile = self.profiles["StarTask_ObdRequestAndCanTx_100ms"]
+        counts = profile.contextual_integer_counts
+        self.assertFalse(profile.dynamic_bound_verified)
+        self.assertEqual(1, counts["unsupported_mixed_execution_region"])
+        estimate = estimate_contextual_integer(counts)
+        self.assertFalse(estimate.verified)
+        self.assertIsNone(estimate.nominal_us)
+        self.assertIsNone(estimate.safe_us)
 
 
 if __name__ == "__main__":

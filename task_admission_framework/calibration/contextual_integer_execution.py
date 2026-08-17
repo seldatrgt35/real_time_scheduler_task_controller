@@ -25,7 +25,7 @@ def estimate_contextual_integer(
 ) -> ContextualIntegerEstimate:
     profile = json.loads(profile_path.read_text(encoding="utf-8"))
     costs = profile["cost_us_per_occurrence"]
-    administrative = {"loop_iterations", "loop_invocations", "memory_group_loop_iterations", "memory_group_loop_invocations", "fixed_group_loop_iterations", "fixed_group_loop_invocations", "floating_group_loop_iterations", "floating_group_loop_invocations", "communication_group_loop_iterations", "communication_group_loop_invocations", "powertrain_group_loop_iterations", "powertrain_group_loop_invocations", "compound_group_loop_iterations", "compound_group_loop_invocations", "mixed_shape_group_loop_iterations", "mixed_shape_group_loop_invocations"}
+    administrative = {"loop_iterations", "loop_invocations", "memory_group_loop_iterations", "memory_group_loop_invocations", "fixed_group_loop_iterations", "fixed_group_loop_invocations", "floating_group_loop_iterations", "floating_group_loop_invocations", "communication_group_loop_iterations", "communication_group_loop_invocations", "powertrain_group_loop_iterations", "powertrain_group_loop_invocations", "compound_group_loop_iterations", "compound_group_loop_invocations", "mixed_shape_group_loop_iterations", "mixed_shape_group_loop_invocations", "atomic_fallback_region"}
     memory_costs = profile.get("memory_group_cost_us_per_work_unit", {})
     fixed_costs = profile.get("fixed_group_cost_us_per_work_unit", {})
     floating_costs = profile.get("floating_group_cost_us_per_work_unit", {})
@@ -44,7 +44,7 @@ def estimate_contextual_integer(
     mixed_shape_intercepts = profile.get("mixed_shape_intercept_us", {})
     unsupported_set = {
         name for name, count in counts.items()
-        if count > 0 and name not in administrative and name not in costs and name not in memory_costs and name not in fixed_costs and name not in floating_costs and name not in communication_costs and name not in powertrain_costs and name not in compound_costs and name not in mixed_shape_costs and name not in component_costs and name not in mixed_region_costs and not name.startswith("mixed_region_") and not name.endswith("_invocations")
+        if count > 0 and name not in administrative and name not in costs and name not in memory_costs and name not in fixed_costs and name not in floating_costs and name not in communication_costs and name not in powertrain_costs and name not in compound_costs and name not in mixed_shape_costs and name not in component_costs and name not in mixed_region_costs and not name.startswith("mixed_region_") and not name.startswith("atomic_region_") and not name.endswith("_invocations")
     }
     mixed_shapes = {
         name.removeprefix("mixed_region_shape_")
@@ -237,6 +237,8 @@ def estimate_contextual_integer(
         )
     )
     estimate_verified = (
+        counts.get("atomic_fallback_region", 0) == 0
+        and
         (powertrain_time == 0.0 or powertrain_validated)
         and (not mixed_memory_communication or mixed_validated)
         and (not mixed_shapes or mixed_region_in_range)
@@ -258,6 +260,9 @@ def estimate_contextual_integer(
         )
     )
     note = (
+        "Atomic fallback preserves all recognized region work; independent holdout validation is pending."
+        if counts.get("atomic_fallback_region", 0) > 0
+        else
         "Component costs passed isolated holdout but failed the independent compound holdout; this estimate is advisory only."
         if component_time != 0.0 and not component_profile.get("validated", False)
         else "Powertrain numeric coefficients are calibration-derived; independent holdout is pending."
