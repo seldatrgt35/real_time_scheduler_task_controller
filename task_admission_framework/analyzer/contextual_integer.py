@@ -107,6 +107,19 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             body = children[-1] if children else cursor
             compound_group = self._automotive_compound_loop_pattern(body)
             if compound_group is not None:
+                if not self._validated_group_shape(compound_group, body):
+                    shape_hint = (
+                        "debounce_state"
+                        if compound_group
+                        == "automotive_plausibility_debounce_u32"
+                        else "automotive_compound"
+                    )
+                    self._record_unsupported_mixed_loop(
+                        cursor, body, compound_group, multiplier, bound,
+                        definitions, result, shape_hint=shape_hint,
+                        allow_calibrated_shape=False,
+                    )
+                    return
                 result.add(compound_group, multiplier * bound)
                 result.add(f"{compound_group}_invocations", multiplier)
                 helper_calls = sum(
@@ -190,6 +203,13 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 return
             memory_group = self._memory_loop_pattern(body)
             if memory_group is not None:
+                if not self._validated_group_shape(memory_group, body):
+                    self._record_unsupported_mixed_loop(
+                        cursor, body, memory_group, multiplier, bound,
+                        definitions, result, shape_hint="conditional_memory",
+                        allow_calibrated_shape=False,
+                    )
+                    return
                 result.add(memory_group, multiplier * bound)
                 result.add("memory_group_loop_iterations", multiplier * bound)
                 result.add("memory_group_loop_invocations", multiplier)
@@ -309,6 +329,13 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 not has_conditional
                 and not operators.intersection({"*", "/", "%", "<<", ">>"})
             )
+        if group in {
+            "bulk_memory_copy_u32", "bulk_memory_set_u32",
+            "random_indexed_memory_u32", "sequential_memory_u32",
+        }:
+            return not has_conditional and not has_call
+        if group == "automotive_plausibility_debounce_u32":
+            return "-" in operators
         return True
 
     def _execution_component_patterns(
@@ -422,7 +449,8 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
     def _record_unsupported_mixed_loop(
         self, cursor: Cursor, body: Cursor, group: str, multiplier: int,
         bound: int, definitions: dict[str, Cursor],
-        result: ContextualIntegerInference,
+        result: ContextualIntegerInference, *, shape_hint: str | None = None,
+        allow_calibrated_shape: bool = True,
     ) -> None:
         """Describe a mixed loop without assigning a calibrated family cost.
 
@@ -479,13 +507,13 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 ),
             )
 
-        shape = self._mixed_region_candidate_shape(
+        shape = shape_hint or self._mixed_region_candidate_shape(
             descendants, callee_nodes_by_call
         )
         if shape is not None:
             result.add(f"mixed_region_shape_{shape}", multiplier)
 
-        if shape in self._VALIDATED_MIXED_REGION_SHAPES:
+        if allow_calibrated_shape and shape in self._VALIDATED_MIXED_REGION_SHAPES:
             result.add(f"mixed_region_{shape}_i32", scale)
             result.add("mixed_region_group_loop_iterations", scale)
             result.add("mixed_region_group_loop_invocations", multiplier)

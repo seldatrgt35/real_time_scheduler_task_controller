@@ -22,17 +22,11 @@ class GithubUdsRealTaskHoldoutTest(unittest.TestCase):
 
     def test_predictions_are_frozen_before_board_measurement(self) -> None:
         expected = {
-            "StarTask_UdsCanRxDispatch_5ms": (
-                True, 15.051369627657897, 17.30907507180658
-            ),
             "StarTask_ObdPidDecode_10ms": (
                 False, 11.06675, 12.7267625
             ),
             "StarTask_UdsResponseValidation_20ms": (
                 False, 9.9142896343, 11.401433079444999
-            ),
-            "StarTask_DtcAndSessionMaintenance_50ms": (
-                True, 22.4367857144, 25.802303571559996
             ),
         }
         for task_name, (verified, nominal, safe) in expected.items():
@@ -45,14 +39,25 @@ class GithubUdsRealTaskHoldoutTest(unittest.TestCase):
                 self.assertAlmostEqual(safe, estimate.safe_us)
 
     def test_unsupported_real_mixed_task_has_no_partial_estimate(self) -> None:
-        profile = self.profiles["StarTask_ObdRequestAndCanTx_100ms"]
-        counts = profile.contextual_integer_counts
-        self.assertFalse(profile.dynamic_bound_verified)
-        self.assertEqual(1, counts["unsupported_mixed_execution_region"])
-        estimate = estimate_contextual_integer(counts)
-        self.assertFalse(estimate.verified)
-        self.assertIsNone(estimate.nominal_us)
-        self.assertIsNone(estimate.safe_us)
+        expected_shapes = {
+            "StarTask_UdsCanRxDispatch_5ms": "conditional_memory",
+            "StarTask_DtcAndSessionMaintenance_50ms": "debounce_state",
+            "StarTask_ObdRequestAndCanTx_100ms": None,
+        }
+        for task_name, shape in expected_shapes.items():
+            with self.subTest(task=task_name):
+                profile = self.profiles[task_name]
+                counts = profile.contextual_integer_counts
+                self.assertFalse(profile.dynamic_bound_verified)
+                self.assertEqual(1, counts["unsupported_mixed_execution_region"])
+                if shape is not None:
+                    self.assertEqual(1, counts[f"mixed_region_shape_{shape}"])
+                    self.assertGreater(counts.get("mixed_region_branch", 0), 0)
+                self.assertGreater(counts["mixed_region_array_access"], 0)
+                estimate = estimate_contextual_integer(counts)
+                self.assertFalse(estimate.verified)
+                self.assertIsNone(estimate.nominal_us)
+                self.assertIsNone(estimate.safe_us)
 
 
 if __name__ == "__main__":
