@@ -17,5 +17,19 @@ void StarBasic_FloatingPoint(void);
 void StarBasic_DirectCall(void);
 void StarBasic_IndirectCall(void);
 void StarBasic_Switch(void);
+void StarBasic_MaskedMultiply(void);
+void StarBasic_MaskedDivide(void);
+void StarBasic_MaskedModulo(void);
+void StarBasic_BitwiseNested(void);
+void StarBasic_Checksum(void);
+void StarBasic_Q15Multiply(void);
+void StarBasic_Q31Multiply(void);
+void StarBasic_Q31Mac(void);
+void StarBasic_Float32Add(void);
+void StarBasic_Float32Divide(void);
+void StarBasic_Float64Add(void);
+void StarBasic_Float64Multiply(void);
+void StarBasic_Float64Divide(void);
+void StarBasic_IntToFloat(void);
 
 #endif

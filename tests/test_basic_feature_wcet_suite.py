@@ -23,7 +23,7 @@ class BasicFeatureWcetSuiteTest(unittest.TestCase):
         }
 
     def test_all_measurement_points_have_an_estimate(self) -> None:
-        self.assertEqual(13, len(self.profiles))
+        self.assertEqual(27, len(self.profiles))
         for task_name, profile in self.profiles.items():
             with self.subTest(task=task_name):
                 estimate = estimate_contextual_integer(
@@ -74,6 +74,29 @@ class BasicFeatureWcetSuiteTest(unittest.TestCase):
         self.assertFalse(estimate.verified)
         self.assertAlmostEqual(104.0625, estimate.nominal_us)
         self.assertGreaterEqual(estimate.safe_us, 88.791)
+
+    def test_extended_basic_families_are_isolated(self) -> None:
+        expected = {
+            "StarBasic_MaskedMultiply": "multiply_masked_index_u32",
+            "StarBasic_MaskedDivide": "divide_masked_index_u32",
+            "StarBasic_MaskedModulo": "modulo_masked_index_u32",
+            "StarBasic_BitwiseNested": "bitwise_nested_u32",
+            "StarBasic_Checksum": "checksum_processed_byte_u32",
+            "StarBasic_Q15Multiply": "q15_multiply_u32",
+            "StarBasic_Q31Multiply": "q31_multiply_u32",
+            "StarBasic_Q31Mac": "q31_mac_u32",
+            "StarBasic_Float32Add": "float32_add_sub_u32",
+            "StarBasic_Float32Divide": "float32_divide_u32",
+            "StarBasic_Float64Add": "float64_add_sub_u32",
+            "StarBasic_Float64Multiply": "float64_multiply_u32",
+            "StarBasic_Float64Divide": "float64_divide_u32",
+            "StarBasic_IntToFloat": "int32_to_float32_u32",
+        }
+        for task_name, feature in expected.items():
+            with self.subTest(task=task_name):
+                self.assertEqual(
+                    32, self.profiles[task_name].contextual_integer_counts[feature]
+                )
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ typedef __UINT64_TYPE__ uint64_t;
 #define STAR_DEMCR       (*(volatile uint32_t *)0xE000EDFCUL)
 #define STAR_DWT_CTRL    (*(volatile uint32_t *)0xE0001000UL)
 #define STAR_DWT_CYCCNT  (*(volatile uint32_t *)0xE0001004UL)
-#define STAR_POINT_COUNT (13U)
+#define STAR_POINT_COUNT (27U)
 #define STAR_SAMPLES     (40U)
 #define STAR_WARMUPS     (8U)
 #define STAR_CORE_HZ     (48000000U)
@@ -48,7 +48,21 @@ static const StarBasicTask s_tasks[STAR_POINT_COUNT] =
     StarBasic_FloatingPoint,
     StarBasic_DirectCall,
     StarBasic_IndirectCall,
-    StarBasic_Switch
+    StarBasic_Switch,
+    StarBasic_MaskedMultiply,
+    StarBasic_MaskedDivide,
+    StarBasic_MaskedModulo,
+    StarBasic_BitwiseNested,
+    StarBasic_Checksum,
+    StarBasic_Q15Multiply,
+    StarBasic_Q31Multiply,
+    StarBasic_Q31Mac,
+    StarBasic_Float32Add,
+    StarBasic_Float32Divide,
+    StarBasic_Float64Add,
+    StarBasic_Float64Multiply,
+    StarBasic_Float64Divide,
+    StarBasic_IntToFloat
 };
 
 static uint32_t ToMicrosecondsX1000(uint32_t cycles)

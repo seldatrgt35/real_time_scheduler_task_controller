@@ -200,3 +200,157 @@ void StarBasic_Switch(void)
     }
     s_sink = value;
 }
+
+void StarBasic_MaskedMultiply(void)
+{
+    uint32_t index;
+    uint32_t value = s_sink;
+    for (index = 0U; index < STAR_BASIC_ITERATIONS; ++index)
+    {
+        value += (index * 17U) & STAR_BASIC_MASK;
+    }
+    s_sink = value;
+}
+
+void StarBasic_MaskedDivide(void)
+{
+    uint32_t index;
+    uint32_t value = s_sink;
+    for (index = 1U; index <= STAR_BASIC_ITERATIONS; ++index)
+    {
+        value += (0x3FFFU / index) & STAR_BASIC_MASK;
+    }
+    s_sink = value;
+}
+
+void StarBasic_MaskedModulo(void)
+{
+    uint32_t index;
+    uint32_t value = s_sink;
+    for (index = 1U; index <= STAR_BASIC_ITERATIONS; ++index)
+    {
+        value += (0xF3579BDFU % index) & STAR_BASIC_MASK;
+    }
+    s_sink = value;
+}
+
+void StarBasic_BitwiseNested(void)
+{
+    uint32_t index;
+    uint32_t value = s_sink;
+    for (index = 0U; index < STAR_BASIC_ITERATIONS; ++index)
+    {
+        value = (value ^ index) | 0x55U;
+    }
+    s_sink = value;
+}
+
+void StarBasic_Checksum(void)
+{
+    uint32_t index;
+    uint32_t checksum = s_sink;
+    for (index = 0U; index < STAR_BASIC_ITERATIONS; ++index)
+    {
+        checksum ^= s_input[index] & 0xFFU;
+    }
+    s_sink = checksum;
+}
+
+void StarBasic_Q15Multiply(void)
+{
+    uint32_t index;
+    uint32_t value = s_sink | 1U;
+    for (index = 0U; index < STAR_BASIC_ITERATIONS; ++index)
+    {
+        value = (value * 16384U) >> 15U;
+    }
+    s_sink = value;
+}
+
+void StarBasic_Q31Multiply(void)
+{
+    uint32_t index;
+    uint32_t value = s_sink | 1U;
+    for (index = 0U; index < STAR_BASIC_ITERATIONS; ++index)
+    {
+        value *= 1024U;
+    }
+    s_sink = value;
+}
+
+void StarBasic_Q31Mac(void)
+{
+    uint32_t index;
+    uint32_t value = s_sink | 1U;
+    for (index = 0U; index < STAR_BASIC_ITERATIONS; ++index)
+    {
+        value += value * 16U;
+    }
+    s_sink = value;
+}
+
+void StarBasic_Float32Add(void)
+{
+    uint32_t index;
+    float value = (float)(s_sink | 1U);
+    for (index = 0U; index < STAR_BASIC_ITERATIONS; ++index)
+    {
+        value = value + 1.25F;
+    }
+    s_sink = (uint32_t)value;
+}
+
+void StarBasic_Float32Divide(void)
+{
+    uint32_t index;
+    float value = (float)(s_sink | 1U);
+    for (index = 0U; index < STAR_BASIC_ITERATIONS; ++index)
+    {
+        value = value / 1.0625F;
+    }
+    s_sink = (uint32_t)value;
+}
+
+void StarBasic_Float64Add(void)
+{
+    uint32_t index;
+    double value = (double)(s_sink | 1U);
+    for (index = 0U; index < STAR_BASIC_ITERATIONS; ++index)
+    {
+        value = value + 1.25;
+    }
+    s_sink = (uint32_t)value;
+}
+
+void StarBasic_Float64Multiply(void)
+{
+    uint32_t index;
+    double value = (double)(s_sink | 1U);
+    for (index = 0U; index < STAR_BASIC_ITERATIONS; ++index)
+    {
+        value = value * 0.875;
+    }
+    s_sink = (uint32_t)value;
+}
+
+void StarBasic_Float64Divide(void)
+{
+    uint32_t index;
+    double value = (double)(s_sink | 1U);
+    for (index = 0U; index < STAR_BASIC_ITERATIONS; ++index)
+    {
+        value = value / 1.0625;
+    }
+    s_sink = (uint32_t)value;
+}
+
+void StarBasic_IntToFloat(void)
+{
+    uint32_t index;
+    float total = 0.0F;
+    for (index = 0U; index < STAR_BASIC_ITERATIONS; ++index)
+    {
+        total += (float)s_input[index];
+    }
+    s_sink = (uint32_t)total;
+}
