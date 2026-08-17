@@ -45,6 +45,17 @@ class AutomotiveDtcSnapshotBlindHoldoutTest(unittest.TestCase):
         self.assertAlmostEqual(40.67722685005926, estimate.nominal_us)
         self.assertAlmostEqual(46.77881087756815, estimate.safe_us)
 
+    def test_sparse_board_result_exposes_path_occupancy_mismatch(self) -> None:
+        board_us = 17.479
+        estimate = estimate_contextual_integer(
+            self.profile.contextual_integer_counts
+        )
+        self.assertGreater(
+            abs(estimate.nominal_us - board_us) / board_us,
+            1.0,
+        )
+        self.assertGreaterEqual(estimate.safe_us, board_us)
+
 
 if __name__ == "__main__":
     unittest.main()

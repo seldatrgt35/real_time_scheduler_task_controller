@@ -1,0 +1,2 @@
+task,scenario,board_us,frozen_nominal_us,nominal_ape_percent,frozen_safe_us,safe_coverage,executed_records,total_records,status
+StarTask_DtcSnapshotPack_20ms,SPARSE_TYPICAL_PATH,17.479,40.67722685005926,132.720560959204,46.77881087756815,PASS_CONSERVATIVE,3,16,FAIL_PATH_OCCUPANCY_MISMATCH
