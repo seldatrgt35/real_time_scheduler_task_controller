@@ -193,11 +193,25 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 result.add("communication_group_loop_iterations", multiplier * bound)
                 result.add("communication_group_loop_invocations", multiplier)
                 return
-            floating_group = self._floating_loop_pattern(body)
-            if floating_group is not None:
-                result.add(floating_group, multiplier * bound)
+            floating_groups = self._floating_loop_patterns(body)
+            if floating_groups:
+                for floating_group in floating_groups:
+                    result.add(floating_group, multiplier * bound)
                 result.add("floating_group_loop_iterations", multiplier * bound)
                 result.add("floating_group_loop_invocations", multiplier)
+                if len(floating_groups) > 1:
+                    result.add("atomic_fallback_region", multiplier)
+                    result.add(
+                        "atomic_region_shape_mixed_floating_operations",
+                        multiplier,
+                    )
+                    result.add(
+                        "atomic_region_bounded_iterations", multiplier * bound
+                    )
+                    result.notes.append(
+                        "Multiple floating operator classes were preserved; "
+                        "their combined estimate is advisory pending holdout."
+                    )
                 return
             fixed_group = self._fixed_point_loop_pattern(body)
             if fixed_group is not None:
@@ -963,7 +977,7 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
             return "checksum_processed_byte_u32"
         return None
 
-    def _floating_loop_pattern(self, body: Cursor) -> str | None:
+    def _floating_loop_patterns(self, body: Cursor) -> tuple[str, ...]:
         descendants = self._descendants(body)
         if any(node.kind == CursorKind.ARRAY_SUBSCRIPT_EXPR for node in descendants):
             casts = [
@@ -975,7 +989,8 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 and self._contains_float_type(node)
                 for node in casts
             ):
-                return "int32_to_float32_u32"
+                return ("int32_to_float32_u32",)
+        features: list[str] = []
         for node in descendants:
             if node.kind not in self._BINARY_KINDS:
                 continue
@@ -985,12 +1000,12 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 continue
             prefix = "float32" if size == 4 else "float64"
             if operator in self._ADD_SUB:
-                return f"{prefix}_add_sub_u32"
-            if operator in self._MULTIPLY:
-                return f"{prefix}_multiply_u32"
-            if operator in self._DIVIDE:
-                return f"{prefix}_divide_u32"
-        return None
+                features.append(f"{prefix}_add_sub_u32")
+            elif operator in self._MULTIPLY:
+                features.append(f"{prefix}_multiply_u32")
+            elif operator in self._DIVIDE:
+                features.append(f"{prefix}_divide_u32")
+        return tuple(features)
 
     @staticmethod
     def _canonical_size(cursor: Cursor) -> int:

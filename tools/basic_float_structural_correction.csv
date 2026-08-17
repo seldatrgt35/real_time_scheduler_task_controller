@@ -1,0 +1,2 @@
+task,board_us,frozen_nominal_us,frozen_safe_us,frozen_safe_coverage,corrected_nominal_us,corrected_absolute_error_percent,corrected_safe_us,corrected_safe_coverage,corrected_verified
+StarBasic_FloatingPoint,88.791,44.0625,50.671875,FAIL,104.0625,17.1993771835,119.671875,PASS,false

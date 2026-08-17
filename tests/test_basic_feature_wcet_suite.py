@@ -65,6 +65,16 @@ class BasicFeatureWcetSuiteTest(unittest.TestCase):
         self.assertLess(abs(estimate.nominal_us - 22.395) / 22.395, 0.09)
         self.assertGreaterEqual(estimate.safe_us, 22.395)
 
+    def test_float_expression_preserves_add_and_multiply(self) -> None:
+        counts = self.profiles["StarBasic_FloatingPoint"].contextual_integer_counts
+        self.assertEqual(32, counts["float32_add_sub_u32"])
+        self.assertEqual(32, counts["float32_multiply_u32"])
+        self.assertEqual(1, counts["atomic_region_shape_mixed_floating_operations"])
+        estimate = estimate_contextual_integer(counts)
+        self.assertFalse(estimate.verified)
+        self.assertAlmostEqual(104.0625, estimate.nominal_us)
+        self.assertGreaterEqual(estimate.safe_us, 88.791)
+
 
 if __name__ == "__main__":
     unittest.main()
