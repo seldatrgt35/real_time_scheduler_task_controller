@@ -1,0 +1,4 @@
+task_id,task,nominal_us,wcet_us,deadline_us,prediction_frozen_before_board,training_role
+0,BccTask_WheelSpeedAndBrake_5ms,28.812,33.1338,5000,true,holdout
+1,BccTask_ThermalActuator_10ms,22.2883928571,25.6316517857,10000,true,holdout
+2,BccTask_StabilityRequest_20ms,33.958,39.0517,20000,true,holdout

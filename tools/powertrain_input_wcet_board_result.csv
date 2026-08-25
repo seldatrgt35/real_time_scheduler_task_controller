@@ -1,0 +1,2 @@
+task,board_mean_us,board_max_us,frozen_nominal_us,nominal_absolute_error_percent,frozen_wcet_us,wcet_coverage,wcet_headroom_us,deadline_us,wcet_deadline_usage_percent
+AppTask_PowertrainInput_5ms,16.500,16.500,19.812,20.0727272727,22.7838,PASS,6.2838,5000,0.455676

@@ -1,0 +1,4 @@
+task_id,task,board_mean_us,board_max_us,frozen_nominal_us,nominal_error_percent,frozen_wcet_us,wcet_coverage,wcet_headroom_us
+0,BccTask_WheelSpeedAndBrake_5ms,29.020,29.020,28.812,-0.7167470710,33.1338,PASS,4.1138
+1,BccTask_ThermalActuator_10ms,23.020,23.020,22.2883928571,-3.1781361551,25.6316517857,PASS,2.6116517857
+2,BccTask_StabilityRequest_20ms,34.791,34.791,33.958,-2.3948728125,39.0517,PASS,4.2607

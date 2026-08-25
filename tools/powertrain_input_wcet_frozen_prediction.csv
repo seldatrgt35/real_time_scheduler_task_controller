@@ -1,0 +1,2 @@
+task,nominal_us,wcet_us,deadline_us,prediction_frozen_before_board
+AppTask_PowertrainInput_5ms,19.812,22.7838,5000,true

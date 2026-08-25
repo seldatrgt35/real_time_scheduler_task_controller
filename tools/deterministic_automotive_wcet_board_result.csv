@@ -1,0 +1,2 @@
+task,board_mean_us,board_max_us,frozen_nominal_us,frozen_wcet_us,frozen_wcet_coverage,corrected_nominal_us,corrected_wcet_us,corrected_wcet_coverage,corrected_wcet_headroom_us
+StarAutomotiveTask_10ms,134.166,134.166,97.0826410640,111.6450372236,FAIL,166.8126410640,191.8345372236,PASS,57.6685372236

@@ -157,6 +157,18 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                 result.add(powertrain_group, multiplier * bound)
                 result.add("powertrain_group_loop_iterations", multiplier * bound)
                 result.add("powertrain_group_loop_invocations", multiplier)
+                # A calibrated integer shape may share the same bounded loop
+                # with floating-point work.  The integer family coefficient
+                # does not absorb those operations, so retain them instead of
+                # returning after the first matching family.
+                floating_groups = self._floating_loop_patterns(body)
+                for floating_group in floating_groups:
+                    result.add(floating_group, multiplier * bound)
+                if floating_groups:
+                    result.add(
+                        "floating_group_loop_iterations", multiplier * bound
+                    )
+                    result.add("floating_group_loop_invocations", multiplier)
                 return
             if self._mixed_plausibility_loop(body):
                 self._record_unsupported_mixed_loop(
@@ -211,6 +223,17 @@ class ContextualIntegerAnalyzer(DynamicOperationAnalyzer):
                     result.notes.append(
                         "Multiple floating operator classes were preserved; "
                         "their combined estimate is advisory pending holdout."
+                    )
+                # Floating-point classification covers only the floating
+                # operators. Preserve adjacent integer arithmetic and memory
+                # operand contexts instead of dropping them at this return.
+                self._count_loop_chains(
+                    body, multiplier * bound, new_indices, result
+                )
+                for statement in body.get_children():
+                    self._walk_context_cursor(
+                        statement, multiplier * bound, definitions,
+                        call_stack, constants, new_indices, result
                     )
                 return
             fixed_group = self._fixed_point_loop_pattern(body)

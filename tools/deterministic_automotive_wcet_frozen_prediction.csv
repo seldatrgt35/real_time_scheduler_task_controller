@@ -1,0 +1,2 @@
+task,nominal_us,wcet_us,deadline_us,prediction_frozen_before_board
+StarAutomotiveTask_10ms,97.0826410640,111.6450372236,10000,true
