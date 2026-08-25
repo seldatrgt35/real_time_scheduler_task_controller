@@ -338,6 +338,24 @@
     "callback_pack_holdout_safe_limit_us": 22.05418356757168,
     "callback_pack_holdout_safe_result": "PASS"
   },
+  "mixed_integer_float_family_models": {
+    "iterations_min": 8,
+    "iterations_max": 32,
+    "add": {
+      "intercept_us": 2.1665,
+      "iteration_us": 2.878348214286
+    },
+    "multiply": {
+      "intercept_us": 0.916,
+      "iteration_us": 4.159982142857
+    },
+    "memory": {
+      "intercept_us": 1.1035,
+      "iteration_us": 4.2116875
+    },
+    "source": "Nine S32K148 board points: three isolated shapes at 8, 16, and 32 iterations. Real automotive holdouts were excluded from fitting.",
+    "independent_holdout": "StarAutomotiveTask_10ms board maximum 134.166 us"
+  },
   "cost_us_per_occurrence": {
     "add_constant_u32": 0.0416666667,
     "add_local_u32": 0.1041666667,

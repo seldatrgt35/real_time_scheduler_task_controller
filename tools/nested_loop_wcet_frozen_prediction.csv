@@ -1,0 +1,2 @@
+task,outer_iterations,inner_iterations,total_inner_work,nominal_us,wcet_us,deadline_us,prediction_frozen_before_board,training_role
+NestedLoopAutomotive_SensorMatrixTask_10ms,8,4,32,33.7085767960,38.7648633154,10000,true,holdout

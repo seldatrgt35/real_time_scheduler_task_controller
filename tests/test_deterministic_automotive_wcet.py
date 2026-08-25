@@ -37,6 +37,8 @@ class DeterministicAutomotiveWcetTest(unittest.TestCase):
 
     def test_corrected_prediction_covers_frozen_board_measurement(self) -> None:
         estimate = estimate_contextual_integer(self.profile.contextual_integer_counts)
+        self.assertAlmostEqual(124.73730773119534, estimate.nominal_us)
+        self.assertAlmostEqual(143.44790389087464, estimate.safe_us)
         self.assertGreaterEqual(estimate.safe_us, 134.166)
 
 

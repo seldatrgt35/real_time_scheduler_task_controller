@@ -47,6 +47,9 @@ def estimate_contextual_integer(
     basic_gap_profile = profile.get("basic_gap_family_models", {})
     basic_memory_profile = profile.get("basic_memory_family_models", {})
     basic_control_profile = profile.get("basic_control_family_models", {})
+    mixed_integer_float_profile = profile.get(
+        "mixed_integer_float_family_models", {}
+    )
     mixed_shape_intercepts = profile.get("mixed_shape_intercept_us", {})
     unsupported_set = {
         name for name, count in counts.items()
@@ -256,7 +259,74 @@ def estimate_contextual_integer(
         <= mixed_region_profile.get("iterations_max", -1)
         for family in mixed_shapes
     )
-    nominal = operations + loop_control + loop_setup + memory_time + fixed_time + floating_time + communication_time + powertrain_time + compound_time + mixed_shape_time + component_time + mixed_region_time + conditional_write_time
+    mixed_integer_float_time = 0.0
+    mixed_integer_float_family = None
+    mixed_integer_float_iterations = counts.get(
+        "floating_group_loop_iterations", 0
+    )
+    if (
+        counts.get("floating_group_loop_invocations", 0) == 1
+        and mixed_integer_float_profile.get("iterations_min", 0)
+        <= mixed_integer_float_iterations
+        <= mixed_integer_float_profile.get("iterations_max", -1)
+    ):
+        if (
+            counts.get("int32_to_float32_u32", 0)
+            == mixed_integer_float_iterations
+            and counts.get("float32_add_sub_u32", 0)
+            == mixed_integer_float_iterations
+            and counts.get("float32_multiply_u32", 0)
+            == mixed_integer_float_iterations
+            and (
+                counts.get("add_memory_u32", 0)
+                == mixed_integer_float_iterations
+                or counts.get("powertrain_group_loop_iterations", 0)
+                == mixed_integer_float_iterations
+            )
+        ):
+            mixed_integer_float_family = "memory"
+            operations -= (
+                counts.get("add_memory_u32", 0)
+                * costs.get("add_memory_u32", 0.0)
+            )
+            powertrain_time = 0.0
+        elif (
+            counts.get("float32_add_sub_u32", 0)
+            == mixed_integer_float_iterations
+            and counts.get("float32_multiply_u32", 0)
+            == mixed_integer_float_iterations
+            and counts.get("multiply_local_u32", 0)
+            == mixed_integer_float_iterations
+        ):
+            mixed_integer_float_family = "multiply"
+            operations -= mixed_integer_float_iterations * (
+                costs.get("add_local_u32", 0.0)
+                + costs.get("multiply_local_u32", 0.0)
+            )
+        elif (
+            counts.get("float32_add_sub_u32", 0)
+            == mixed_integer_float_iterations
+            and counts.get("float32_multiply_u32", 0) == 0
+            and counts.get("add_local_u32", 0)
+            == mixed_integer_float_iterations
+        ):
+            mixed_integer_float_family = "add"
+            operations -= (
+                mixed_integer_float_iterations
+                * costs.get("add_local_u32", 0.0)
+            )
+    if mixed_integer_float_family is not None:
+        family_profile = mixed_integer_float_profile[
+            mixed_integer_float_family
+        ]
+        mixed_integer_float_time = (
+            family_profile["intercept_us"]
+            + mixed_integer_float_iterations
+            * family_profile["iteration_us"]
+        )
+        floating_time = 0.0
+
+    nominal = operations + loop_control + loop_setup + memory_time + fixed_time + floating_time + communication_time + powertrain_time + compound_time + mixed_shape_time + component_time + mixed_region_time + conditional_write_time + mixed_integer_float_time
     basic_gap_family = None
     basic_gap_iterations = counts.get("loop_iterations", 0)
     basic_gap_payload = {
@@ -473,6 +543,7 @@ def estimate_contextual_integer(
          "mixed_shape_group": mixed_shape_time,
          "component_group": component_time,
          "mixed_region_group": mixed_region_time,
+         "mixed_integer_float_group": mixed_integer_float_time,
          "conditional_memory_write_correction": conditional_write_time}
     if (
         basic_gap_family is not None

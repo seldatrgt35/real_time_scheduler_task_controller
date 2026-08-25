@@ -1,2 +1,2 @@
-task,board_mean_us,board_max_us,frozen_nominal_us,frozen_wcet_us,frozen_wcet_coverage,corrected_nominal_us,corrected_wcet_us,corrected_wcet_coverage,corrected_wcet_headroom_us
-StarAutomotiveTask_10ms,134.166,134.166,97.0826410640,111.6450372236,FAIL,166.8126410640,191.8345372236,PASS,57.6685372236
+task,board_mean_us,board_max_us,frozen_nominal_us,frozen_wcet_us,frozen_wcet_coverage,first_correction_wcet_us,mixed_model_nominal_us,mixed_model_wcet_us,mixed_model_wcet_coverage,mixed_model_wcet_headroom_us
+StarAutomotiveTask_10ms,134.166,134.166,97.0826410640,111.6450372236,FAIL,191.8345372236,124.7373077312,143.4479038909,PASS,9.2819038909

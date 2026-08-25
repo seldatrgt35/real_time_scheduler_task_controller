@@ -1,0 +1,10 @@
+family_id,family,iterations,completed_samples,board_mean_us,board_max_us
+0,add,8,40,24.854,24.854
+0,add,16,40,48.729,48.729
+0,add,32,40,94.104,94.104
+1,multiply,8,40,34.291,34.291
+1,multiply,16,40,67.333,67.333
+1,multiply,32,40,134.083,134.083
+2,memory,8,40,35.166,35.166
+2,memory,16,40,67.937,67.937
+2,memory,32,40,136.062,136.062
