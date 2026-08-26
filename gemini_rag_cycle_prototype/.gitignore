@@ -1,0 +1,6 @@
+.env
+index/*.json
+results/*.json
+results/*.raw.txt
+__pycache__/
+*.pyc

@@ -1,0 +1,4 @@
+model,outer_iterations,inner_iterations_per_outer,total_inner_iterations,nominal_us,wcet_us,confidence_percent,board_max_us,nominal_absolute_error_percent,wcet_coverage
+ChatGPT,8,4,32,17.0,28.0,35,28.187,39.6885088871,FAIL
+Gemini-Flash,8,4,32,23.5,35.0,80,28.187,16.6282328733,PASS
+STAR-framework,8,4,32,33.7085767960,38.7648633154,,28.187,19.5890899918,PASS

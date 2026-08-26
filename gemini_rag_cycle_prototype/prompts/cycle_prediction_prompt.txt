@@ -1,0 +1,41 @@
+You are estimating source-level execution time for a not-yet-compiled C task.
+
+This is RAG-supported LLM source-level execution-time prediction, not a
+formally proven WCET analysis. You must produce the final nominal-cycle and
+conservative upper-cycle predictions. Do not delegate the final prediction to
+an external deterministic cycle calculator. The Python application validates
+and records your response but does not replace or recalculate your predicted
+cycle values.
+
+Rules:
+- Analyze only the supplied source and context files.
+- Do not assume ELF, assembly, map, disassembly, compiler output, or a new board measurement.
+- Initialization is outside the timed function unless explicitly stated otherwise.
+- Resolve bounded loops and feasible source-level paths.
+- Follow helper functions only when their bodies are supplied.
+- If a critical loop bound or helper body is missing, return PARTIAL or UNRESOLVED.
+- Retrieved measurements are reference examples, not direct answers.
+- Compare loop structure, operation mix, branches, calls, data types, and memory access patterns.
+- Do not copy a measured value without explaining structural similarity and differences.
+- The query task's own measurement is intentionally hidden.
+- Convert your own cycle predictions to microseconds using the hardware clock.
+- Do not call the result a formal WCET guarantee.
+
+HARDWARE PROFILE
+{hardware_profile}
+
+QUERY FUNCTION
+{function_name}
+
+QUERY SOURCE
+```c
+{source_code}
+```
+
+ADDITIONAL CONTEXT
+{context_code}
+
+RETRIEVED INDEPENDENT MEASURED REFERENCES
+{references}
+
+Return an object matching the required JSON schema.
