@@ -10,6 +10,17 @@ python -m gemini_rag_cycle_prototype.cli --source $source --function WheelSpeedF
 python -m gemini_rag_cycle_prototype.cli --source $source --function DiagnosticEventAging_Task100ms --no-rag --output gemini_rag_cycle_prototype/results/holdout_v2_dtc.json
 ```
 
+Prompt-v2 path-constrained diagnostic runs must use new output names so the
+frozen baseline files above are not overwritten:
+
+```powershell
+$evidence = "experiments/gemini_source_only_holdout_v2/timing_evidence_source_only.txt"
+
+python -m gemini_rag_cycle_prototype.cli --source $source --function BatteryContactorSupervisor_Task10ms --no-rag --input-constraints-file experiments/gemini_source_only_holdout_v2/constraints/contactor_constraints.txt --timing-evidence-file $evidence --output gemini_rag_cycle_prototype/results/holdout_v2_contactor_prompt_v2.json
+python -m gemini_rag_cycle_prototype.cli --source $source --function WheelSpeedFusion_Task5ms --no-rag --input-constraints-file experiments/gemini_source_only_holdout_v2/constraints/wheel_constraints.txt --timing-evidence-file $evidence --output gemini_rag_cycle_prototype/results/holdout_v2_wheel_prompt_v2.json
+python -m gemini_rag_cycle_prototype.cli --source $source --function DiagnosticEventAging_Task100ms --no-rag --input-constraints-file experiments/gemini_source_only_holdout_v2/constraints/dtc_constraints.txt --timing-evidence-file $evidence --output gemini_rag_cycle_prototype/results/holdout_v2_dtc_prompt_v2.json
+```
+
 Board ELF:
 
 `artifacts/s32k148_source_only_holdout_v2/star_s32k148_source_only_holdout_v2.elf`

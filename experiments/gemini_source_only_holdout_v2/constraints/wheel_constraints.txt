@@ -1,0 +1,18 @@
+Timed scope: one direct call to WheelSpeedFusion_Task5ms.
+Initialization and scenario setup occur before timing.
+
+Nominal scenario (typical):
+- Each five-element period history is strictly increasing.
+- MedianOfFiveU16 therefore performs no element-shift iterations in its while body.
+
+Boundary scenario:
+- All five period values for a wheel are equal to 1100.
+- The insertion-sort while comparison is evaluated but its body is not entered.
+
+Upper-path scenario:
+- Each five-element period history is strictly decreasing (reverse sorted).
+- Analyze the maximum insertion-sort shifts allowed by five elements.
+- Period and pulse values remain nonzero, so PeriodToSpeedQ8 division executes.
+- Vehicle speed is greater than 256, so EvaluateWheelSlip division executes.
+
+Do not treat the ascending nominal scenario as covering the reverse-sorted path.

@@ -1,0 +1,24 @@
+{
+  "artifact_sha256": "7424134A92BF03CCAFF524F7EE6E7AA114EDFDAE52A547E7E3F76F094668EFC5",
+  "clock_hz": 48000000,
+  "sample_count": 40,
+  "measurement_overhead_cycles": 8,
+  "error_flags": 0,
+  "points": [
+    { "point": 0, "task_id": 0, "scenario_id": 0, "scenario": "typical", "mean_us": 43.062, "maximum_us": 43.062 },
+    { "point": 1, "task_id": 0, "scenario_id": 1, "scenario": "boundary", "mean_us": 43.229, "maximum_us": 43.229 },
+    { "point": 2, "task_id": 0, "scenario_id": 2, "scenario": "worst_path_candidate", "mean_us": 43.375, "maximum_us": 43.375 },
+    { "point": 3, "task_id": 1, "scenario_id": 0, "scenario": "typical_ascending", "mean_us": 46.770, "maximum_us": 46.770 },
+    { "point": 4, "task_id": 1, "scenario_id": 1, "scenario": "boundary_equal", "mean_us": 46.854, "maximum_us": 46.854 },
+    { "point": 5, "task_id": 1, "scenario_id": 2, "scenario": "worst_path_reverse_sorted", "mean_us": 78.520, "maximum_us": 78.520 },
+    { "point": 6, "task_id": 2, "scenario_id": 0, "scenario": "typical", "mean_us": 69.312, "maximum_us": 69.312 },
+    { "point": 7, "task_id": 2, "scenario_id": 1, "scenario": "boundary", "mean_us": 70.604, "maximum_us": 70.604 },
+    { "point": 8, "task_id": 2, "scenario_id": 2, "scenario": "worst_path_candidate", "mean_us": 69.770, "maximum_us": 69.770 }
+  ],
+  "observed_task_maxima": [
+    { "task": "BatteryContactorSupervisor_Task10ms", "point": 2, "maximum_us": 43.375 },
+    { "task": "WheelSpeedFusion_Task5ms", "point": 5, "maximum_us": 78.520 },
+    { "task": "DiagnosticEventAging_Task100ms", "point": 7, "maximum_us": 70.604 }
+  ],
+  "formal_wcet_guarantee": false
+}

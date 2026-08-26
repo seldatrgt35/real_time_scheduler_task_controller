@@ -1,0 +1,15 @@
+Timed scope: one direct call to DiagnosticEventAging_Task100ms.
+Initialization and scenario setup occur before timing.
+
+Nominal scenario (typical):
+- Twelve events use the mixed active/status/counter values installed by Initialize.
+
+Boundary scenario:
+- Active events begin with confirm_count=2 and cross the confirmation threshold 3.
+- Inactive events begin with heal_count=4 and cross the healing threshold 5.
+
+Upper-path scenario to analyze:
+- All events are inactive.
+- confirm_count begins at 255, heal_count begins at 4, status begins at 0x03.
+- Each event increments healing to 5, clears confirmation, executes the inactive
+  UpdateDtcStatus path, and updates the checksum.
