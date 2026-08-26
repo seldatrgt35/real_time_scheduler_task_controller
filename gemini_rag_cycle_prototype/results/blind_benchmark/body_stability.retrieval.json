@@ -1,0 +1,44 @@
+{
+  "hits": [
+    {
+      "task_id": "torque_coordination_wcet_board_result.csv:2:AppTask_TorqueCoordination_20ms",
+      "task_name": "AppTask_TorqueCoordination_20ms",
+      "similarity": 0.8145590649268951
+    },
+    {
+      "task_id": "powertrain_input_wcet_board_result.csv:2:AppTask_PowertrainInput_5ms",
+      "task_name": "AppTask_PowertrainInput_5ms",
+      "similarity": 0.8114813997380211
+    },
+    {
+      "task_id": "github_isotp_c_blind_board_results.csv:3:StarTask_IsotpErrorAging_20ms",
+      "task_name": "StarTask_IsotpErrorAging_20ms",
+      "similarity": 0.7931588042600317
+    },
+    {
+      "task_id": "github_uds_real_task_board_results.csv:5:StarTask_DtcAndSessionMaintenance_50ms",
+      "task_name": "StarTask_DtcAndSessionMaintenance_50ms",
+      "similarity": 0.7931058311828404
+    },
+    {
+      "task_id": "iso14229_real_automotive_blind_board_results.csv:3:StarTask_UdsAddressLengthDecode_20ms",
+      "task_name": "StarTask_UdsAddressLengthDecode_20ms",
+      "similarity": 0.789097118828207
+    }
+  ],
+  "excluded": [
+    {
+      "task_id": "body_chassis_wcet_board_result.csv:2:BccTask_WheelSpeedAndBrake_5ms",
+      "reason": "same_source_path"
+    },
+    {
+      "task_id": "body_chassis_wcet_board_result.csv:3:BccTask_ThermalActuator_10ms",
+      "reason": "same_source_path"
+    },
+    {
+      "task_id": "body_chassis_wcet_board_result.csv:4:BccTask_StabilityRequest_20ms",
+      "reason": "same_source_path"
+    }
+  ],
+  "warnings": []
+}

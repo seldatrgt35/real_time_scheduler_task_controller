@@ -1,0 +1,7 @@
+[
+  {"id":"nested_sensor_matrix","source":"experiments/llm_source_wcet_blind_test/automotive_sensor_matrix_task.c","function":"AutomotiveSensorMatrix_Task10ms"},
+  {"id":"body_wheel_brake","source":"task_admission_framework/examples/body_chassis_control_holdout.c","function":"BccTask_WheelSpeedAndBrake_5ms"},
+  {"id":"body_thermal","source":"task_admission_framework/examples/body_chassis_control_holdout.c","function":"BccTask_ThermalActuator_10ms"},
+  {"id":"body_stability","source":"task_admission_framework/examples/body_chassis_control_holdout.c","function":"BccTask_StabilityRequest_20ms"},
+  {"id":"uds_transfer_block","source":"task_admission_framework/examples/iso14229_real_automotive_blind_suite.c","function":"StarTask_UdsTransferDataBlock_5ms"}
+]

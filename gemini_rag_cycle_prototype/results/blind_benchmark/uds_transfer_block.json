@@ -1,0 +1,53 @@
+{
+  "analysis_status": "SUPPORTED",
+  "function_name": "StarTask_UdsTransferDataBlock_5ms",
+  "hardware_profile_id": "S32K148_GCC11_4_O0_48MHz_source_only",
+  "source_analysis": {
+    "outer_iterations": 32,
+    "inner_iterations_per_outer": null,
+    "total_inner_iterations": 32,
+    "worst_case_path": [
+      "initialization",
+      "for_loop_32_iterations",
+      "checksum_xor_result_store"
+    ],
+    "estimated_source_memory_reads": 65,
+    "estimated_source_memory_writes": 33,
+    "dominant_operations": [
+      "array_read",
+      "array_write",
+      "add",
+      "xor",
+      "loop_branch"
+    ]
+  },
+  "retrieved_examples_used": [
+    {
+      "task_id": "basic_memory_calibration_board_results.csv:9:StarMemory_Copy16",
+      "similarity": 0.819591,
+      "measured_mean_us": 10.625,
+      "measured_maximum_us": 10.625,
+      "reason_used": "Provides baseline per-iteration cycles for unoptimized memory copy loop (16 iterations)."
+    },
+    {
+      "task_id": "basic_feature_wcet_board_results.csv:8:StarBasic_MemoryCopy",
+      "similarity": 0.813201,
+      "measured_mean_us": 18.312,
+      "measured_maximum_us": 18.312,
+      "reason_used": "Provides baseline execution time for 32-iteration memory copy loop without arithmetic addition."
+    }
+  ],
+  "estimated_nominal_cycles": 1152,
+  "estimated_upper_cycles": 1224,
+  "estimated_nominal_us": 24.0,
+  "estimated_upper_us": 25.5,
+  "confidence_percent": 92,
+  "estimation_reasoning_summary": "The function contains a deterministic loop executing 32 iterations (STAR_TRANSFER_SIZE). Each iteration performs a 1-byte read from SRAM, a 1-byte write to SRAM, and an 8-bit to 32-bit addition for checksum. Under -O0 optimization on Cortex-M4F, each loop iteration takes ~35 cycles due to stack reload/store operations for local variables. 32 iterations yield ~1120 cycles plus ~32 cycles for function entry/exit and post-loop bitwise XOR operations, resulting in ~1152 nominal cycles (24.0 us at 48 MHz).",
+  "assumptions": [
+    "SRAM access is zero wait-state for data reads/writes",
+    "Loop iteration count is exactly 32 as fixed by STAR_TRANSFER_SIZE constant",
+    "Stack-based local variable loads and stores occur without cache or bus contention"
+  ],
+  "unresolved": [],
+  "warnings": []
+}

@@ -1,0 +1,57 @@
+{
+  "analysis_status": "SUPPORTED",
+  "function_name": "BccTask_ThermalActuator_10ms",
+  "hardware_profile_id": "S32K148_GCC11_4_O0_48MHz_source_only",
+  "source_analysis": {
+    "outer_iterations": 12,
+    "inner_iterations_per_outer": null,
+    "total_inner_iterations": 12,
+    "worst_case_path": [
+      "for_loop_index_0_to_11",
+      "read_g_temperature_input",
+      "call_ApplyActuatorGain",
+      "saturation_check_branch",
+      "write_g_actuator_output",
+      "accumulate_total_output",
+      "write_g_stability_request"
+    ],
+    "estimated_source_memory_reads": 12,
+    "estimated_source_memory_writes": 13,
+    "dominant_operations": [
+      "array_read",
+      "array_write",
+      "function_call",
+      "int_multiplication",
+      "int_division",
+      "range_saturation_branches"
+    ]
+  },
+  "retrieved_examples_used": [
+    {
+      "task_id": "torque_coordination_wcet_board_result.csv:2:AppTask_TorqueCoordination_20ms",
+      "similarity": 0.823111,
+      "measured_mean_us": 48.041,
+      "measured_maximum_us": 48.041,
+      "reason_used": "Reference for 16-iteration loop with helper function call and min/max saturation logic under GCC -O0."
+    },
+    {
+      "task_id": "powertrain_input_wcet_board_result.csv:2:AppTask_PowertrainInput_5ms",
+      "similarity": 0.812804,
+      "measured_mean_us": 16.5,
+      "measured_maximum_us": 16.5,
+      "reason_used": "Reference for loop memory reads and conditional logic structure on Cortex-M4F at 48MHz."
+    }
+  ],
+  "estimated_nominal_cycles": 1152,
+  "estimated_upper_cycles": 1248,
+  "estimated_nominal_us": 24.0,
+  "estimated_upper_us": 26.0,
+  "confidence_percent": 90,
+  "estimation_reasoning_summary": "The query function executes a 12-iteration loop performing array reading, helper function call (ApplyActuatorGain), saturation bounds checking, array writing, and accumulation. Compared to AppTask_TorqueCoordination_20ms (48.041 us for 16 iterations with heavy interpolation calls), BccTask_ThermalActuator_10ms features a simpler helper function (single multiplication and division) and fewer iterations (12 vs 16), yielding ~96 cycles per iteration at -O0 optimization. Multiply 12 iterations by 96 cycles/iteration plus function setup/teardown yields approximately 1152 nominal cycles (24.0 us at 48MHz) and an upper bound of 1248 cycles (26.0 us).",
+  "assumptions": [
+    "No flash/SRAM wait states or bus contention",
+    "GCC -O0 maintains stack frames for ApplyActuatorGain calls"
+  ],
+  "unresolved": [],
+  "warnings": []
+}

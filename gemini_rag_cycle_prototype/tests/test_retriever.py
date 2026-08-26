@@ -9,6 +9,10 @@ from gemini_rag_cycle_prototype.rag.measurement_loader import (
     source_fingerprint,
 )
 from gemini_rag_cycle_prototype.rag.retriever import Retriever, cosine_similarity
+from gemini_rag_cycle_prototype.predictor import (
+    LeakageError,
+    canonicalize_reference_ids,
+)
 from gemini_rag_cycle_prototype.schemas import Measurement, RagRecord, StructuralSummary
 
 
@@ -18,6 +22,11 @@ class FakeEmbedder:
 
     def embed_query(self, text: str) -> list[float]:
         return [1.0, 0.0]
+
+
+class FailingEmbedder(FakeEmbedder):
+    def embed_query(self, text: str) -> list[float]:
+        raise AssertionError("no-RAG mode must not request a query embedding")
 
 
 def record(
@@ -83,6 +92,22 @@ class RetrieverTest(unittest.TestCase):
             "near_duplicate_source", "hardware_profile_mismatch",
             "same_source_path",
         }.issubset(reasons))
+
+    def test_unique_retrieved_task_name_is_canonicalized_safely(self) -> None:
+        item = record("dataset.csv:2:TaskA", "TaskA", "void TaskA(void){x++;}")
+        from gemini_rag_cycle_prototype.rag.retriever import RetrievalHit, RetrievalResult
+        retrieval = RetrievalResult(hits=[RetrievalHit(item, 0.9)])
+        self.assertEqual(
+            {"dataset.csv:2:TaskA"},
+            canonicalize_reference_ids({"TaskA"}, retrieval),
+        )
+
+    def test_unretrieved_reference_is_still_rejected(self) -> None:
+        item = record("dataset.csv:2:TaskA", "TaskA", "void TaskA(void){x++;}")
+        from gemini_rag_cycle_prototype.rag.retriever import RetrievalHit, RetrievalResult
+        retrieval = RetrievalResult(hits=[RetrievalHit(item, 0.9)])
+        with self.assertRaises(LeakageError):
+            canonicalize_reference_ids({"NotRetrieved"}, retrieval)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,48 @@
+{
+  "hits": [
+    {
+      "task_id": "github_uds_real_task_board_results.csv:6:StarTask_ObdRequestAndCanTx_100ms",
+      "task_name": "StarTask_ObdRequestAndCanTx_100ms",
+      "similarity": 0.8311486330130784
+    },
+    {
+      "task_id": "github_isotp_c_blind_board_results.csv:2:StarTask_IsotpConsecutiveFrameReassembly_10ms",
+      "task_name": "StarTask_IsotpConsecutiveFrameReassembly_10ms",
+      "similarity": 0.8304981967820543
+    },
+    {
+      "task_id": "basic_memory_calibration_board_results.csv:9:StarMemory_Copy16",
+      "task_name": "StarMemory_Copy16",
+      "similarity": 0.8195911031132176
+    },
+    {
+      "task_id": "github_uds_real_task_board_results.csv:2:StarTask_UdsCanRxDispatch_5ms",
+      "task_name": "StarTask_UdsCanRxDispatch_5ms",
+      "similarity": 0.8167515401397946
+    },
+    {
+      "task_id": "basic_feature_wcet_board_results.csv:8:StarBasic_MemoryCopy",
+      "task_name": "StarBasic_MemoryCopy",
+      "similarity": 0.813200758410395
+    }
+  ],
+  "excluded": [
+    {
+      "task_id": "iso14229_real_automotive_blind_board_results.csv:2:StarTask_UdsReadDidPack_10ms",
+      "reason": "same_source_path"
+    },
+    {
+      "task_id": "iso14229_real_automotive_blind_board_results.csv:3:StarTask_UdsAddressLengthDecode_20ms",
+      "reason": "same_source_path"
+    },
+    {
+      "task_id": "iso14229_real_automotive_blind_board_results.csv:4:StarTask_UdsTransferDataBlock_5ms",
+      "reason": "same_source_path"
+    },
+    {
+      "task_id": "iso14229_real_automotive_blind_board_results.csv:5:StarTask_UdsSecurityKeyValidate_20ms",
+      "reason": "same_source_path"
+    }
+  ],
+  "warnings": []
+}

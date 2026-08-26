@@ -14,12 +14,63 @@ Rules:
 - Resolve bounded loops and feasible source-level paths.
 - Follow helper functions only when their bodies are supplied.
 - If a critical loop bound or helper body is missing, return PARTIAL or UNRESOLVED.
+- Never price a loop body only once. Convert every operation, branch, memory
+  access, and helper call inside a bounded loop to its dynamic execution count.
+- For nested loops, multiply the bounds along the complete nesting path. A
+  helper called once in a 6 by 6 loop executes 36 times, before accounting for
+  helper-internal branches, memory accesses, and operators.
+- Analyze each supplied helper body separately. Compute its per-invocation
+  nominal and conservative cost, then multiply those costs by the helper's
+  dynamic call count at every call site. Do not treat a call as only call/return
+  overhead while omitting the callee body.
+- Count loop initialization, condition checks (including the final failed
+  check), increments, address/index calculations, loads, stores, arithmetic,
+  comparisons, taken/not-taken branches, function-call overhead, and callee
+  work. Distinguish source-level logical accesses from compiler-sensitive
+  stack/addressing overhead and include a justified allowance for the latter.
+- Before choosing final cycle values, build an internal dynamic-work ledger for
+  the worst-case feasible path. At minimum it must reconcile loop-control
+  executions, total helper invocations, helper-body executions, memory reads,
+  memory writes, branches, and major operator classes. Use that ledger in the
+  final arithmetic; merely listing counts without pricing them is insufficient.
+- Perform a mandatory bottom-up cross-check: sum fixed task overhead, loop
+  control, caller-body work, call overhead, and all multiplied callee-body work.
+  If this reconstruction materially disagrees with the initial estimate, use
+  the higher justified value or lower confidence and return PARTIAL when the
+  discrepancy cannot be resolved.
+- Sanity-check relative complexity. A task with materially more dynamic nested
+  iterations or helper-body executions must not receive a lower estimate than
+  a structurally cheaper task/reference unless a concrete operation-level
+  reason is stated.
 - Retrieved measurements are reference examples, not direct answers.
 - Compare loop structure, operation mix, branches, calls, data types, and memory access patterns.
 - Do not copy a measured value without explaining structural similarity and differences.
 - The query task's own measurement is intentionally hidden.
+- In retrieved_examples_used.task_id, copy the complete "Reference example ID"
+  exactly as supplied. Do not substitute the shorter task name.
 - Convert your own cycle predictions to microseconds using the hardware clock.
+- The conservative upper estimate must cover plausible source-to-machine-code
+  expansion at the configured optimization level; it is not an arbitrary small
+  percentage added to nominal. Increase it when nested loops, branch paths,
+  helper bodies, array indexing, or stack traffic create uncertainty.
 - Do not call the result a formal WCET guarantee.
+
+MANDATORY ESTIMATION PROCEDURE
+1. Identify the worst-case feasible source path and every bounded loop nesting
+   path that can occur on it.
+2. Derive dynamic counts. For each call site use:
+   dynamic helper invocations = product of enclosing loop bounds multiplied by
+   calls per enclosing-body execution.
+3. Expand each supplied helper into per-invocation operation, branch, and memory
+   costs, including its own bounded loops.
+4. Calculate nominal cycles bottom-up from fixed overhead plus every dynamic
+   component. Do not rely on pattern recognition alone.
+5. Calculate upper cycles from the same ledger using conservative path and
+   compilation allowances. Confirm upper cycles are not below nominal cycles.
+6. Recalculate microseconds from cycles using the hardware clock and verify the
+   two representations agree before returning JSON.
+7. In estimation_reasoning_summary, state the decisive dynamic counts and show
+   a compact arithmetic decomposition of the final nominal and upper estimates.
 
 HARDWARE PROFILE
 {hardware_profile}

@@ -1,0 +1,68 @@
+{
+  "task_count": 5,
+  "planned_task_count": 5,
+  "missing_predictions": [],
+  "upper_coverage_count": 1,
+  "rows": [
+    {
+      "id": "nested_sensor_matrix",
+      "function": "AutomotiveSensorMatrix_Task10ms",
+      "status": "SUPPORTED",
+      "board_max_us": 28.187,
+      "nominal_us": 22.5,
+      "nominal_ape_percent": 20.175967644658886,
+      "upper_us": 26.0,
+      "upper_covers_board": false,
+      "upper_headroom_us": -2.187000000000001,
+      "confidence_percent": 88
+    },
+    {
+      "id": "body_wheel_brake",
+      "function": "BccTask_WheelSpeedAndBrake_5ms",
+      "status": "SUPPORTED",
+      "board_max_us": 29.02,
+      "nominal_us": 24.75,
+      "nominal_ape_percent": 14.713990351481735,
+      "upper_us": 26.0,
+      "upper_covers_board": false,
+      "upper_headroom_us": -3.0199999999999996,
+      "confidence_percent": 92
+    },
+    {
+      "id": "body_thermal",
+      "function": "BccTask_ThermalActuator_10ms",
+      "status": "SUPPORTED",
+      "board_max_us": 23.02,
+      "nominal_us": 24.0,
+      "nominal_ape_percent": 4.257167680278021,
+      "upper_us": 26.0,
+      "upper_covers_board": true,
+      "upper_headroom_us": 2.9800000000000004,
+      "confidence_percent": 90
+    },
+    {
+      "id": "body_stability",
+      "function": "BccTask_StabilityRequest_20ms",
+      "status": "SUPPORTED",
+      "board_max_us": 34.791,
+      "nominal_us": 30.0,
+      "nominal_ape_percent": 13.77080279382598,
+      "upper_us": 33.0,
+      "upper_covers_board": false,
+      "upper_headroom_us": -1.7909999999999968,
+      "confidence_percent": 90
+    },
+    {
+      "id": "uds_transfer_block",
+      "function": "StarTask_UdsTransferDataBlock_5ms",
+      "status": "SUPPORTED",
+      "board_max_us": 28.562,
+      "nominal_us": 24.0,
+      "nominal_ape_percent": 15.9722708493803,
+      "upper_us": 25.5,
+      "upper_covers_board": false,
+      "upper_headroom_us": -3.062000000000001,
+      "confidence_percent": 92
+    }
+  ]
+}

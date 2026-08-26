@@ -1,0 +1,48 @@
+{
+  "analysis_status": "SUPPORTED",
+  "function_name": "BccTask_WheelSpeedAndBrake_5ms",
+  "hardware_profile_id": "S32K148_GCC11_4_O0_48MHz_source_only",
+  "source_analysis": {
+    "outer_iterations": 24,
+    "inner_iterations_per_outer": null,
+    "total_inner_iterations": 24,
+    "worst_case_path": [
+      "for loop iterations 0 to 23",
+      "g_wheel_capture array read",
+      "threshold computation wheel * 20 + 1100",
+      "conditional branch slip_flags update",
+      "final store to g_brake_request"
+    ],
+    "estimated_source_memory_reads": 24,
+    "estimated_source_memory_writes": 1,
+    "dominant_operations": [
+      "array_load",
+      "addition",
+      "multiplication",
+      "comparison",
+      "bitwise_shift_and_or"
+    ]
+  },
+  "retrieved_examples_used": [
+    {
+      "task_id": "powertrain_input_wcet_board_result.csv:2:AppTask_PowertrainInput_5ms",
+      "similarity": 0.833867,
+      "measured_mean_us": 16.5,
+      "measured_maximum_us": 16.5,
+      "reason_used": "Highly similar structure featuring a single loop over sample array with conditional flag mask updates and accumulated status write; scaled from 16 to 24 iterations with minor adjustment for dynamic threshold calculation."
+    }
+  ],
+  "estimated_nominal_cycles": 1188,
+  "estimated_upper_cycles": 1248,
+  "estimated_nominal_us": 24.75,
+  "estimated_upper_us": 26.0,
+  "confidence_percent": 92,
+  "estimation_reasoning_summary": "The target task performs 24 iterations of sample processing, array loading, speed threshold comparison (with a dynamic wheel index multiplication), bitwise flag setting, and a final global register write. Comparing with AppTask_PowertrainInput_5ms (16 iterations, 16.5 us / 792 cycles at -O0 48MHz), scaling iterations by 1.5x and accounting for unoptimized dynamic threshold arithmetic yields ~1188 nominal cycles (24.75 us).",
+  "assumptions": [
+    "SRAM accesses complete without additional wait states",
+    "g_wheel_capture is placed in contiguous SRAM",
+    "GCC -O0 unoptimized instruction sequence produces standard stack-based intermediate reads/writes per iteration"
+  ],
+  "unresolved": [],
+  "warnings": []
+}

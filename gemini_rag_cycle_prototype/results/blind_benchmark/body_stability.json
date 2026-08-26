@@ -1,0 +1,60 @@
+{
+  "analysis_status": "SUPPORTED",
+  "function_name": "BccTask_StabilityRequest_20ms",
+  "hardware_profile_id": "S32K148_GCC11_4_O0_48MHz_source_only",
+  "source_analysis": {
+    "outer_iterations": 20,
+    "inner_iterations_per_outer": null,
+    "total_inner_iterations": 20,
+    "worst_case_path": [
+      "g_stability_request read",
+      "loop 20 iterations",
+      "read g_wheel_capture array",
+      "subtract constant 1000",
+      "call ApplyActuatorGain",
+      "multiply and divide by 256",
+      "add correction to request",
+      "conditional saturation checks",
+      "store back to g_stability_request"
+    ],
+    "estimated_source_memory_reads": 21,
+    "estimated_source_memory_writes": 1,
+    "dominant_operations": [
+      "array_access",
+      "function_call",
+      "int_mul",
+      "int_div",
+      "branch_compare",
+      "add_sub"
+    ]
+  },
+  "retrieved_examples_used": [
+    {
+      "task_id": "torque_coordination_wcet_board_result.csv:2:AppTask_TorqueCoordination_20ms",
+      "similarity": 0.814559,
+      "measured_mean_us": 48.041,
+      "measured_maximum_us": 48.041,
+      "reason_used": "Structural reference for loop with 16 iterations, helper function call per iteration, and saturation logic, yielding 48.041 us (2306 cycles)."
+    },
+    {
+      "task_id": "powertrain_input_wcet_board_result.csv:2:AppTask_PowertrainInput_5ms",
+      "similarity": 0.811481,
+      "measured_mean_us": 16.5,
+      "measured_maximum_us": 16.5,
+      "reason_used": "Baseline baseline loop overhead reference for 16 iterations without helper call."
+    }
+  ],
+  "estimated_nominal_cycles": 1440,
+  "estimated_upper_cycles": 1584,
+  "estimated_nominal_us": 30.0,
+  "estimated_upper_us": 33.0,
+  "confidence_percent": 90,
+  "estimation_reasoning_summary": "The task BccTask_StabilityRequest_20ms executes a single loop with exactly 20 iterations. In each iteration, it performs an array read (g_wheel_capture[index]), calls the helper function ApplyActuatorGain (which executes a 32-bit integer multiplication and division by 256), accumulates the correction, and applies conditional bounds checks. Under GCC -O0 optimization on ARM Cortex-M4F (48MHz), unoptimized stack frame overhead per function call adds ~20 cycles, loop overhead adds ~10 cycles, and the body takes ~40 cycles, resulting in ~70-72 cycles per iteration (~1440 nominal cycles total). This is scaled relative to AppTask_TorqueCoordination_20ms which takes ~144 cycles/iteration due to a more complex torque interpolation helper.",
+  "assumptions": [
+    "Compiled with GCC 11.4 -O0 targeting Cortex-M4F at 48MHz without instruction caching",
+    "Zero wait-state SRAM data and code access",
+    "All loop bounds are strictly constant (20 iterations)"
+  ],
+  "unresolved": [],
+  "warnings": []
+}

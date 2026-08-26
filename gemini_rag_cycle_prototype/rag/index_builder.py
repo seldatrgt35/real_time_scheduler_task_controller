@@ -40,7 +40,16 @@ def build_index(
 ) -> RagIndex:
     embeddings = embedder.embed_documents([embedding_text(item) for item in records])
     if len(embeddings) != len(records):
-        raise ValueError("embedding count does not match record count")
+        raise ValueError(
+            "Embedding count mismatch: "
+            f"expected {len(records)}, received {len(embeddings)}"
+        )
+    for position, embedding in enumerate(embeddings):
+        if len(embedding) != dimensions:
+            raise ValueError(
+                "Embedding dimension mismatch at record "
+                f"{position}: expected {dimensions}, received {len(embedding)}"
+            )
     index = RagIndex(
         embedding_model=model_name,
         embedding_dimensions=dimensions,

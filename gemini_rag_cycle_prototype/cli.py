@@ -29,6 +29,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--exclude-source-path")
     result.add_argument("--top-k", type=int, default=5)
     result.add_argument("--minimum-similarity", type=float, default=0.45)
+    result.add_argument(
+        "--no-rag", action="store_true",
+        help="skip retrieval and predict from source plus hardware profile only",
+    )
     result.add_argument("--output", type=Path)
     result.add_argument("--repository-root", type=Path, default=Path(__file__).resolve().parents[1])
     return result
@@ -52,6 +56,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     root = args.repository_root.resolve()
     prototype = root / "gemini_rag_cycle_prototype"
+    source_code = read_required(args.source, "C source") if args.source else None
+    if args.source and not args.function:
+        parser().error("--function is required for prediction")
     index_path = prototype / "index" / "measurements.json"
     loader = MeasurementLoader(root)
     records = loader.load()
@@ -73,9 +80,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.build_index or args.rebuild_index:
             return 0
         parser().error("--source and --function are required for prediction")
-    if not args.function:
-        parser().error("--function is required for prediction")
-    source_code = read_required(args.source, "C source")
     context_parts = [read_required(path, "context file") for path in args.context_file]
     client = client or GeminiClient()
     prediction, raw, retrieval = Predictor(
@@ -92,6 +96,7 @@ def main(argv: list[str] | None = None) -> int:
             args.exclude_source_path
             or repository_relative_or_absolute(args.source, root)
         ),
+        use_rag=not args.no_rag,
     )
     output = args.output or prototype / "results" / f"{args.function}.json"
     output.parent.mkdir(parents=True, exist_ok=True)

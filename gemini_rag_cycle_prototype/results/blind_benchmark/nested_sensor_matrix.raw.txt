@@ -1,0 +1,56 @@
+{
+  "analysis_status": "SUPPORTED",
+  "function_name": "AutomotiveSensorMatrix_Task10ms",
+  "hardware_profile_id": "S32K148_GCC11_4_O0_48MHz_source_only",
+  "source_analysis": {
+    "outer_iterations": 8,
+    "inner_iterations_per_outer": 4,
+    "total_inner_iterations": 32,
+    "worst_case_path": [
+      "for sensor = 0 to 7",
+      "sum = 0",
+      "for sample = 0 to 3: sum += sensor_samples[sensor][sample]",
+      "filtered_sensor[sensor] = sum >> 2",
+      "checksum ^= filtered_sensor[sensor]",
+      "task_sink = checksum"
+    ],
+    "estimated_source_memory_reads": 40,
+    "estimated_source_memory_writes": 9,
+    "dominant_operations": [
+      "2D array indexing",
+      "32-bit addition",
+      "bitwise right shift",
+      "bitwise XOR",
+      "loop control (load, increment, compare, branch)"
+    ]
+  },
+  "retrieved_examples_used": [
+    {
+      "task_id": "powertrain_input_wcet_board_result.csv:2:AppTask_PowertrainInput_5ms",
+      "similarity": 0.843395,
+      "measured_mean_us": 16.5,
+      "measured_maximum_us": 16.5,
+      "reason_used": "Contains 16 iterations with 1D array access, addition, and bitwise operations under -O0 at 48 MHz (approx. 49.5 cycles/iteration)."
+    },
+    {
+      "task_id": "basic_control_calibration_board_results.csv:12:StarControl_Checksum16",
+      "similarity": 0.817563,
+      "measured_mean_us": 9.729,
+      "measured_maximum_us": 9.729,
+      "reason_used": "Provides a baseline for 16-iteration loop overhead and XOR accumulation under -O0 (approx. 29.2 cycles/iteration)."
+    }
+  ],
+  "estimated_nominal_cycles": 1080,
+  "estimated_upper_cycles": 1248,
+  "estimated_nominal_us": 22.5,
+  "estimated_upper_us": 26.0,
+  "confidence_percent": 88,
+  "estimation_reasoning_summary": "The task contains a perfectly bounded nested loop structure (8 outer iterations, 4 inner iterations per outer, totaling 32 inner iterations). At -O0 on Cortex-M4, unoptimized stack variable accesses and 2D array indexing require ~25 cycles per inner iteration (~800 cycles total), with ~30 cycles per outer iteration overhead for shifting, XORing, and loop control (~240 cycles total), plus function prologue/epilogue and final volatile sink write (~40 cycles), totaling ~1080 nominal cycles (22.5 us at 48 MHz).",
+  "assumptions": [
+    "Target executes at 48 MHz from flash/SRAM without cache miss delays.",
+    "Unoptimized -O0 compilation keeps local loop counters and intermediate sums on the stack frame.",
+    "Data arrays reside in internal SRAM with zero wait states."
+  ],
+  "unresolved": [],
+  "warnings": []
+}

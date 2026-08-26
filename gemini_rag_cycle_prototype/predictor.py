@@ -14,6 +14,32 @@ class LeakageError(RuntimeError):
     pass
 
 
+def canonicalize_reference_ids(
+    returned_ids: set[str], retrieval: RetrievalResult
+) -> set[str]:
+    """Resolve only exact IDs or unique names from the already-filtered hits."""
+    allowed_ids = {hit.record.task_id for hit in retrieval.hits}
+    names: dict[str, list[str]] = {}
+    for hit in retrieval.hits:
+        names.setdefault(hit.record.task_name, []).append(hit.record.task_id)
+    canonical = set()
+    unknown = set()
+    for returned in returned_ids:
+        if returned in allowed_ids:
+            canonical.add(returned)
+        elif len(names.get(returned, [])) == 1:
+            canonical.add(names[returned][0])
+        else:
+            unknown.add(returned)
+    if unknown:
+        raise LeakageError(
+            "Gemini cited references outside the leakage-filtered retrieval "
+            f"set: returned={sorted(unknown)}; allowed_ids={sorted(allowed_ids)}; "
+            f"allowed_names={sorted(names)}"
+        )
+    return canonical
+
+
 class Predictor:
     def __init__(
         self, repository_root: Path, index: RagIndex, client: GeminiClient
@@ -60,16 +86,21 @@ class Predictor:
         exclude_task_id: str | None = None,
         exclude_function: str | None = None,
         exclude_source_path: str | None = None,
+        use_rag: bool = True,
     ) -> tuple[PredictionResponse, str, RetrievalResult]:
-        retrieval = Retriever(self.index, self.client).retrieve(
-            source_code,
-            function_name,
-            HARDWARE_PROFILE_ID,
-            top_k=top_k,
-            minimum_similarity=minimum_similarity,
-            exclude_task_id=exclude_task_id,
-            exclude_function=exclude_function,
-            exclude_source_path=exclude_source_path,
+        retrieval = (
+            Retriever(self.index, self.client).retrieve(
+                source_code,
+                function_name,
+                HARDWARE_PROFILE_ID,
+                top_k=top_k,
+                minimum_similarity=minimum_similarity,
+                exclude_task_id=exclude_task_id,
+                exclude_function=exclude_function,
+                exclude_source_path=exclude_source_path,
+            )
+            if use_rag
+            else RetrievalResult()
         )
         prompt = self.template.format(
             hardware_profile=json.dumps(self.profile, indent=2),
@@ -79,13 +110,15 @@ class Predictor:
             references=self._references(retrieval),
         )
         prediction, raw = self.client.predict(prompt)
-        allowed_ids = {hit.record.task_id for hit in retrieval.hits}
         returned_ids = {
             example.task_id for example in prediction.retrieved_examples_used
         }
-        if not returned_ids.issubset(allowed_ids):
-            raise LeakageError(
-                "Gemini cited a reference that was not in the leakage-filtered retrieval set"
+        canonical_ids = canonicalize_reference_ids(returned_ids, retrieval)
+        if canonical_ids != returned_ids:
+            prediction.warnings.append(
+                "Gemini returned one or more unique retrieved task names instead "
+                "of full reference IDs; citations were validated against the "
+                "same leakage-filtered top-k set."
             )
         if prediction.hardware_profile_id != HARDWARE_PROFILE_ID:
             raise ValueError("prediction used the wrong hardware profile")
