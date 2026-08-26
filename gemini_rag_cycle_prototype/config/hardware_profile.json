@@ -5,13 +5,16 @@
   "clock_hz": 48000000,
   "compiler": "ARM GCC 11.4",
   "optimization": "-O0",
+  "instruction_location": "internal PFlash; ELF .text starts at address 0x00000410",
   "floating_point": "not used by initial query profile",
   "initialization_timed": false,
   "data_location": "internal SRAM",
   "interrupts_included": false,
   "dma_included": false,
   "scheduler_context_switch_included": false,
-  "cache_effects_included": false,
-  "flash_wait_states": null,
+  "instruction_cache": "do not assume an instruction cache",
+  "branch_prediction": "do not assume a dynamic branch predictor or assign generic branch-misprediction penalties",
+  "flash_wait_states": "not supplied; zero-wait-state instruction fetch must not be assumed",
+  "timed_scope": "direct call to the selected task function only; initialization, warm-up, DWT access, time conversion, result storage, interrupts, DMA, and scheduler switching are excluded",
   "measurement_note": "The repository device profile advertises a 112 MHz-capable MCU; these board harness measurements explicitly convert at 48 MHz."
 }

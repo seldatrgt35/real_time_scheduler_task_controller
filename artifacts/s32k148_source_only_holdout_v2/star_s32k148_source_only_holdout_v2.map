@@ -1,0 +1,357 @@
+Archive member included to satisfy reference by file (symbol)
+
+c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+                              C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o (__aeabi_uldivmod)
+c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+                              c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o) (__udivmoddi4)
+c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
+                              c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o) (__aeabi_ldiv0)
+
+Discarded input sections
+
+ .group         0x00000000        0xc C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .text          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .data          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .bss           0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .comment       0x00000000       0x89 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .group         0x00000000        0xc C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .text          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .data          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .bss           0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .debug_macro   0x00000000      0xa8a C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .comment       0x00000000       0x89 C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .group         0x00000000        0xc C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+ .text          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+ .data          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+ .bss           0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+ .debug_macro   0x00000000      0xa8a C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+ .comment       0x00000000       0x89 C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+ .text          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+ .data          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+ .bss           0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+ .data          0x00000000        0x0 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+ .bss           0x00000000        0x0 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+ .data          0x00000000        0x0 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+ .bss           0x00000000        0x0 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+ .ARM.extab     0x00000000        0x0 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+ .ARM.exidx     0x00000000        0x8 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+ .data          0x00000000        0x0 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
+ .bss           0x00000000        0x0 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+FLASH            0x00000000         0x00180000         xr
+RAM              0x1ffe0000         0x0003f000         xrw
+*default*        0x00000000         0xffffffff
+
+Linker script and memory map
+
+LOAD C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+LOAD C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+LOAD C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+LOAD C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+START GROUP
+LOAD c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a
+LOAD c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/../../../../arm-none-eabi/lib/thumb/v7e-m/nofp\libg.a
+LOAD c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/../../../../arm-none-eabi/lib/thumb/v7e-m/nofp\libc.a
+END GROUP
+                0x1ffe0000                __ram_start = ORIGIN (RAM)
+                0x2001f000                __ram_end = (ORIGIN (RAM) + LENGTH (RAM))
+                0x2001f000                __StackTop = __ram_end
+                0x2001e000                __StackLimit = (__StackTop - 0x1000)
+
+.isr_vector     0x00000000      0x400
+ *(.isr_vector)
+ .isr_vector    0x00000000      0x400 C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+                0x00000000                g_pfnVectors
+
+.flash_config   0x00000400       0x10
+ *(.flash_config)
+ .flash_config  0x00000400       0x10 C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+                0x00000400                g_s32k148_flash_config
+
+.text           0x00000410      0xfcc
+ *(.text*)
+ .text.AbsoluteDifferenceU16
+                0x00000410       0x30 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .text.EvaluateVoltageAgreement
+                0x00000440       0x32 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .text.EvaluateCoilCurrent
+                0x00000472       0x34 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .text.NextContactorState
+                0x000004a6       0x9e C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .text.MixContactorDiagnostic
+                0x00000544       0x3a C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .text.MedianOfFiveU16
+                0x0000057e       0xac C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .text.PeriodToSpeedQ8
+                0x0000062a       0x3a C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .text.EvaluateWheelSlip
+                0x00000664       0x4a C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .text.SaturatingIncrementU8
+                0x000006ae       0x1c C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .text.UpdateDtcStatus
+                0x000006ca       0x62 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .text.UpdateDtcChecksum
+                0x0000072c       0x34 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .text.AutomotiveHoldoutV2_Initialize
+                0x00000760      0x1d0 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+                0x00000760                AutomotiveHoldoutV2_Initialize
+ .text.BatteryContactorSupervisor_Task10ms
+                0x00000930       0xe8 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+                0x00000930                BatteryContactorSupervisor_Task10ms
+ .text.WheelSpeedFusion_Task5ms
+                0x00000a18      0x118 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+                0x00000a18                WheelSpeedFusion_Task5ms
+ .text.DiagnosticEventAging_Task100ms
+                0x00000b30      0x104 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+                0x00000b30                DiagnosticEventAging_Task100ms
+ .text.ToMicrosecondsX1000
+                0x00000c34       0x4c C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .text.MeasureOverhead
+                0x00000c80       0x4c C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .text.main     0x00000ccc      0x318 C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+                0x00000ccc                main
+ .text.NMI_Handler
+                0x00000fe4        0x8 C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+                0x00000fe4                NMI_Handler
+ .text.HardFault_Handler
+                0x00000fec        0x8 C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+                0x00000fec                HardFault_Handler
+ .text.SVC_Handler
+                0x00000ff4        0xc C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+                0x00000ff4                SVC_Handler
+ .text.PendSV_Handler
+                0x00001000        0xc C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+                0x00001000                PendSV_Handler
+ .text.SysTick_Handler
+                0x0000100c        0xc C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+                0x0000100c                SysTick_Handler
+ .text.LPTMR0_IRQHandler
+                0x00001018        0xc C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+                0x00001018                LPTMR0_IRQHandler
+ .text.rts_s32k148_reset_entry
+                0x00001024        0xe C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+                0x00001024                rts_s32k148_reset_entry
+ *fill*         0x00001032        0x2 
+ .text.Reset_Handler
+                0x00001034       0x94 C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+                0x00001034                Reset_Handler
+ .text.Default_Handler
+                0x000010c8        0x8 C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+                0x000010c8                Default_Handler
+ .text          0x000010d0       0x30 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+                0x000010d0                __aeabi_uldivmod
+ .text          0x00001100      0x2d8 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+                0x00001100                __udivmoddi4
+ .text          0x000013d8        0x4 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
+                0x000013d8                __aeabi_idiv0
+                0x000013d8                __aeabi_ldiv0
+ *(.rodata*)
+ *(.init)
+ *(.fini)
+                0x000013dc                . = ALIGN (0x4)
+                0x000013dc                __text_end = .
+
+.glue_7         0x000013dc        0x0
+ .glue_7        0x000013dc        0x0 linker stubs
+
+.glue_7t        0x000013dc        0x0
+ .glue_7t       0x000013dc        0x0 linker stubs
+
+.vfp11_veneer   0x000013dc        0x0
+ .vfp11_veneer  0x000013dc        0x0 linker stubs
+
+.v4_bx          0x000013dc        0x0
+ .v4_bx         0x000013dc        0x0 linker stubs
+
+.iplt           0x000013dc        0x0
+ .iplt          0x000013dc        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+
+.rel.dyn        0x000013dc        0x0
+ .rel.iplt      0x000013dc        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+
+.data           0x1ffe0000        0x0 load address 0x000013dc
+                0x1ffe0000                . = ALIGN (0x4)
+                0x1ffe0000                __data_start = .
+ *(.data*)
+                0x1ffe0000                . = ALIGN (0x4)
+                0x1ffe0000                __data_end = .
+                0x000013dc                __data_load = LOADADDR (.data)
+
+.igot.plt       0x1ffe0000        0x0
+ .igot.plt      0x1ffe0000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+
+.bss            0x1ffe0000       0xe0
+                0x1ffe0000                . = ALIGN (0x10)
+                0x1ffe0000                __bss_start = .
+ *(.bss*)
+ .bss.s_pack_voltage
+                0x1ffe0000        0xc C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .bss.s_bus_voltage
+                0x1ffe000c        0xc C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .bss.s_coil_current
+                0x1ffe0018        0xc C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .bss.s_contactor_command
+                0x1ffe0024        0x6 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ *fill*         0x1ffe002a        0x2 
+ .bss.s_contactor_state
+                0x1ffe002c        0x6 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ *fill*         0x1ffe0032        0x2 
+ .bss.s_wheel_period
+                0x1ffe0034       0x28 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .bss.s_wheel_pulse_count
+                0x1ffe005c        0x8 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .bss.s_dtc_active
+                0x1ffe0064        0xc C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .bss.s_dtc_confirm_counter
+                0x1ffe0070        0xc C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .bss.s_dtc_heal_counter
+                0x1ffe007c        0xc C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .bss.s_dtc_status
+                0x1ffe0088        0xc C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .bss.s_holdout_sink
+                0x1ffe0094        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .bss.g_star_holdout_v2_complete
+                0x1ffe0098        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+                0x1ffe0098                g_star_holdout_v2_complete
+ .bss.g_star_holdout_v2_current
+                0x1ffe009c        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+                0x1ffe009c                g_star_holdout_v2_current
+ .bss.g_star_holdout_v2_results
+                0x1ffe00a0       0x40 C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+                0x1ffe00a0                g_star_holdout_v2_results
+ *(COMMON)
+                0x1ffe00e0                . = ALIGN (0x10)
+                0x1ffe00e0                __bss_end = .
+                0x1ffe00e0                __image_ram_end = .
+                0x00000001                ASSERT ((__image_ram_end <= __StackLimit), Static RAM sections overlap the reserved MSP stack)
+                0x00000001                ASSERT (((__StackTop & 0x7) == 0x0), MSP top must be 8-byte aligned)
+                0x00000001                ASSERT ((SIZEOF (.isr_vector) == 0x400), S32K148 vector table must contain exactly 256 entries)
+                0x00000001                ASSERT ((ADDR (.flash_config) == 0x400), S32K148 flash configuration field must be at 0x400)
+
+/DISCARD/
+ *(.comment)
+ *(.ARM.exidx*)
+ *(.ARM.extab*)
+OUTPUT(artifacts\s32k148_source_only_holdout_v2\star_s32k148_source_only_holdout_v2.elf elf32-littlearm)
+LOAD linker stubs
+
+.ARM.attributes
+                0x00000000       0x2c
+ .ARM.attributes
+                0x00000000       0x2e C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .ARM.attributes
+                0x0000002e       0x2e C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .ARM.attributes
+                0x0000005c       0x2e C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+ .ARM.attributes
+                0x0000008a       0x21 C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+ .ARM.attributes
+                0x000000ab       0x1e c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+ .ARM.attributes
+                0x000000c9       0x2e c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+ .ARM.attributes
+                0x000000f7       0x1e c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
+
+.note.GNU-stack
+                0x00000000        0x0
+ .note.GNU-stack
+                0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+
+.debug_info     0x00000000     0x11f7
+ .debug_info    0x00000000      0x6d7 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .debug_info    0x000006d7      0x314 C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .debug_info    0x000009eb       0xb0 C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+ .debug_info    0x00000a9b       0x23 C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+ .debug_info    0x00000abe       0x24 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+ .debug_info    0x00000ae2      0x6f1 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+ .debug_info    0x000011d3       0x24 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
+
+.debug_abbrev   0x00000000      0x481
+ .debug_abbrev  0x00000000      0x13f C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .debug_abbrev  0x0000013f      0x131 C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .debug_abbrev  0x00000270       0x6d C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+ .debug_abbrev  0x000002dd       0x12 C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+ .debug_abbrev  0x000002ef       0x14 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+ .debug_abbrev  0x00000303      0x16a c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+ .debug_abbrev  0x0000046d       0x14 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
+
+.debug_aranges  0x00000000      0x138
+ .debug_aranges
+                0x00000000       0x90 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .debug_aranges
+                0x00000090       0x30 C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .debug_aranges
+                0x000000c0       0x50 C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+ .debug_aranges
+                0x00000110       0x28 C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+
+.debug_rnglists
+                0x00000000      0x153
+ .debug_rnglists
+                0x00000000       0x6d C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .debug_rnglists
+                0x0000006d       0x20 C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .debug_rnglists
+                0x0000008d       0x37 C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+ .debug_rnglists
+                0x000000c4       0x1a C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+ .debug_rnglists
+                0x000000de       0x75 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+
+.debug_macro    0x00000000      0xb1f
+ .debug_macro   0x00000000       0x39 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .debug_macro   0x00000039      0xa8a C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .debug_macro   0x00000ac3       0x4b C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .debug_macro   0x00000b0e       0x11 C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+
+.debug_line     0x00000000      0xf3c
+ .debug_line    0x00000000      0x585 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .debug_line    0x00000585      0x1f2 C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .debug_line    0x00000777       0xee C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+ .debug_line    0x00000865       0x95 C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+ .debug_line    0x000008fa       0x4e c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+ .debug_line    0x00000948      0x5aa c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+ .debug_line    0x00000ef2       0x4a c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
+
+.debug_str      0x00000000     0x4101
+ .debug_str     0x00000000     0x3278 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+                               0x3311 (size before relaxing)
+ .debug_str     0x00003278      0x6d2 C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+                               0x35b9 (size before relaxing)
+ .debug_str     0x0000394a       0xb1 C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+                               0x2eb8 (size before relaxing)
+ .debug_str     0x000039fb       0x77 C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+                                 0xc4 (size before relaxing)
+ .debug_str     0x00003a72       0x92 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+                                 0x9e (size before relaxing)
+ .debug_str     0x00003b04      0x5c5 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+                                0x6c7 (size before relaxing)
+ .debug_str     0x000040c9       0x38 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
+                                 0xa2 (size before relaxing)
+
+.debug_frame    0x00000000      0x42c
+ .debug_frame   0x00000000      0x264 C:\Users\nxg19748\AppData\Local\Temp\cc08K1NW.o
+ .debug_frame   0x00000264       0x8c C:\Users\nxg19748\AppData\Local\Temp\ccxUXeYY.o
+ .debug_frame   0x000002f0       0xdc C:\Users\nxg19748\AppData\Local\Temp\cc47upP8.o
+ .debug_frame   0x000003cc       0x2c c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+ .debug_frame   0x000003f8       0x34 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+
+.debug_line_str
+                0x00000000      0x156
+ .debug_line_str
+                0x00000000       0xb8 C:\Users\nxg19748\AppData\Local\Temp\cc90g13x.o
+                                 0xca (size before relaxing)
+ .debug_line_str
+                0x000000b8       0x92 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+                                 0x9a (size before relaxing)
+ .debug_line_str
+                0x0000014a        0xc c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
+                                 0xa2 (size before relaxing)
+
+.debug_loclists
+                0x00000000      0xb1b
+ .debug_loclists
+                0x00000000      0xb1b c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)

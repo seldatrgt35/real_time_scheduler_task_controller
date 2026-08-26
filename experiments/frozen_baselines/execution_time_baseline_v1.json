@@ -1,0 +1,100 @@
+{
+  "baseline_id": "execution-time-baseline-v1",
+  "status": "frozen",
+  "policy": "Do not overwrite listed prediction files or reinterpret fixed-input board maxima as formal WCET.",
+  "experiments": [
+    {
+      "id": "sensor_matrix",
+      "function": "AutomotiveSensorMatrix_Task10ms",
+      "direct_llm": {
+        "source": "experiments/llm_source_wcet_blind_test/results_template.csv",
+        "gemini_nominal_us": 23.5,
+        "gemini_upper_us": 35.0
+      },
+      "rag_supported_llm": {
+        "source": "gemini_rag_cycle_prototype/results/blind_benchmark/nested_sensor_matrix.json",
+        "sha256": "DFF4133A127D4A2D3A4AD30A5A79150337B1B75A6B1FDE6D395C439BB85249B7",
+        "nominal_us": 22.5,
+        "upper_us": 26.0
+      },
+      "board": {
+        "source": "experiments/llm_source_wcet_blind_test/board_result.csv",
+        "scenario": "fixed benchmark input",
+        "maximum_us": 28.187
+      }
+    },
+    {
+      "id": "bms_scheduler",
+      "function": "BmsScheduler_RunDueTask",
+      "direct_llm": {
+        "source": "gemini_rag_cycle_prototype/results/bms_scheduler_no_rag.json",
+        "sha256": "FAA3B271A74B71E6D64C6A5282EA07931C8FE572D2FA3B53DF7AA81239772B24",
+        "nominal_us": 34.38,
+        "upper_us": 43.75
+      },
+      "rag_supported_llm": {
+        "source": "gemini_rag_cycle_prototype/results/bms_scheduler_blind.json",
+        "sha256": "E1BB691E73C5F8720F160300808AF19F626521CEE341FD604185111891297C86",
+        "nominal_us": 31.25,
+        "upper_us": 38.54
+      },
+      "board": {
+        "source": "user debugger capture",
+        "scenario": "fixed scheduler release/input state",
+        "maximum_us": 54.895
+      }
+    },
+    {
+      "id": "contactor",
+      "function": "BatteryContactorSupervisor_Task10ms",
+      "direct_llm": {
+        "model": "gemini-3.5-flash",
+        "source": "gemini_rag_cycle_prototype/results/holdout_v2_contactor.json",
+        "sha256": "62C9D5983745A82D80609AD8367D16D7C29ED820C74DDDAC59B19E5D6D0D2586",
+        "nominal_us": 34.38,
+        "upper_us": 57.29
+      },
+      "rag_supported_llm": { "status": "not_run" },
+      "board": {
+        "source": "user debugger capture",
+        "scenario": "typical fixed input",
+        "maximum_us": 42.270
+      }
+    },
+    {
+      "id": "wheel_fusion",
+      "function": "WheelSpeedFusion_Task5ms",
+      "direct_llm": {
+        "model": "gemini-3.5-flash",
+        "source": "gemini_rag_cycle_prototype/results/holdout_v2_wheel.json",
+        "sha256": "053236624C7DEEF6377B14B55622CE9F6D6A316CF309E23053294A878D4CE188",
+        "nominal_us": 68.75,
+        "upper_us": 143.75
+      },
+      "rag_supported_llm": { "status": "not_run" },
+      "board": {
+        "source": "user debugger capture",
+        "scenario": "ascending/easy insertion-sort input",
+        "maximum_us": 46.645,
+        "wcet_claim": false
+      }
+    },
+    {
+      "id": "dtc_aging",
+      "function": "DiagnosticEventAging_Task100ms",
+      "direct_llm": {
+        "model": "gemini-3.5-flash",
+        "source": "gemini_rag_cycle_prototype/results/holdout_v2_dtc.json",
+        "sha256": "39228CC33BA74EB05C01FF3B95C225F4404755FDC2BD5FD16FE7080B986ED0DC",
+        "nominal_us": 72.9,
+        "upper_us": 108.3
+      },
+      "rag_supported_llm": { "status": "not_run" },
+      "board": {
+        "source": "user debugger capture",
+        "scenario": "typical fixed input",
+        "maximum_us": 71.125
+      }
+    }
+  ]
+}

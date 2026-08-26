@@ -111,6 +111,22 @@ class ValidationAndCliTest(unittest.TestCase):
         self.assertIn("product of enclosing loop bounds", template)
         self.assertIn("compact arithmetic decomposition", template)
 
+    def test_prompt_rejects_unsupported_source_only_hardware_assumptions(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        prototype = root / "gemini_rag_cycle_prototype"
+        template = (prototype / "prompts" / "cycle_prediction_prompt.txt").read_text(
+            encoding="utf-8"
+        )
+        profile = (prototype / "config" / "hardware_profile.json").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Internal-SRAM data does not imply", template)
+        self.assertIn("do not claim zero-wait-state instruction", template)
+        self.assertIn("Do not cite a generic", template)
+        self.assertIn("PFlash fetch timing", template)
+        self.assertIn('"instruction_location": "internal PFlash', profile)
+        self.assertIn('"flash_wait_states": "not supplied', profile)
+
 
 if __name__ == "__main__":
     unittest.main()

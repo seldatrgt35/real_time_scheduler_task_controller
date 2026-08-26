@@ -1,7 +1,8 @@
 You are estimating source-level execution time for a not-yet-compiled C task.
 
-This is RAG-supported LLM source-level execution-time prediction, not a
-formally proven WCET analysis. You must produce the final nominal-cycle and
+This is LLM source-level execution-time prediction, not a formally proven WCET
+analysis. Retrieved references may be absent; when they are absent this is a
+strict source-only prediction. You must produce the final nominal-cycle and
 conservative upper-cycle predictions. Do not delegate the final prediction to
 an external deterministic cycle calculator. The Python application validates
 and records your response but does not replace or recalculate your predicted
@@ -10,6 +11,11 @@ cycle values.
 Rules:
 - Analyze only the supplied source and context files.
 - Do not assume ELF, assembly, map, disassembly, compiler output, or a new board measurement.
+- Treat the supplied hardware profile as authoritative. Do not silently replace
+  an unknown hardware property with a favorable value.
+- This source-only prediction must stand on its own when the references section
+  says no references are available. Do not invent, recall, or imply measured
+  reference tasks that were not supplied in the prompt.
 - Initialization is outside the timed function unless explicitly stated otherwise.
 - Resolve bounded loops and feasible source-level paths.
 - Follow helper functions only when their bodies are supplied.
@@ -28,6 +34,15 @@ Rules:
   comparisons, taken/not-taken branches, function-call overhead, and callee
   work. Distinguish source-level logical accesses from compiler-sensitive
   stack/addressing overhead and include a justified allowance for the latter.
+- Account for the configured instruction and data locations independently.
+  Internal-SRAM data does not imply that instructions execute from SRAM. When
+  the profile places .text in PFlash, do not claim zero-wait-state instruction
+  fetch. If the exact Flash wait-state/prefetch configuration is unknown, state
+  that limitation and include a visible conservative allowance in upper cycles.
+- Use Cortex-M4-appropriate control-flow reasoning. Do not cite a generic
+  dynamic branch predictor, branch-prediction misses, cache misses, unaligned
+  accesses, DMA stalls, or interrupt interference unless the supplied profile
+  or source actually establishes them.
 - Before choosing final cycle values, build an internal dynamic-work ledger for
   the worst-case feasible path. At minimum it must reconcile loop-control
   executions, total helper invocations, helper-body executions, memory reads,
@@ -53,6 +68,9 @@ Rules:
   expansion at the configured optimization level; it is not an arbitrary small
   percentage added to nominal. Increase it when nested loops, branch paths,
   helper bodies, array indexing, or stack traffic create uncertainty.
+- A high confidence score is not allowed when a material hardware timing input
+  is unknown. Confidence and warnings must reflect unknown Flash timing rather
+  than hiding it behind an exact-looking cycle total.
 - Do not call the result a formal WCET guarantee.
 
 MANDATORY ESTIMATION PROCEDURE
@@ -66,11 +84,15 @@ MANDATORY ESTIMATION PROCEDURE
 4. Calculate nominal cycles bottom-up from fixed overhead plus every dynamic
    component. Do not rely on pattern recognition alone.
 5. Calculate upper cycles from the same ledger using conservative path and
-   compilation allowances. Confirm upper cycles are not below nominal cycles.
+   compilation allowances. List each material allowance (including unknown
+   PFlash fetch timing) in the reasoning instead of applying an unexplained
+   percentage. Confirm upper cycles are not below nominal cycles.
 6. Recalculate microseconds from cycles using the hardware clock and verify the
    two representations agree before returning JSON.
 7. In estimation_reasoning_summary, state the decisive dynamic counts and show
    a compact arithmetic decomposition of the final nominal and upper estimates.
+8. Audit every assumption against the hardware profile. Remove unsupported
+   claims before returning the JSON, and put unavoidable unknowns in warnings.
 
 HARDWARE PROFILE
 {hardware_profile}
