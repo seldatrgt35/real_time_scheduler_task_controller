@@ -16,6 +16,17 @@ The cached RAG implementation and frozen baseline are retained for a later
 controlled source-only versus RAG comparison; they are not used by the current
 holdout-v3 experiment.
 
+Validated board feedback is stored in
+`tools/learning_feedback_board_results.csv`. After a new board result is added,
+run `--rebuild-index` to embed it. A feedback task is no longer a blind holdout
+after promotion to this dataset.
+
+All records in the retrieval index contain measured board timing paired with C
+source. The index includes the existing measured datasets and subsequently
+validated `learning_feedback` records. Prior Gemini predictions and prediction
+errors are never indexed. Query-identity and near-duplicate leakage filters
+still prevent a task from retrieving its own measurement.
+
 ## Security
 
 Revoke any API key pasted into chat, source, shell history, or logs. Put a new

@@ -38,18 +38,47 @@ def build_index(
     records: list[RagRecord], embedder: Embedder, output_path: Path,
     model_name: str, dimensions: int,
 ) -> RagIndex:
-    embeddings = embedder.embed_documents([embedding_text(item) for item in records])
-    if len(embeddings) != len(records):
+    reusable: dict[tuple[str, str], list[float]] = {}
+    if output_path.exists():
+        existing = load_index(output_path)
+        if (
+            existing.embedding_model == model_name
+            and existing.embedding_dimensions == dimensions
+        ):
+            reusable = {
+                (item.record.task_id, item.record.source_fingerprint): item.embedding
+                for item in existing.records
+                if len(item.embedding) == dimensions
+            }
+
+    missing_records = [
+        item for item in records
+        if (item.task_id, item.source_fingerprint) not in reusable
+    ]
+    generated = (
+        embedder.embed_documents([embedding_text(item) for item in missing_records])
+        if missing_records else []
+    )
+    if len(generated) != len(missing_records):
         raise ValueError(
             "Embedding count mismatch: "
-            f"expected {len(records)}, received {len(embeddings)}"
+            f"expected {len(missing_records)}, received {len(generated)}"
         )
-    for position, embedding in enumerate(embeddings):
+    for position, embedding in enumerate(generated):
         if len(embedding) != dimensions:
             raise ValueError(
                 "Embedding dimension mismatch at record "
                 f"{position}: expected {dimensions}, received {len(embedding)}"
             )
+    generated_by_key = {
+        (record.task_id, record.source_fingerprint): embedding
+        for record, embedding in zip(missing_records, generated)
+    }
+    embeddings = [
+        reusable.get((record.task_id, record.source_fingerprint))
+        or generated_by_key[(record.task_id, record.source_fingerprint)]
+        for record in records
+    ]
     index = RagIndex(
         embedding_model=model_name,
         embedding_dimensions=dimensions,

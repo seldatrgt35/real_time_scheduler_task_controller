@@ -36,6 +36,11 @@ DATASETS = (
     DatasetSpec("mixed_region_calibration_measurements.csv", "mixed_helper_saturation_calibration.c", "calibration"),
     DatasetSpec("powertrain_input_wcet_board_result.csv", "automotive_feature_reference.c", "holdout"),
     DatasetSpec("torque_coordination_wcet_board_result.csv", "automotive_feature_reference.c", "holdout"),
+    DatasetSpec(
+        "learning_feedback_board_results.csv",
+        "experiments/gemini_source_only_holdout_v3/automotive_holdout_v3_tasks.c",
+        "learning_feedback",
+    ),
 )
 
 
@@ -187,7 +192,14 @@ class MeasurementLoader:
         seen: set[tuple[str, str]] = set()
         for spec in DATASETS:
             csv_path = self.tools / spec.csv_name
-            source_path = self.examples / spec.source_name if spec.source_name else None
+            source_path = None
+            if spec.source_name:
+                candidate = Path(spec.source_name)
+                source_path = (
+                    self.root / candidate
+                    if len(candidate.parts) > 1
+                    else self.examples / candidate
+                )
             if not csv_path.exists() or source_path is None or not source_path.exists():
                 self.skipped.append({"dataset": spec.csv_name, "reason": "missing dataset or source"})
                 continue

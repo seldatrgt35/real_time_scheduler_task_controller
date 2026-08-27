@@ -32,6 +32,7 @@ class FailingEmbedder(FakeEmbedder):
 def record(
     task_id: str, name: str, source: str,
     hardware: str = HARDWARE_PROFILE_ID, source_path: str = "task.c",
+    dataset_split: str = "calibration",
 ) -> RagRecord:
     return RagRecord(
         task_id=task_id,
@@ -43,7 +44,7 @@ def record(
         hardware_profile_id=hardware,
         structural_summary=StructuralSummary(),
         measurement=Measurement(mean_us=10.0, maximum_us=12.0, source_path="m.csv"),
-        dataset_split="holdout",
+        dataset_split=dataset_split,
     )
 
 

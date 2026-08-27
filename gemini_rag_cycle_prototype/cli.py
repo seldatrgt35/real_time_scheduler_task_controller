@@ -73,7 +73,10 @@ def main(argv: list[str] | None = None) -> int:
             records, client, index_path,
             client.embedding_model, client.embedding_dimensions,
         )
-        print(f"Built index with {len(records)} records: {index_path}")
+        print(
+            f"Built board-measurement index with {len(records)} records: "
+            f"{index_path}"
+        )
         if not args.source:
             return 0
     if not args.source:

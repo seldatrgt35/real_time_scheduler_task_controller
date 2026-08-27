@@ -7,7 +7,11 @@ import unittest
 from unittest.mock import patch
 
 from gemini_rag_cycle_prototype.gemini_client import GeminiClient
-from gemini_rag_cycle_prototype.rag.index_builder import build_index
+from gemini_rag_cycle_prototype.rag.index_builder import (
+    IndexedRecord,
+    RagIndex,
+    build_index,
+)
 from gemini_rag_cycle_prototype.schemas import Measurement, RagRecord, StructuralSummary
 
 
@@ -54,6 +58,44 @@ def record(task_id: str) -> RagRecord:
 
 
 class GeminiEmbeddingTest(unittest.TestCase):
+    def test_index_rebuild_reuses_unchanged_embeddings(self) -> None:
+        existing_record = record("1")
+        new_record = record("2")
+        calls = []
+
+        def embed_documents(texts):
+            calls.append(texts)
+            return [[0.0, 1.0, 0.0]]
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "index.json"
+            path.write_text(
+                RagIndex(
+                    embedding_model="fake",
+                    embedding_dimensions=3,
+                    records=[IndexedRecord(
+                        record=existing_record,
+                        embedding=[1.0, 0.0, 0.0],
+                    )],
+                ).model_dump_json(),
+                encoding="utf-8",
+            )
+            rebuilt = build_index(
+                [existing_record, new_record],
+                SimpleNamespace(embed_documents=embed_documents),
+                path,
+                "fake",
+                3,
+            )
+
+        self.assertEqual(1, len(calls))
+        self.assertEqual(1, len(calls[0]))
+        self.assertIn("Task_2", calls[0][0])
+        self.assertEqual(
+            [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            [item.embedding for item in rebuilt.records],
+        )
+
     def test_three_documents_produce_three_ordered_embeddings(self) -> None:
         gemini = client({
             "first": [[1.0, 0.0, 0.0]],

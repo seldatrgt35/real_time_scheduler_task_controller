@@ -15,6 +15,29 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class MeasurementLoaderTest(unittest.TestCase):
+    def test_validated_learning_feedback_is_loaded(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        records = MeasurementLoader(root).load()
+        feedback = {
+            record.task_name: record
+            for record in records
+            if record.dataset_split == "learning_feedback"
+        }
+        self.assertEqual(
+            {
+                "BatteryBalancing_Task10ms",
+                "EpsTorqueArbitration_Task5ms",
+                "ThermalNetworkSupervision_Task20ms",
+            },
+            set(feedback),
+        )
+        self.assertEqual(82.333, feedback["BatteryBalancing_Task10ms"].measurement.maximum_us)
+        self.assertEqual(40, feedback["BatteryBalancing_Task10ms"].measurement.sample_count)
+        self.assertEqual(6, feedback["BatteryBalancing_Task10ms"].measurement.measurement_overhead_cycles)
+        serialized = feedback["BatteryBalancing_Task10ms"].model_dump_json()
+        self.assertNotIn("gemini_prediction", serialized)
+        self.assertNotIn("signed_error", serialized)
+
     def test_us_x1000_is_divided_by_one_thousand(self) -> None:
         measurement = _measurement(
             {
