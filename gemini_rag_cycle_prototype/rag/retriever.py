@@ -9,8 +9,9 @@ from gemini_rag_cycle_prototype.rag.measurement_loader import (
     extract_function,
     normalize_source,
     source_fingerprint,
+    structural_summary,
 )
-from gemini_rag_cycle_prototype.schemas import RagRecord
+from gemini_rag_cycle_prototype.schemas import RagRecord, StructuralSummary
 
 
 def cosine_similarity(left: list[float], right: list[float]) -> float:
@@ -28,6 +29,12 @@ def cosine_similarity(left: list[float], right: list[float]) -> float:
 class RetrievalHit:
     record: RagRecord
     similarity: float
+    structural_similarity: float = 1.0
+    combined_score: float | None = None
+
+    @property
+    def ranking_score(self) -> float:
+        return self.similarity if self.combined_score is None else self.combined_score
 
 
 @dataclass
@@ -35,6 +42,67 @@ class RetrievalResult:
     hits: list[RetrievalHit] = field(default_factory=list)
     excluded: list[dict[str, str]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+
+
+def _jaccard(left: list[str], right: list[str]) -> float:
+    left_set = set(left)
+    right_set = set(right)
+    if not left_set and not right_set:
+        return 1.0
+    union = left_set | right_set
+    return len(left_set & right_set) / len(union)
+
+
+def _count_similarity(left: int, right: int) -> float:
+    if left == 0 and right == 0:
+        return 1.0
+    return 1.0 - (abs(left - right) / max(left, right, 1))
+
+
+def structural_similarity(
+    query: StructuralSummary, candidate: StructuralSummary
+) -> float:
+    """Score source shape independently from semantic embedding proximity."""
+    query_has_loop = query.loop_count > 0
+    candidate_has_loop = candidate.loop_count > 0
+    loop_presence = 1.0 if query_has_loop == candidate_has_loop else 0.0
+    loop_count = 1.0 - (
+        abs(query.loop_count - candidate.loop_count)
+        / max(query.loop_count, candidate.loop_count, 1)
+    )
+    depth = 1.0 - (
+        abs(query.nested_loop_depth - candidate.nested_loop_depth)
+        / max(query.nested_loop_depth, candidate.nested_loop_depth, 1)
+    )
+    branch = 1.0 if query.has_branches == candidate.has_branches else 0.0
+    helper = 1.0 if query.has_helper_calls == candidate.has_helper_calls else 0.0
+    count_shape = sum((
+        _count_similarity(query.branch_count, candidate.branch_count),
+        _count_similarity(query.helper_call_count, candidate.helper_call_count),
+        _count_similarity(query.array_access_count, candidate.array_access_count),
+        _count_similarity(query.assignment_count, candidate.assignment_count),
+        _count_similarity(query.comparison_count, candidate.comparison_count),
+        _count_similarity(
+            query.arithmetic_operator_count, candidate.arithmetic_operator_count
+        ),
+        _count_similarity(
+            query.bitwise_operator_count, candidate.bitwise_operator_count
+        ),
+        _count_similarity(query.divide_modulo_count, candidate.divide_modulo_count),
+    )) / 8.0
+    return (
+        0.10 * loop_presence
+        + 0.10 * loop_count
+        + 0.10 * depth
+        + 0.05 * branch
+        + 0.075 * helper
+        + 0.30 * count_shape
+        + 0.125 * _jaccard(query.operation_families, candidate.operation_families)
+        + 0.075 * _jaccard(query.data_types, candidate.data_types)
+        + 0.075 * _jaccard(
+            query.memory_access_patterns, candidate.memory_access_patterns
+        )
+    )
 
 
 class Retriever:
@@ -46,6 +114,7 @@ class Retriever:
         self, query_source: str, query_function: str,
         hardware_profile_id: str, *, top_k: int = 5,
         minimum_similarity: float = 0.45,
+        minimum_structural_similarity: float = 0.75,
         exclude_task_id: str | None = None,
         exclude_function: str | None = None,
         exclude_source_path: str | None = None,
@@ -61,6 +130,7 @@ class Retriever:
             f"Task: {query_function}\nC source:\n{target_source}"
         )
         query_embedding = self.embedder.embed_query(query_text)
+        query_structure = structural_summary(target_source)
         result = RetrievalResult()
         candidates: list[RetrievalHit] = []
         for item in self.index.records:
@@ -94,9 +164,38 @@ class Retriever:
                 result.excluded.append({"task_id": record.task_id, "reason": reason})
                 continue
             similarity = cosine_similarity(query_embedding, item.embedding)
-            if similarity >= minimum_similarity:
-                candidates.append(RetrievalHit(record, similarity))
-        result.hits = sorted(
-            candidates, key=lambda hit: hit.similarity, reverse=True
-        )[:top_k]
+            structure = structural_similarity(
+                query_structure, structural_summary(record.source_code)
+            )
+            if similarity < minimum_similarity:
+                continue
+            if structure < minimum_structural_similarity:
+                result.excluded.append({
+                    "task_id": record.task_id,
+                    "reason": "structural_similarity_below_threshold",
+                })
+                continue
+            candidates.append(RetrievalHit(
+                record=record,
+                similarity=similarity,
+                structural_similarity=structure,
+                combined_score=(0.45 * similarity) + (0.55 * structure),
+            ))
+        ranked = sorted(candidates, key=lambda hit: hit.ranking_score, reverse=True)
+        selected: list[RetrievalHit] = []
+        selected_families: set[str] = set()
+        for hit in ranked:
+            family = hit.record.source_path.replace("\\", "/").casefold()
+            if family in selected_families:
+                continue
+            selected.append(hit)
+            selected_families.add(family)
+            if len(selected) == top_k:
+                break
+        result.hits = selected
+        if not result.hits:
+            result.warnings.append(
+                "No reference passed both semantic and structural retrieval gates; "
+                "prediction must proceed without measured reference evidence."
+            )
         return result

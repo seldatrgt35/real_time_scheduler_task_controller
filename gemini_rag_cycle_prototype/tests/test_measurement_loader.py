@@ -15,6 +15,20 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class MeasurementLoaderTest(unittest.TestCase):
+    def test_structural_summary_counts_operation_shape(self) -> None:
+        from gemini_rag_cycle_prototype.rag.measurement_loader import structural_summary
+
+        summary = structural_summary(
+            "void Task(void){for(i=0;i<8;i++){x[i]=Helper(x[i]);"
+            "if(x[i]>3){mask|=1U<<i;}}}"
+        )
+        self.assertEqual(1, summary.loop_count)
+        self.assertEqual(1, summary.helper_call_count)
+        self.assertEqual(1, summary.branch_count)
+        self.assertGreaterEqual(summary.array_access_count, 3)
+        self.assertGreater(summary.comparison_count, 0)
+        self.assertGreater(summary.bitwise_operator_count, 0)
+
     def test_validated_learning_feedback_is_loaded(self) -> None:
         root = Path(__file__).resolve().parents[2]
         records = MeasurementLoader(root).load()
@@ -28,12 +42,22 @@ class MeasurementLoaderTest(unittest.TestCase):
                 "BatteryBalancing_Task10ms",
                 "EpsTorqueArbitration_Task5ms",
                 "ThermalNetworkSupervision_Task20ms",
+                "DcLinkRippleMonitor_Task1ms",
+                "NetworkSignalSupervision_Task10ms",
+                "InjectorPulseCompensation_Task5ms",
             },
             set(feedback),
         )
         self.assertEqual(82.333, feedback["BatteryBalancing_Task10ms"].measurement.maximum_us)
         self.assertEqual(40, feedback["BatteryBalancing_Task10ms"].measurement.sample_count)
         self.assertEqual(6, feedback["BatteryBalancing_Task10ms"].measurement.measurement_overhead_cycles)
+        self.assertEqual(
+            57.5, feedback["DcLinkRippleMonitor_Task1ms"].measurement.maximum_us
+        )
+        self.assertIn(
+            "gemini_rag_holdout_v4",
+            feedback["DcLinkRippleMonitor_Task1ms"].source_path,
+        )
         serialized = feedback["BatteryBalancing_Task10ms"].model_dump_json()
         self.assertNotIn("gemini_prediction", serialized)
         self.assertNotIn("signed_error", serialized)

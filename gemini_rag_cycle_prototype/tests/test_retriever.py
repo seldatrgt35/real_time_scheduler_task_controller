@@ -8,7 +8,11 @@ from gemini_rag_cycle_prototype.rag.measurement_loader import (
     normalize_source,
     source_fingerprint,
 )
-from gemini_rag_cycle_prototype.rag.retriever import Retriever, cosine_similarity
+from gemini_rag_cycle_prototype.rag.retriever import (
+    Retriever,
+    cosine_similarity,
+    structural_similarity,
+)
 from gemini_rag_cycle_prototype.predictor import (
     LeakageError,
     canonicalize_reference_ids,
@@ -58,6 +62,21 @@ def record(
 
 
 class RetrieverTest(unittest.TestCase):
+    def test_structural_similarity_rejects_wrong_loop_shape(self) -> None:
+        flat = StructuralSummary(
+            loop_count=1, nested_loop_depth=1, has_branches=True,
+            has_helper_calls=False, operation_families=["compare"],
+            memory_access_patterns=["array"],
+        )
+        nested = StructuralSummary(
+            loop_count=2, nested_loop_depth=2, has_branches=True,
+            has_helper_calls=True,
+            operation_families=["compare", "bitwise"],
+            memory_access_patterns=["array"],
+        )
+        self.assertLess(structural_similarity(flat, nested), 0.8)
+        self.assertAlmostEqual(1.0, structural_similarity(nested, nested))
+
     def test_multi_function_file_embeds_only_requested_task(self) -> None:
         source = (
             "void First(void){for(i=0;i<8;i++){a[i]++;}}\n"
@@ -107,6 +126,7 @@ class RetrieverTest(unittest.TestCase):
             exclude_task_id="same-id", minimum_similarity=0.0,
             exclude_source_path="query.c",
             near_duplicate_threshold=0.75,
+            minimum_structural_similarity=0.0,
         )
         self.assertEqual(["valid"], [hit.record.task_id for hit in result.hits])
         reasons = {item["reason"] for item in result.excluded}
@@ -131,6 +151,24 @@ class RetrieverTest(unittest.TestCase):
         retrieval = RetrievalResult(hits=[RetrievalHit(item, 0.9)])
         with self.assertRaises(LeakageError):
             canonicalize_reference_ids({"NotRetrieved"}, retrieval)
+
+    def test_top_k_contains_at_most_one_record_per_source_family(self) -> None:
+        entries = [
+            record("a1", "A1", "void A1(void){x++;}", source_path="family_a.c"),
+            record("a2", "A2", "void A2(void){x+=2;}", source_path="family_a.c"),
+            record("b1", "B1", "void B1(void){x+=3;}", source_path="family_b.c"),
+        ]
+        index = RagIndex(
+            embedding_model="fake", embedding_dimensions=2,
+            records=[IndexedRecord(record=item, embedding=[1.0, 0.0]) for item in entries],
+        )
+        result = Retriever(index, FakeEmbedder()).retrieve(
+            "void Q(void){x+=4;}", "Q", HARDWARE_PROFILE_ID,
+            top_k=3, minimum_similarity=0.0,
+            minimum_structural_similarity=0.0,
+        )
+        self.assertEqual(2, len(result.hits))
+        self.assertEqual(2, len({hit.record.source_path for hit in result.hits}))
 
 
 if __name__ == "__main__":

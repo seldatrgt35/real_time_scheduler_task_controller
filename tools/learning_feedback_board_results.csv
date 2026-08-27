@@ -2,3 +2,6 @@ task,board_mean_us,board_max_us,completed_samples,measurement_overhead_cycles,da
 BatteryBalancing_Task10ms,82.333,82.333,40,6,learning_feedback,experiments/gemini_source_only_holdout_v3/automotive_holdout_v3_tasks.c
 EpsTorqueArbitration_Task5ms,113.416,113.416,40,6,learning_feedback,experiments/gemini_source_only_holdout_v3/automotive_holdout_v3_tasks.c
 ThermalNetworkSupervision_Task20ms,116.520,116.520,40,6,learning_feedback,experiments/gemini_source_only_holdout_v3/automotive_holdout_v3_tasks.c
+DcLinkRippleMonitor_Task1ms,57.500,57.500,40,6,learning_feedback,experiments/gemini_rag_holdout_v4/automotive_holdout_v4_tasks.c
+NetworkSignalSupervision_Task10ms,43.083,43.083,40,6,learning_feedback,experiments/gemini_rag_holdout_v4/automotive_holdout_v4_tasks.c
+InjectorPulseCompensation_Task5ms,16.312,16.312,40,6,learning_feedback,experiments/gemini_rag_holdout_v4/automotive_holdout_v4_tasks.c

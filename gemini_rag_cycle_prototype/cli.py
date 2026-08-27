@@ -30,6 +30,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--top-k", type=int, default=5)
     result.add_argument("--minimum-similarity", type=float, default=0.45)
     result.add_argument(
+        "--minimum-structural-similarity", type=float, default=0.75,
+        help="reject retrieved records below this source-structure score",
+    )
+    result.add_argument(
         "--no-rag", action="store_true",
         help="skip retrieval and predict from source plus hardware profile only",
     )
@@ -93,6 +97,7 @@ def main(argv: list[str] | None = None) -> int:
         context_code="\n\n".join(context_parts),
         top_k=args.top_k,
         minimum_similarity=args.minimum_similarity,
+        minimum_structural_similarity=args.minimum_structural_similarity,
         exclude_task_id=args.exclude_task_id,
         exclude_function=args.exclude_function,
         exclude_source_path=(
@@ -108,7 +113,14 @@ def main(argv: list[str] | None = None) -> int:
     output.with_suffix(".retrieval.json").write_text(
         json.dumps({
             "hits": [
-                {"task_id": hit.record.task_id, "task_name": hit.record.task_name, "similarity": hit.similarity}
+                {
+                    "task_id": hit.record.task_id,
+                    "task_name": hit.record.task_name,
+                    "embedding_similarity": hit.similarity,
+                    "structural_similarity": hit.structural_similarity,
+                    "combined_score": hit.ranking_score,
+                    "source_family": hit.record.source_path,
+                }
                 for hit in retrieval.hits
             ],
             "excluded": retrieval.excluded,

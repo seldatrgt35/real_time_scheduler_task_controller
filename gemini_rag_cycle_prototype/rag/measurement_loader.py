@@ -104,15 +104,31 @@ def structural_summary(source: str) -> StructuralSummary:
         if re.search(pattern, clean):
             families.append(label)
     types = sorted(set(re.findall(r"\b(?:u?int(?:8|16|32|64)_t|float|double)\b", clean)))
-    arrays = re.findall(r"\w+\s*\[[^\]]+\]", clean)
+    arrays = re.findall(r"\b[A-Za-z_]\w*\s*\[[^\]]+\]", clean)
     calls = re.findall(r"\b([A-Za-z_]\w*)\s*\(", clean)
-    keywords = {"for", "while", "if", "switch", "sizeof"}
+    keywords = {"for", "while", "if", "switch", "sizeof", "return"}
+    helper_calls = [call for call in calls[1:] if call not in keywords]
+    branch_count = len(re.findall(r"\b(?:if|switch)\s*\(", clean))
+    branch_count += len(re.findall(r"\b(?:case|default)\b\s*:", clean))
+    comparison_count = len(re.findall(r"==|!=|<=|>=|(?<!<)<(?!<)|(?<!>)>(?!>)", clean))
+    arithmetic_count = len(re.findall(r"(?<!\+)(?:\+|-)(?![+=>])|\*(?!=)", clean))
+    bitwise_count = len(re.findall(r"<<|>>|(?<!\|)\|(?!\|)|(?<!&)&(?!&)|\^", clean))
+    divide_modulo_count = len(re.findall(r"/|%", clean))
+    assignment_count = len(re.findall(r"(?<![=!<>+\-*/%&|^])=(?!=)", clean))
     return StructuralSummary(
         loop_count=len(loops),
         nested_loop_depth=max_depth,
         known_total_iterations=None,
-        has_branches=bool(re.search(r"\b(if|switch)\s*\(", clean)),
-        has_helper_calls=any(call not in keywords for call in calls[1:]),
+        has_branches=branch_count > 0,
+        has_helper_calls=bool(helper_calls),
+        branch_count=branch_count,
+        helper_call_count=len(helper_calls),
+        array_access_count=len(arrays),
+        assignment_count=assignment_count,
+        comparison_count=comparison_count,
+        arithmetic_operator_count=arithmetic_count,
+        bitwise_operator_count=bitwise_count,
+        divide_modulo_count=divide_modulo_count,
         data_types=types,
         operation_families=families,
         memory_access_patterns=["array"] if arrays else [],
@@ -190,22 +206,38 @@ class MeasurementLoader:
     def load(self) -> list[RagRecord]:
         records: list[RagRecord] = []
         seen: set[tuple[str, str]] = set()
+        source_cache: dict[Path, str] = {}
         for spec in DATASETS:
             csv_path = self.tools / spec.csv_name
-            source_path = None
+            default_source_path = None
             if spec.source_name:
                 candidate = Path(spec.source_name)
-                source_path = (
+                default_source_path = (
                     self.root / candidate
                     if len(candidate.parts) > 1
                     else self.examples / candidate
                 )
-            if not csv_path.exists() or source_path is None or not source_path.exists():
+            if not csv_path.exists() or default_source_path is None or not default_source_path.exists():
                 self.skipped.append({"dataset": spec.csv_name, "reason": "missing dataset or source"})
                 continue
-            full_source = source_path.read_text(encoding="utf-8")
             with csv_path.open(encoding="utf-8-sig", newline="") as handle:
                 for row_number, row in enumerate(csv.DictReader(handle), start=2):
+                    row_source = row.get("source_file", "").strip()
+                    source_path = (
+                        self.root / Path(row_source)
+                        if row_source
+                        else default_source_path
+                    )
+                    if not source_path.exists():
+                        self.skipped.append({
+                            "dataset": spec.csv_name,
+                            "row": str(row_number),
+                            "reason": f"row source not found: {row_source}",
+                        })
+                        continue
+                    full_source = source_cache.setdefault(
+                        source_path, source_path.read_text(encoding="utf-8")
+                    )
                     measurement = _measurement(row, csv_path)
                     task_name = row.get("task", "").strip() or _synthetic_name(spec, row)
                     if measurement is None or not task_name:

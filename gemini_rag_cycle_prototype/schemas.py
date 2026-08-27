@@ -11,6 +11,14 @@ class StructuralSummary(BaseModel):
     known_total_iterations: int | None = None
     has_branches: bool = False
     has_helper_calls: bool = False
+    branch_count: int = 0
+    helper_call_count: int = 0
+    array_access_count: int = 0
+    assignment_count: int = 0
+    comparison_count: int = 0
+    arithmetic_operator_count: int = 0
+    bitwise_operator_count: int = 0
+    divide_modulo_count: int = 0
     data_types: list[str] = Field(default_factory=list)
     operation_families: list[str] = Field(default_factory=list)
     memory_access_patterns: list[str] = Field(default_factory=list)

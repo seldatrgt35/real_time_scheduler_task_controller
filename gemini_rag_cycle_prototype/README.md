@@ -16,7 +16,13 @@ point-estimate sum. Python validates and records the values without replacing
 or recalculating them.
 
 Retrieval embeds the requested task body rather than the whole multi-function
-source file. If no record clears the similarity threshold, Gemini receives no
+source file. Candidates must pass both embedding and source-structure gates.
+The structure score includes loop nesting, branch/helper/array counts, assignment
+and operator intensity, data types, and memory-access shape.
+The default structural acceptance threshold is `0.75` and can be changed with
+`--minimum-structural-similarity` for controlled experiments.
+Ranking combines both scores, and at most one result is selected from each
+source-file family. If no record clears both gates, Gemini receives no
 measurement reference and must return a source-only PARTIAL result instead of
 inventing hardware cost.
 
