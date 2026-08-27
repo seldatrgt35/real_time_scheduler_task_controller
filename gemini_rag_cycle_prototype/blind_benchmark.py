@@ -81,24 +81,26 @@ def evaluate() -> None:
             continue
         prediction = json.loads(prediction_path.read_text(encoding="utf-8"))
         board = float(truth[query["id"]])
-        nominal = prediction.get("estimated_nominal_us")
-        upper = prediction.get("estimated_upper_us")
+        estimate = prediction.get("estimated_execution_us")
+        if estimate is None:
+            # Read-only compatibility for frozen results created with the old schema.
+            estimate = prediction.get("estimated_nominal_us")
         rows.append({
             "id": query["id"],
             "function": query["function"],
             "status": prediction["analysis_status"],
             "board_max_us": board,
-            "nominal_us": nominal,
-            "nominal_ape_percent": (
-                abs(float(nominal) - board) / board * 100.0
-                if nominal is not None else None
+            "estimated_execution_us": estimate,
+            "absolute_error_percent": (
+                abs(float(estimate) - board) / board * 100.0
+                if estimate is not None else None
             ),
-            "upper_us": upper,
-            "upper_covers_board": (
-                float(upper) >= board if upper is not None else False
+            "estimate_covers_board": (
+                float(estimate) >= board if estimate is not None else False
             ),
-            "upper_headroom_us": (
-                float(upper) - board if upper is not None else None
+            "signed_error_percent": (
+                (float(estimate) - board) / board * 100.0
+                if estimate is not None else None
             ),
             "confidence_percent": prediction["confidence_percent"],
         })
@@ -106,7 +108,7 @@ def evaluate() -> None:
         "task_count": len(rows),
         "planned_task_count": len(queries),
         "missing_predictions": missing,
-        "upper_coverage_count": sum(row["upper_covers_board"] for row in rows),
+        "estimate_coverage_count": sum(row["estimate_covers_board"] for row in rows),
         "rows": rows,
     }
     output = RESULTS / "evaluation.json"

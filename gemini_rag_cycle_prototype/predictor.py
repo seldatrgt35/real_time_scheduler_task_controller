@@ -81,8 +81,7 @@ class Predictor:
 
     def predict(
         self, source_code: str, function_name: str, *,
-        context_code: str = "", input_constraints: str = "",
-        timing_evidence: str = "", top_k: int = 5,
+        context_code: str = "", top_k: int = 5,
         minimum_similarity: float = 0.45,
         exclude_task_id: str | None = None,
         exclude_function: str | None = None,
@@ -108,12 +107,6 @@ class Predictor:
             function_name=function_name,
             source_code=source_code,
             context_code=context_code or "No additional context files supplied.",
-            input_constraints=(
-                input_constraints or "No input or state constraints supplied."
-            ),
-            timing_evidence=(
-                timing_evidence or "No target timing evidence supplied."
-            ),
             references=self._references(retrieval),
         )
         prediction, raw = self.client.predict(prompt)
@@ -130,22 +123,13 @@ class Predictor:
         if prediction.hardware_profile_id != HARDWARE_PROFILE_ID:
             raise ValueError("prediction used the wrong hardware profile")
         if (
-            prediction.estimated_nominal_cycles is not None
-            and prediction.estimated_nominal_us is not None
+            prediction.estimated_execution_cycles is not None
+            and prediction.estimated_execution_us is not None
         ):
-            expected = prediction.estimated_nominal_cycles / 48.0
-            if abs(expected - prediction.estimated_nominal_us) > max(0.05, expected * 0.01):
+            expected = prediction.estimated_execution_cycles / 48.0
+            if abs(expected - prediction.estimated_execution_us) > max(0.05, expected * 0.01):
                 prediction.warnings.append(
-                    "Nominal cycle/us values are inconsistent at 48 MHz; values were recorded unchanged."
-                )
-        if (
-            prediction.estimated_upper_cycles is not None
-            and prediction.estimated_upper_us is not None
-        ):
-            expected = prediction.estimated_upper_cycles / 48.0
-            if abs(expected - prediction.estimated_upper_us) > max(0.05, expected * 0.01):
-                prediction.warnings.append(
-                    "Upper cycle/us values are inconsistent at 48 MHz; values were recorded unchanged."
+                    "Execution cycle/us values are inconsistent at 48 MHz; values were recorded unchanged."
                 )
         prediction.warnings.extend(retrieval.warnings)
         return prediction, raw, retrieval

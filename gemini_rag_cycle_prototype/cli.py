@@ -24,8 +24,6 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--source", type=Path)
     result.add_argument("--function")
     result.add_argument("--context-file", type=Path, action="append", default=[])
-    result.add_argument("--input-constraints-file", type=Path)
-    result.add_argument("--timing-evidence-file", type=Path)
     result.add_argument("--exclude-task-id")
     result.add_argument("--exclude-function")
     result.add_argument("--exclude-source-path")
@@ -83,14 +81,6 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         parser().error("--source and --function are required for prediction")
     context_parts = [read_required(path, "context file") for path in args.context_file]
-    input_constraints = (
-        read_required(args.input_constraints_file, "input constraints file")
-        if args.input_constraints_file else ""
-    )
-    timing_evidence = (
-        read_required(args.timing_evidence_file, "timing evidence file")
-        if args.timing_evidence_file else ""
-    )
     client = client or GeminiClient()
     prediction, raw, retrieval = Predictor(
         root, load_index(index_path), client
@@ -98,8 +88,6 @@ def main(argv: list[str] | None = None) -> int:
         source_code,
         args.function,
         context_code="\n\n".join(context_parts),
-        input_constraints=input_constraints,
-        timing_evidence=timing_evidence,
         top_k=args.top_k,
         minimum_similarity=args.minimum_similarity,
         exclude_task_id=args.exclude_task_id,

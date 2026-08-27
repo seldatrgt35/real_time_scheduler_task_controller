@@ -20,10 +20,8 @@ def prediction(**overrides) -> dict:
         "hardware_profile_id": "S32K148_GCC11_4_O0_48MHz_source_only",
         "source_analysis": SourceAnalysis().model_dump(),
         "retrieved_examples_used": [],
-        "estimated_nominal_cycles": 480,
-        "estimated_upper_cycles": 576,
-        "estimated_nominal_us": 10.0,
-        "estimated_upper_us": 12.0,
+        "estimated_execution_cycles": 480,
+        "estimated_execution_us": 10.0,
         "confidence_percent": 70,
         "estimation_reasoning_summary": "references and source structure",
         "assumptions": [],
@@ -35,10 +33,25 @@ def prediction(**overrides) -> dict:
 
 
 class ValidationAndCliTest(unittest.TestCase):
-    def test_upper_cycle_cannot_be_smaller_than_nominal(self) -> None:
+    def test_response_schema_is_compatible_with_gemini_developer_api(self) -> None:
+        schema = PredictionResponse.model_json_schema()
+
+        def contains_additional_properties(value) -> bool:
+            if isinstance(value, dict):
+                return (
+                    "additionalProperties" in value
+                    or any(contains_additional_properties(child) for child in value.values())
+                )
+            if isinstance(value, list):
+                return any(contains_additional_properties(child) for child in value)
+            return False
+
+        self.assertFalse(contains_additional_properties(schema))
+
+    def test_execution_cycles_must_be_positive(self) -> None:
         with self.assertRaises(ValidationError):
             PredictionResponse.model_validate(
-                prediction(estimated_upper_cycles=479)
+                prediction(estimated_execution_cycles=0)
             )
 
     def test_confidence_must_be_in_range(self) -> None:
@@ -47,17 +60,15 @@ class ValidationAndCliTest(unittest.TestCase):
 
     def test_supported_requires_all_predictions(self) -> None:
         with self.assertRaises(ValidationError):
-            PredictionResponse.model_validate(prediction(estimated_upper_us=None))
+            PredictionResponse.model_validate(prediction(estimated_execution_us=None))
 
     def test_unresolved_requires_explanation(self) -> None:
         with self.assertRaises(ValidationError):
             PredictionResponse.model_validate(
                 prediction(
                     analysis_status="UNRESOLVED",
-                    estimated_nominal_cycles=None,
-                    estimated_upper_cycles=None,
-                    estimated_nominal_us=None,
-                    estimated_upper_us=None,
+                    estimated_execution_cycles=None,
+                    estimated_execution_us=None,
                 )
             )
 
@@ -89,17 +100,14 @@ class ValidationAndCliTest(unittest.TestCase):
             ),
             client,
         ).predict(
-            "void Task(void) {}", "Task", use_rag=False,
-            input_constraints="input is bounded to 0..7",
-            timing_evidence="no cycle-cost table is available",
+            "void Task(void) {}", "Task", use_rag=False
         )
         self.assertEqual("SUPPORTED", result.analysis_status)
         self.assertEqual([], retrieval.hits)
         self.assertIn("No sufficiently similar independent references", client.prompt)
-        self.assertIn("strict source-only analysis", client.prompt)
-        self.assertIn("input is bounded to 0..7", client.prompt)
-        self.assertIn("no cycle-cost table is available", client.prompt)
-        self.assertIn("dynamic_calls * cycles_per_call", client.prompt)
+        self.assertIn("dynamic helper invocations", client.prompt)
+        self.assertIn("mandatory bottom-up cross-check", client.prompt)
+        self.assertIn("merely listing counts without pricing them is insufficient", client.prompt)
 
     def test_prompt_requires_nested_loop_callee_cost_expansion(self) -> None:
         root = Path(__file__).resolve().parents[2]
@@ -109,10 +117,10 @@ class ValidationAndCliTest(unittest.TestCase):
             / "prompts"
             / "cycle_prediction_prompt.txt"
         ).read_text(encoding="utf-8")
-        self.assertIn("Multiply nested loop", template)
-        self.assertIn("helper bodies", template)
-        self.assertIn("product of enclosing loop", template)
-        self.assertIn("dynamic_work_ledger", template)
+        self.assertIn("helper called once in a 6 by 6 loop executes 36 times", template)
+        self.assertIn("callee-body work", template)
+        self.assertIn("product of enclosing loop bounds", template)
+        self.assertIn("compact arithmetic decomposition", template)
 
     def test_prompt_rejects_unsupported_source_only_hardware_assumptions(self) -> None:
         root = Path(__file__).resolve().parents[2]
@@ -124,48 +132,11 @@ class ValidationAndCliTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("Internal-SRAM data does not imply", template)
-        self.assertIn("do not invent a precise Flash penalty", template)
+        self.assertIn("do not claim zero-wait-state instruction", template)
         self.assertIn("Do not cite a generic", template)
-        self.assertIn("upper_basis to NOT_AVAILABLE", template)
+        self.assertIn("PFlash fetch timing", template)
         self.assertIn('"instruction_location": "internal PFlash', profile)
         self.assertIn('"flash_wait_states": "not supplied', profile)
-
-    def test_helper_ledger_rejects_inconsistent_multiplication(self) -> None:
-        with self.assertRaises(ValidationError):
-            PredictionResponse.model_validate(prediction(
-                dynamic_work_ledger={
-                    "helper_invocations": [{
-                        "function": "Helper",
-                        "dynamic_calls": 6,
-                        "nominal_cycles_per_call": 10,
-                        "nominal_total_cycles": 59,
-                    }]
-                }
-            ))
-
-    def test_component_total_must_match_final_cycles(self) -> None:
-        with self.assertRaises(ValidationError):
-            PredictionResponse.model_validate(prediction(
-                dynamic_work_ledger={
-                    "nominal_cycle_components": [
-                        {"name": "source", "cycles": 479, "basis": "estimate"}
-                    ]
-                }
-            ))
-
-    def test_formal_guarantee_claim_is_rejected(self) -> None:
-        with self.assertRaises(ValidationError):
-            PredictionResponse.model_validate(prediction(formal_guarantee=True))
-
-    def test_missing_upper_requires_not_available_basis(self) -> None:
-        result = PredictionResponse.model_validate(prediction(
-            analysis_status="PARTIAL",
-            estimated_upper_cycles=None,
-            estimated_upper_us=None,
-            upper_basis="NOT_AVAILABLE",
-            unresolved=["PFlash timing evidence is missing"],
-        ))
-        self.assertEqual("NOT_AVAILABLE", result.upper_basis)
 
 
 if __name__ == "__main__":
