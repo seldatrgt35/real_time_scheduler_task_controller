@@ -29,6 +29,15 @@ class FailingEmbedder(FakeEmbedder):
         raise AssertionError("no-RAG mode must not request a query embedding")
 
 
+class CapturingEmbedder(FakeEmbedder):
+    def __init__(self) -> None:
+        self.query = ""
+
+    def embed_query(self, text: str) -> list[float]:
+        self.query = text
+        return super().embed_query(text)
+
+
 def record(
     task_id: str, name: str, source: str,
     hardware: str = HARDWARE_PROFILE_ID, source_path: str = "task.c",
@@ -49,6 +58,19 @@ def record(
 
 
 class RetrieverTest(unittest.TestCase):
+    def test_multi_function_file_embeds_only_requested_task(self) -> None:
+        source = (
+            "void First(void){for(i=0;i<8;i++){a[i]++;}}\n"
+            "void Second(void){b ^= 7U;}"
+        )
+        embedder = CapturingEmbedder()
+        Retriever(
+            RagIndex(embedding_model="fake", embedding_dimensions=2, records=[]),
+            embedder,
+        ).retrieve(source, "Second", HARDWARE_PROFILE_ID)
+        self.assertIn("void Second", embedder.query)
+        self.assertNotIn("void First", embedder.query)
+
     def test_cosine_similarity_and_ranking(self) -> None:
         self.assertAlmostEqual(1.0, cosine_similarity([1, 0], [2, 0]))
         index = RagIndex(

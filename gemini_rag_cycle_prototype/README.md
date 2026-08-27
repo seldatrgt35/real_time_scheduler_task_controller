@@ -6,7 +6,8 @@ Independent source-only prototype for:
 C source -> Gemini prediction -> one conservative execution-time estimate
 ```
 
-The active workflow is source-only (`--no-rag`). It does not compile the query,
+The active workflow uses leakage-filtered board-measurement retrieval by default.
+Use `--no-rag` only for the controlled source-only comparison. It does not compile the query,
 inspect ELF/assembly, call the existing STAR execution estimator, or perform
 scheduler analysis. Gemini produces `estimated_source_execution_cycles` and
 `estimated_source_execution_us` from explicitly priced cycle components.
@@ -14,9 +15,10 @@ Unknown compiler/PFlash components remain `null` and are excluded from the
 point-estimate sum. Python validates and records the values without replacing
 or recalculating them.
 
-The cached RAG implementation and frozen baseline are retained for a later
-controlled source-only versus RAG comparison; they are not used by the current
-holdout-v3 experiment.
+Retrieval embeds the requested task body rather than the whole multi-function
+source file. If no record clears the similarity threshold, Gemini receives no
+measurement reference and must return a source-only PARTIAL result instead of
+inventing hardware cost.
 
 Validated board feedback is stored in
 `tools/learning_feedback_board_results.csv`. After a new board result is added,

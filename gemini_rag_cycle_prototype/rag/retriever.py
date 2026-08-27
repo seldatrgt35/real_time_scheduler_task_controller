@@ -5,7 +5,11 @@ from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 
 from gemini_rag_cycle_prototype.rag.index_builder import Embedder, RagIndex
-from gemini_rag_cycle_prototype.rag.measurement_loader import normalize_source, source_fingerprint
+from gemini_rag_cycle_prototype.rag.measurement_loader import (
+    extract_function,
+    normalize_source,
+    source_fingerprint,
+)
 from gemini_rag_cycle_prototype.schemas import RagRecord
 
 
@@ -47,10 +51,14 @@ class Retriever:
         exclude_source_path: str | None = None,
         near_duplicate_threshold: float = 0.97,
     ) -> RetrievalResult:
-        normalized_query = normalize_source(query_source)
-        fingerprint = source_fingerprint(query_source)
+        # A source file can contain several unrelated task entry points. Rank
+        # references from the requested task body, not from the entire file;
+        # otherwise every task in one suite produces nearly the same query.
+        target_source = extract_function(query_source, query_function) or query_source
+        normalized_query = normalize_source(target_source)
+        fingerprint = source_fingerprint(target_source)
         query_text = (
-            f"Task: {query_function}\nC source:\n{query_source}"
+            f"Task: {query_function}\nC source:\n{target_source}"
         )
         query_embedding = self.embedder.embed_query(query_text)
         result = RetrievalResult()
