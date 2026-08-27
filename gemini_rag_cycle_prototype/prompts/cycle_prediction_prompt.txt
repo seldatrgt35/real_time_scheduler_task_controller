@@ -39,7 +39,7 @@ Rules:
   Internal-SRAM data does not imply that instructions execute from SRAM. When
   the profile places .text in PFlash, do not claim zero-wait-state instruction
   fetch. If the exact Flash wait-state/prefetch configuration is unknown, state
-  that limitation and state it in warnings. Do not invent a large arbitrary
+  the unknown PFlash fetch timing in warnings. Do not invent a large arbitrary
   margin for an unknown hardware setting.
 - Use Cortex-M4-appropriate control-flow reasoning. Do not cite a generic
   dynamic branch predictor, branch-prediction misses, cache misses, unaligned

@@ -47,6 +47,11 @@ class ValidationAndCliTest(unittest.TestCase):
             return False
 
         self.assertFalse(contains_additional_properties(schema))
+        properties = schema["properties"]
+        self.assertIn("estimated_execution_cycles", properties)
+        self.assertIn("estimated_execution_us", properties)
+        self.assertNotIn("estimated_nominal_cycles", properties)
+        self.assertNotIn("estimated_upper_cycles", properties)
 
     def test_execution_cycles_must_be_positive(self) -> None:
         with self.assertRaises(ValidationError):

@@ -1,15 +1,20 @@
-# Gemini RAG cycle prediction prototype
+# Gemini source-level execution-time prototype
 
 Independent source-only prototype for:
 
 ```text
-C source -> measured-task retrieval -> Gemini prediction -> cycles and us
+C source -> Gemini prediction -> one conservative execution-time estimate
 ```
 
-It does not compile the query, inspect ELF/assembly, call the existing STAR
-execution estimator, or perform scheduler analysis. Gemini produces the final
-nominal and conservative-upper predictions. Python validates and records them
-without replacing the values.
+The active workflow is source-only (`--no-rag`). It does not compile the query,
+inspect ELF/assembly, call the existing STAR execution estimator, or perform
+scheduler analysis. Gemini produces `estimated_execution_cycles` and
+`estimated_execution_us`. Python validates and records those values without
+replacing or recalculating them.
+
+The cached RAG implementation and frozen baseline are retained for a later
+controlled source-only versus RAG comparison; they are not used by the current
+holdout-v3 experiment.
 
 ## Security
 
@@ -40,20 +45,26 @@ python -m gemini_rag_cycle_prototype.cli --discover
 python -m gemini_rag_cycle_prototype.cli --build-index
 ```
 
-## Blind prediction
+## Current blind holdout
 
 ```powershell
-python -m gemini_rag_cycle_prototype.cli `
-  --source experiments/llm_source_wcet_blind_test/automotive_sensor_matrix_task.c `
-  --function AutomotiveSensorMatrix_Task10ms `
-  --exclude-task-id AutomotiveSensorMatrix_Task10ms `
-  --exclude-function AutomotiveSensorMatrix_Task10ms `
-  --exclude-source-path experiments/llm_source_wcet_blind_test/automotive_sensor_matrix_task.c `
-  --top-k 5 `
-  --output gemini_rag_cycle_prototype/results/automotive_sensor_matrix_prediction.json
+$source = "experiments/gemini_source_only_holdout_v3/automotive_holdout_v3_tasks.c"
+
+python -m gemini_rag_cycle_prototype.cli --source $source `
+  --function BatteryBalancing_Task10ms --no-rag `
+  --output gemini_rag_cycle_prototype/results/holdout_v3_battery.json
+
+python -m gemini_rag_cycle_prototype.cli --source $source `
+  --function EpsTorqueArbitration_Task5ms --no-rag `
+  --output gemini_rag_cycle_prototype/results/holdout_v3_eps.json
+
+python -m gemini_rag_cycle_prototype.cli --source $source `
+  --function ThermalNetworkSupervision_Task20ms --no-rag `
+  --output gemini_rag_cycle_prototype/results/holdout_v3_thermal.json
 ```
 
-Add helper/header context with repeated `--context-file` arguments.
+The matching board ELF and debugger expressions are documented in
+`experiments/gemini_source_only_holdout_v3/README.md`.
 
 ## Leakage controls
 
