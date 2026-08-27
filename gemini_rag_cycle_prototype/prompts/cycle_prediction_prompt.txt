@@ -17,6 +17,29 @@ ESTIMATE DEFINITION
 - Do not target a desired error percentage or bias. Do not add a safety margin
   merely to make the result conservative.
 
+ESTIMATION BASIS DECISION
+- A retrieved reference with `Combined retrieval score >= 0.85` is a STRONG
+  measured reference. If one or more strong references exist, set
+  `estimation_basis=REFERENCE_ANCHORED` and anchor the estimate to exactly one
+  of those measured references.
+- Copy its complete ID into `reference_anchor_task_id` and its supplied measured
+  maximum time into `reference_anchor_measured_us`.
+- Convert the measured anchor time to cycles at the supplied clock. Start from
+  that empirical cycle total, then adjust only for explicit source-structure
+  differences such as iteration count, dynamic helper calls, memory accesses,
+  branches, or operator classes. List every adjustment in
+  `reference_adjustments`.
+- Do not discard a strong measured anchor in favor of generic per-instruction
+  Cortex-M4 assumptions or a smaller source-only reconstruction.
+- Do not copy the anchor unchanged when meaningful structural differences
+  exist. Explain the direction and basis of each adjustment.
+- If no strong reference exists, set `estimation_basis=SOURCE_ONLY`, leave the
+  anchor fields null, and cap `confidence_percent` at 50. A source-only number
+  is LLM engineering judgment, not measured MCU cycle pricing. Do not describe
+  it as an instruction-by-instruction reconstruction.
+- Weak references may inform qualitative reasoning, but they are not timing
+  anchors.
+
 SOURCE ANALYSIS RULES
 - Initialization is outside the timed function unless explicitly stated.
 - Resolve bounded loops and feasible source-level paths.
@@ -41,13 +64,18 @@ SOURCE ANALYSIS RULES
 - In `retrieved_examples_used.task_id`, copy the complete supplied reference ID.
 
 CYCLE COMPONENT RULES
-- Return `cycle_components` and separate at least these concepts:
+- For `SOURCE_ONLY`, return `cycle_components` and separate at least these concepts:
   1. `source_visible_work`: caller operations, loop control, branches, and
      source-visible memory work.
   2. `resolved_helper_work`: expanded helper bodies and justified call overhead.
   3. `compiler_sensitive_overhead`: stack spills, instruction selection, and
      other compiler-dependent work not established by supplied evidence.
   4. `pflash_fetch_overhead`: PFlash wait-state/prefetch contribution.
+- For `REFERENCE_ANCHORED`, use `reference_anchor_baseline` for the measured
+  anchor cycles and `explicit_structural_adjustment` for the net source-shape
+  adjustment. The adjustment may be positive or negative and must cite concrete
+  differences. Still include unknown compiler/PFlash components as null; do not
+  add them again because the empirical baseline already reflects its own build.
 - A priced component has an integer `cycles` value and specific evidence.
 - An unpriced component has `cycles=null` and evidence explaining why it cannot
   be priced.
@@ -73,6 +101,8 @@ FORBIDDEN UNSUPPORTED ASSUMPTIONS
 - Multiplying by 1.3, 1.6, or any other unsupported factor.
 - Adding a generic compiler, stack, Flash, cache, or uncertainty percentage.
 - Inventing CPI or instruction counts from general Cortex-M4 knowledge.
+- Assigning fixed costs such as one cycle per ALU operation, two cycles per
+  load/store, a fixed helper-call cost, or a guessed division latency.
 - Claiming zero-wait-state instruction fetch because data is in SRAM.
 - Citing generic dynamic branch prediction, cache misses, unaligned accesses,
   DMA stalls, or interrupt interference without supplied evidence.

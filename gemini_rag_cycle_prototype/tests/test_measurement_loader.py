@@ -88,6 +88,18 @@ class MeasurementLoaderTest(unittest.TestCase):
         self.assertAlmostEqual(48.041, torque.measurement.maximum_us)
         self.assertEqual("holdout", torque.dataset_split)
 
+    def test_feedback_reference_contains_defines_helpers_and_initialization(self) -> None:
+        records = MeasurementLoader(ROOT).load()
+        injector = next(
+            item for item in records
+            if item.task_name == "InjectorPulseCompensation_Task5ms"
+        )
+        self.assertIn("#define INJECTOR_COUNT", injector.source_context)
+        self.assertIn("AutomotiveHoldoutV4_Initialize", injector.source_context)
+        self.assertIn("InterpolatePulseU16", injector.callee_source)
+        self.assertIn("ApplyVoltageCorrectionU16", injector.callee_source)
+        self.assertNotEqual("", injector.context_fingerprint)
+
     def test_function_extraction_and_path_independent_fingerprint(self) -> None:
         first = "/* x */ void Task(void) { unsigned x = 1U; }"
         second = "void Task(void)\n{ unsigned x=1U; } // y"

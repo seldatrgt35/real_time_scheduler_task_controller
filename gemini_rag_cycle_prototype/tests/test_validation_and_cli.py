@@ -20,6 +20,10 @@ def prediction(**overrides) -> dict:
         "hardware_profile_id": "S32K148_GCC11_4_O0_48MHz_source_only",
         "source_analysis": SourceAnalysis().model_dump(),
         "retrieved_examples_used": [],
+        "estimation_basis": "SOURCE_ONLY",
+        "reference_anchor_task_id": None,
+        "reference_anchor_measured_us": None,
+        "reference_adjustments": [],
         "cycle_components": [
             {"name": "source_visible_work", "cycles": 300, "evidence": "ledger"},
             {"name": "resolved_helper_work", "cycles": 180, "evidence": "helper expansion"},
@@ -27,7 +31,7 @@ def prediction(**overrides) -> dict:
         "estimated_source_execution_cycles": 480,
         "estimated_source_execution_us": 10.0,
         "formal_guarantee": False,
-        "confidence_percent": 70,
+        "confidence_percent": 50,
         "estimation_reasoning_summary": "references and source structure",
         "assumptions": [],
         "unresolved": [],
@@ -56,6 +60,7 @@ class ValidationAndCliTest(unittest.TestCase):
         self.assertIn("estimated_source_execution_cycles", properties)
         self.assertIn("estimated_source_execution_us", properties)
         self.assertIn("cycle_components", properties)
+        self.assertIn("estimation_basis", properties)
         self.assertNotIn("estimated_execution_cycles", properties)
         self.assertNotIn("estimated_nominal_cycles", properties)
         self.assertNotIn("estimated_upper_cycles", properties)
@@ -69,6 +74,19 @@ class ValidationAndCliTest(unittest.TestCase):
     def test_confidence_must_be_in_range(self) -> None:
         with self.assertRaises(ValidationError):
             PredictionResponse.model_validate(prediction(confidence_percent=101))
+
+    def test_reference_anchor_requires_measurement_and_adjustments(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "requires anchor task ID"):
+            PredictionResponse.model_validate(
+                prediction(estimation_basis="REFERENCE_ANCHORED")
+            )
+        parsed = PredictionResponse.model_validate(prediction(
+            estimation_basis="REFERENCE_ANCHORED",
+            reference_anchor_task_id="board.csv:2:ReferenceTask",
+            reference_anchor_measured_us=10.0,
+            reference_adjustments=["same loop count; extra branch added"],
+        ))
+        self.assertEqual("REFERENCE_ANCHORED", parsed.estimation_basis)
 
     def test_supported_requires_all_predictions(self) -> None:
         with self.assertRaises(ValidationError):
@@ -170,6 +188,8 @@ class ValidationAndCliTest(unittest.TestCase):
         self.assertIn("Assuming one or another number of Flash wait states", template)
         self.assertIn("Multiplying by 1.3, 1.6", template)
         self.assertIn("Do not target a desired error percentage", template)
+        self.assertIn("Combined retrieval score >= 0.85", template)
+        self.assertIn("Do not discard a strong measured anchor", template)
         self.assertIn('"instruction_location": "internal PFlash', profile)
         self.assertIn('"flash_wait_states": "not supplied', profile)
 

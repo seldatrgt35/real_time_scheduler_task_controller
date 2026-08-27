@@ -78,6 +78,94 @@ def extract_function(source: str, function_name: str) -> str | None:
     return None
 
 
+def function_names(source: str) -> list[str]:
+    return list(dict.fromkeys(re.findall(
+        r"\b(?:void|[A-Za-z_]\w*(?:\s*\*)?)\s+([A-Za-z_]\w*)\s*\([^;]*?\)\s*\{",
+        source,
+        flags=re.S,
+    )))
+
+
+def called_functions(function_source: str) -> list[str]:
+    calls = re.findall(r"\b([A-Za-z_]\w*)\s*\(", strip_comments(function_source))
+    keywords = {"for", "while", "if", "switch", "sizeof", "return"}
+    return [name for name in calls[1:] if name not in keywords]
+
+
+def extract_reachable_helpers(source: str, root_function: str) -> str:
+    available = set(function_names(source))
+    pending = list(called_functions(extract_function(source, root_function) or ""))
+    visited = {root_function}
+    helpers: list[str] = []
+    while pending:
+        name = pending.pop(0)
+        if name in visited or name not in available:
+            continue
+        visited.add(name)
+        body = extract_function(source, name)
+        if body is None:
+            continue
+        helpers.append(body)
+        pending.extend(called_functions(body))
+    return "\n\n".join(helpers)
+
+
+def extract_relevant_defines(source: str, relevant_source: str) -> str:
+    definitions: dict[str, str] = {}
+    for match in re.finditer(
+        r"^[ \t]*#define[ \t]+([A-Za-z_]\w*)([^\r\n]*)",
+        source,
+        flags=re.M,
+    ):
+        remainder = match.group(2)
+        # In C, a function-like macro has no whitespace between its name and
+        # opening parenthesis. Object-like values commonly use spaced `(8U)`.
+        if remainder.startswith("("):
+            continue
+        definitions[match.group(1)] = match.group(0).strip()
+    selected: list[str] = []
+    search_text = relevant_source
+    changed = True
+    while changed:
+        changed = False
+        for name, line in definitions.items():
+            if line in selected:
+                continue
+            if re.search(rf"\b{re.escape(name)}\b", search_text):
+                selected.append(line)
+                search_text += "\n" + line
+                changed = True
+    return "\n".join(selected)
+
+
+def extract_initialization_context(source: str) -> str:
+    initializers = [
+        name for name in function_names(source)
+        if "initialize" in name.casefold() or name.casefold().endswith("_init")
+    ]
+    return "\n\n".join(
+        body for name in initializers
+        if (body := extract_function(source, name)) is not None
+    )
+
+
+def build_reference_context(
+    source: str, task_name: str
+) -> tuple[str, str]:
+    task_source = extract_function(source, task_name) or ""
+    callee_source = extract_reachable_helpers(source, task_name)
+    initialization = extract_initialization_context(source)
+    defines = extract_relevant_defines(
+        source, "\n".join((task_source, callee_source, initialization))
+    )
+    sections = []
+    if defines:
+        sections.append("Relevant object-like defines:\n" + defines)
+    if initialization:
+        sections.append("Initialization context (outside timed interval):\n" + initialization)
+    return callee_source, "\n\n".join(sections)
+
+
 def structural_summary(source: str) -> StructuralSummary:
     clean = strip_comments(source)
     loops = list(re.finditer(r"\b(for|while|do)\b", clean))
@@ -223,11 +311,15 @@ class MeasurementLoader:
             with csv_path.open(encoding="utf-8-sig", newline="") as handle:
                 for row_number, row in enumerate(csv.DictReader(handle), start=2):
                     row_source = row.get("source_file", "").strip()
-                    source_path = (
-                        self.root / Path(row_source)
-                        if row_source
-                        else default_source_path
-                    )
+                    if row_source:
+                        row_candidate = Path(row_source)
+                        source_path = (
+                            self.root / row_candidate
+                            if len(row_candidate.parts) > 1
+                            else self.examples / row_candidate
+                        )
+                    else:
+                        source_path = default_source_path
                     if not source_path.exists():
                         self.skipped.append({
                             "dataset": spec.csv_name,
@@ -252,15 +344,25 @@ class MeasurementLoader:
                         continue
                     seen.add(key)
                     normalized = normalize_source(function_source)
+                    callee_source, source_context = build_reference_context(
+                        full_source, task_name
+                    )
                     records.append(RagRecord(
                         task_id=f"{spec.csv_name}:{row_number}:{task_name}",
                         task_name=task_name,
                         source_path=str(source_path.relative_to(self.root)),
                         source_code=function_source,
+                        callee_source=callee_source,
+                        source_context=source_context,
+                        context_fingerprint=source_fingerprint(
+                            callee_source + "\n" + source_context
+                        ),
                         source_fingerprint=source_fingerprint(function_source),
                         normalized_source=normalized,
                         hardware_profile_id=HARDWARE_PROFILE_ID,
-                        structural_summary=structural_summary(function_source),
+                        structural_summary=structural_summary(
+                            function_source + "\n" + callee_source
+                        ),
                         measurement=measurement,
                         dataset_split=row.get("dataset_role", "").strip() or row.get("fit_role", "").strip().lower() or spec.split,
                     ))

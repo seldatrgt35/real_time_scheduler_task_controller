@@ -39,6 +39,9 @@ class RagRecord(BaseModel):
     task_name: str
     source_path: str
     source_code: str
+    callee_source: str = ""
+    source_context: str = ""
+    context_fingerprint: str = ""
     source_fingerprint: str
     normalized_source: str
     hardware_profile_id: str
@@ -68,8 +71,20 @@ class SourceAnalysis(BaseModel):
 
 class CycleComponent(BaseModel):
     name: str
-    cycles: int | None = Field(default=None, ge=0)
+    cycles: int | None = None
     evidence: str
+
+    @model_validator(mode="after")
+    def validate_signed_adjustment(self) -> "CycleComponent":
+        if (
+            self.cycles is not None
+            and self.cycles < 0
+            and self.name != "explicit_structural_adjustment"
+        ):
+            raise ValueError(
+                "negative cycles are allowed only for explicit_structural_adjustment"
+            )
+        return self
 
 
 class PredictionResponse(BaseModel):
@@ -78,6 +93,10 @@ class PredictionResponse(BaseModel):
     hardware_profile_id: str
     source_analysis: SourceAnalysis
     retrieved_examples_used: list[RetrievedExample] = Field(default_factory=list)
+    estimation_basis: Literal["REFERENCE_ANCHORED", "SOURCE_ONLY"]
+    reference_anchor_task_id: str | None = None
+    reference_anchor_measured_us: float | None = None
+    reference_adjustments: list[str] = Field(default_factory=list)
     cycle_components: list[CycleComponent] = Field(default_factory=list)
     estimated_source_execution_cycles: int | None = None
     estimated_source_execution_us: float | None = None
@@ -129,4 +148,17 @@ class PredictionResponse(BaseModel):
                 )
         if self.analysis_status == "UNRESOLVED" and not self.unresolved:
             raise ValueError("UNRESOLVED requires an explanation")
+        if self.estimation_basis == "REFERENCE_ANCHORED":
+            if not self.reference_anchor_task_id or self.reference_anchor_measured_us is None:
+                raise ValueError(
+                    "REFERENCE_ANCHORED requires anchor task ID and measured time"
+                )
+            if self.reference_anchor_measured_us <= 0:
+                raise ValueError("reference anchor measured time must be positive")
+            if not self.reference_adjustments:
+                raise ValueError(
+                    "REFERENCE_ANCHORED requires explicit structural adjustments"
+                )
+        elif self.reference_anchor_task_id is not None or self.reference_anchor_measured_us is not None:
+            raise ValueError("SOURCE_ONLY cannot claim a reference anchor")
         return self

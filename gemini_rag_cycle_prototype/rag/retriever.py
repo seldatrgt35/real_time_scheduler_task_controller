@@ -7,6 +7,7 @@ from difflib import SequenceMatcher
 from gemini_rag_cycle_prototype.rag.index_builder import Embedder, RagIndex
 from gemini_rag_cycle_prototype.rag.measurement_loader import (
     extract_function,
+    build_reference_context,
     normalize_source,
     source_fingerprint,
     structural_summary,
@@ -124,13 +125,18 @@ class Retriever:
         # references from the requested task body, not from the entire file;
         # otherwise every task in one suite produces nearly the same query.
         target_source = extract_function(query_source, query_function) or query_source
+        query_callees, query_context = build_reference_context(
+            query_source, query_function
+        )
         normalized_query = normalize_source(target_source)
         fingerprint = source_fingerprint(target_source)
         query_text = (
             f"Task: {query_function}\nC source:\n{target_source}"
+            f"\nReachable helper source:\n{query_callees or 'None'}"
+            f"\nRelevant source context:\n{query_context or 'None'}"
         )
         query_embedding = self.embedder.embed_query(query_text)
-        query_structure = structural_summary(target_source)
+        query_structure = structural_summary(target_source + "\n" + query_callees)
         result = RetrievalResult()
         candidates: list[RetrievalHit] = []
         for item in self.index.records:
@@ -165,7 +171,8 @@ class Retriever:
                 continue
             similarity = cosine_similarity(query_embedding, item.embedding)
             structure = structural_similarity(
-                query_structure, structural_summary(record.source_code)
+                query_structure,
+                structural_summary(record.source_code + "\n" + record.callee_source),
             )
             if similarity < minimum_similarity:
                 continue

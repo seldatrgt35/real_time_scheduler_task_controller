@@ -14,6 +14,9 @@ class LeakageError(RuntimeError):
     pass
 
 
+STRONG_REFERENCE_SCORE = 0.85
+
+
 def canonicalize_reference_ids(
     returned_ids: set[str], retrieval: RetrievalResult
 ) -> set[str]:
@@ -77,6 +80,14 @@ class Predictor:
                     "```c",
                     record.source_code,
                     "```",
+                    "Reachable helper source:",
+                    "```c",
+                    record.callee_source or "No reachable helper bodies supplied.",
+                    "```",
+                    "Relevant defines and initialization context:",
+                    "```c",
+                    record.source_context or "No additional source context supplied.",
+                    "```",
                 ))
             )
         return "\n\n".join(output) if output else "No sufficiently similar independent references."
@@ -123,6 +134,38 @@ class Predictor:
                 "Gemini returned one or more unique retrieved task names instead "
                 "of full reference IDs; citations were validated against the "
                 "same leakage-filtered top-k set."
+            )
+        strong_hits = [
+            hit for hit in retrieval.hits
+            if hit.ranking_score >= STRONG_REFERENCE_SCORE
+        ]
+        if strong_hits:
+            if prediction.estimation_basis != "REFERENCE_ANCHORED":
+                raise ValueError(
+                    "strong measured reference requires REFERENCE_ANCHORED estimation"
+                )
+            anchor_ids = canonicalize_reference_ids(
+                {prediction.reference_anchor_task_id or ""}, retrieval
+            )
+            strong_ids = {hit.record.task_id for hit in strong_hits}
+            if not anchor_ids.issubset(strong_ids):
+                raise ValueError(
+                    "reference anchor must be selected from strong retrieval hits"
+                )
+            anchor_id = next(iter(anchor_ids))
+            anchor = next(hit.record for hit in strong_hits if hit.record.task_id == anchor_id)
+            measured = anchor.measurement.maximum_us or anchor.measurement.mean_us
+            if measured is None or abs(
+                measured - (prediction.reference_anchor_measured_us or 0.0)
+            ) > 0.01:
+                raise ValueError("reference anchor measured time does not match RAG evidence")
+        elif prediction.estimation_basis != "SOURCE_ONLY":
+            raise ValueError(
+                "REFERENCE_ANCHORED estimation requires a strong measured reference"
+            )
+        if not strong_hits and prediction.confidence_percent > 50:
+            raise ValueError(
+                "source-only estimation without a strong reference cannot exceed 50 percent confidence"
             )
         if prediction.hardware_profile_id != HARDWARE_PROFILE_ID:
             raise ValueError("prediction used the wrong hardware profile")
