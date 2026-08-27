@@ -1,102 +1,97 @@
 You are estimating source-level execution time for a not-yet-compiled C task.
 
-This is LLM source-level execution-time prediction, not a formally proven WCET
-analysis. Retrieved references may be absent; when they are absent this is a
-strict source-only prediction. You must produce one final conservative point
-estimate in cycles and microseconds. Do not produce separate nominal and upper
-values. Do not delegate the final prediction to
-an external deterministic cycle calculator. The Python application validates
-and records your response but does not replace or recalculate your predicted
-cycle values.
+This is an engineering source-level point estimate, not a formally proven WCET
+bound. Analyze only the supplied C source, hardware profile, context, and
+retrieved measured references. Do not assume access to ELF, assembly, map,
+disassembly, compiler output, or a new board measurement. Do not delegate the
+estimate to an external deterministic cycle calculator.
 
-Rules:
-- Analyze only the supplied source and context files.
-- Do not assume ELF, assembly, map, disassembly, compiler output, or a new board measurement.
-- Treat the supplied hardware profile as authoritative. Do not silently replace
-  an unknown hardware property with a favorable value.
-- This source-only prediction must stand on its own when the references section
-  says no references are available. Do not invent, recall, or imply measured
-  reference tasks that were not supplied in the prompt.
-- Initialization is outside the timed function unless explicitly stated otherwise.
+ESTIMATE DEFINITION
+- Produce one `estimated_source_execution_cycles` value and its corresponding
+  `estimated_source_execution_us` value.
+- The estimate is the sum of source-visible dynamic work and only those
+  compiler-sensitive or hardware-sensitive contributions supported by supplied
+  evidence.
+- It is not a complete hardware WCET bound. Always return
+  `formal_guarantee=false`.
+- Do not target a desired error percentage or bias. Do not add a safety margin
+  merely to make the result conservative.
+
+SOURCE ANALYSIS RULES
+- Initialization is outside the timed function unless explicitly stated.
 - Resolve bounded loops and feasible source-level paths.
 - Follow helper functions only when their bodies are supplied.
-- If a critical loop bound or helper body is missing, return PARTIAL or UNRESOLVED.
-- Never price a loop body only once. Convert every operation, branch, memory
-  access, and helper call inside a bounded loop to its dynamic execution count.
-- For nested loops, multiply the bounds along the complete nesting path. A
-  helper called once in a 6 by 6 loop executes 36 times, before accounting for
-  helper-internal branches, memory accesses, and operators.
-- Analyze each supplied helper body separately. Compute its per-invocation
-  cost on the selected feasible path, then multiply that cost by the helper's
-  dynamic call count at every call site. Do not treat a call as only call/return
-  overhead while omitting the callee body.
-- Count loop initialization, condition checks (including the final failed
-  check), increments, address/index calculations, loads, stores, arithmetic,
-  comparisons, taken/not-taken branches, function-call overhead, and callee
-  work. Distinguish source-level logical accesses from compiler-sensitive
-  stack/addressing overhead and include a justified allowance for the latter.
-- Account for the configured instruction and data locations independently.
-  Internal-SRAM data does not imply that instructions execute from SRAM. When
-  the profile places .text in PFlash, do not claim zero-wait-state instruction
-  fetch. If the exact Flash wait-state/prefetch configuration is unknown, state
-  the unknown PFlash fetch timing in warnings. Do not invent a large arbitrary
-  margin for an unknown hardware setting.
-- Use Cortex-M4-appropriate control-flow reasoning. Do not cite a generic
-  dynamic branch predictor, branch-prediction misses, cache misses, unaligned
-  accesses, DMA stalls, or interrupt interference unless the supplied profile
-  or source actually establishes them.
-- Before choosing final cycle values, build an internal dynamic-work ledger for
-  the worst-case feasible path. At minimum it must reconcile loop-control
-  executions, total helper invocations, helper-body executions, memory reads,
-  memory writes, branches, and major operator classes. Use that ledger in the
-  final arithmetic; merely listing counts without pricing them is insufficient.
-- Perform a mandatory bottom-up cross-check: sum fixed task overhead, loop
-  control, caller-body work, call overhead, and all multiplied callee-body work.
-  If this reconstruction materially disagrees with the initial estimate, use
-  the higher justified value or lower confidence and return PARTIAL when the
-  discrepancy cannot be resolved.
-- Sanity-check relative complexity. A task with materially more dynamic nested
-  iterations or helper-body executions must not receive a lower estimate than
-  a structurally cheaper task/reference unless a concrete operation-level
-  reason is stated.
-- Retrieved measurements are reference examples, not direct answers.
-- Compare loop structure, operation mix, branches, calls, data types, and memory access patterns.
-- Do not copy a measured value without explaining structural similarity and differences.
-- The query task's own measurement is intentionally hidden.
-- In retrieved_examples_used.task_id, copy the complete "Reference example ID"
-  exactly as supplied. Do not substitute the shorter task name.
-- Convert your own cycle predictions to microseconds using the hardware clock.
-- Produce one slightly conservative point estimate for the worst feasible
-  source path. The engineering target is close prediction with modest positive
-  bias, ideally between the observed board time and 10 percent above it across
-  an independent validation set. This is an evaluation target, not permission
-  to multiply every estimate by 1.10. Derive the estimate from the dynamic-work
-  ledger and do not add an unexplained safety factor.
-- A high confidence score is not allowed when a material hardware timing input
-  is unknown. Confidence and warnings must reflect unknown Flash timing rather
-  than hiding it behind an exact-looking cycle total.
-- Do not call the result a formal WCET guarantee.
+- If a critical loop bound or helper body is missing, return PARTIAL or
+  UNRESOLVED and explain what is missing.
+- Never price a loop body only once. Convert operations, branches, memory
+  accesses, and helper calls inside loops to dynamic execution counts.
+- Multiply nested-loop bounds along the complete nesting path. A helper called
+  once in a 6 by 6 loop executes 36 times.
+- Expand each supplied helper body separately and multiply its work by the
+  dynamic call count at every call site. Do not count only call/return overhead
+  while omitting the callee body.
+- Account for loop initialization, condition checks including the final failed
+  check, increments, addressing, loads, stores, arithmetic, comparisons,
+  branches, call overhead, and callee work.
+- Identify the feasible source path whose priced work is highest. Do not invent
+  an input path that contradicts supplied source constraints.
+- Retrieved records contain measured board references. Use them only when
+  structural differences and similarities are explicitly reconciled. Do not
+  copy a measured value without analysis.
+- In `retrieved_examples_used.task_id`, copy the complete supplied reference ID.
 
-MANDATORY ESTIMATION PROCEDURE
-1. Identify the worst-case feasible source path and every bounded loop nesting
-   path that can occur on it.
-2. Derive dynamic counts. For each call site use:
-   dynamic helper invocations = product of enclosing loop bounds multiplied by
-   calls per enclosing-body execution.
-3. Expand each supplied helper into per-invocation operation, branch, and memory
-   costs, including its own bounded loops.
-4. Calculate execution cycles bottom-up from fixed overhead plus every dynamic
-   component. Do not rely on pattern recognition alone.
-5. Select the worst feasible source path and include only justified compilation
-   allowances. List each material allowance in the reasoning instead of applying
-   an unexplained percentage. Return only estimated_execution_cycles and
-   estimated_execution_us; do not return nominal or upper fields.
-6. Recalculate microseconds from cycles using the hardware clock and verify the
-   two representations agree before returning JSON.
-7. In estimation_reasoning_summary, state the decisive dynamic counts and show
-   a compact arithmetic decomposition of the final single estimate.
-8. Audit every assumption against the hardware profile. Remove unsupported
-   claims before returning the JSON, and put unavoidable unknowns in warnings.
+CYCLE COMPONENT RULES
+- Return `cycle_components` and separate at least these concepts:
+  1. `source_visible_work`: caller operations, loop control, branches, and
+     source-visible memory work.
+  2. `resolved_helper_work`: expanded helper bodies and justified call overhead.
+  3. `compiler_sensitive_overhead`: stack spills, instruction selection, and
+     other compiler-dependent work not established by supplied evidence.
+  4. `pflash_fetch_overhead`: PFlash wait-state/prefetch contribution.
+- A priced component has an integer `cycles` value and specific evidence.
+- An unpriced component has `cycles=null` and evidence explaining why it cannot
+  be priced.
+- `estimated_source_execution_cycles` must equal exactly the sum of all
+  non-null component cycle values. Null components contribute zero to that
+  arithmetic because they are unknown, not because their physical cost is zero.
+
+UNPRICED HARDWARE RULE
+If an exact compiler-sensitive or hardware-sensitive timing contribution is not
+supported by the supplied hardware profile or a structurally relevant retrieved
+board reference:
+1. Set that component's cycles to null.
+2. Add the missing contribution to both `unresolved` and `warnings`.
+3. Do not convert it into a percentage, multiplier, wait-state count, CPI, or
+   invented cycle allowance.
+4. Do not add it to `estimated_source_execution_cycles`.
+5. Return `analysis_status=PARTIAL`.
+6. Still return the required point estimate for the components that can be
+   priced from source and supplied evidence.
+
+FORBIDDEN UNSUPPORTED ASSUMPTIONS
+- Assuming one or another number of Flash wait states.
+- Multiplying by 1.3, 1.6, or any other unsupported factor.
+- Adding a generic compiler, stack, Flash, cache, or uncertainty percentage.
+- Inventing CPI or instruction counts from general Cortex-M4 knowledge.
+- Claiming zero-wait-state instruction fetch because data is in SRAM.
+- Citing generic dynamic branch prediction, cache misses, unaligned accesses,
+  DMA stalls, or interrupt interference without supplied evidence.
+
+MANDATORY PROCEDURE
+1. Identify every bounded loop nesting path and the selected feasible path.
+2. Derive dynamic caller-operation, memory, branch, and helper-call counts.
+3. Expand supplied helper bodies, including their internal bounded loops.
+4. Create the cycle components. Price only evidence-supported contributions.
+5. Sum only non-null components into `estimated_source_execution_cycles`.
+6. Convert cycles to microseconds using the supplied hardware clock and verify
+   the two representations agree.
+7. If two bottom-up reconstructions disagree, report the discrepancy. Select a
+   value only when one reconstruction has stronger supplied evidence. Do not
+   select the larger value solely because it is larger.
+8. In `estimation_reasoning_summary`, show decisive dynamic counts and compact
+   arithmetic matching the component sum.
+9. Audit assumptions against the supplied profile. Put unavoidable unknowns in
+   `unresolved` and `warnings`; never hide them inside the point estimate.
 
 HARDWARE PROFILE
 {hardware_profile}
@@ -112,7 +107,7 @@ QUERY SOURCE
 ADDITIONAL CONTEXT
 {context_code}
 
-RETRIEVED INDEPENDENT MEASURED REFERENCES
+RETRIEVED MEASURED BOARD REFERENCES
 {references}
 
 Return an object matching the required JSON schema.

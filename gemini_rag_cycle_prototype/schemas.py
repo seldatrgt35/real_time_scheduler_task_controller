@@ -58,14 +58,22 @@ class SourceAnalysis(BaseModel):
     dominant_operations: list[str] = Field(default_factory=list)
 
 
+class CycleComponent(BaseModel):
+    name: str
+    cycles: int | None = Field(default=None, ge=0)
+    evidence: str
+
+
 class PredictionResponse(BaseModel):
     analysis_status: Literal["SUPPORTED", "PARTIAL", "UNRESOLVED"]
     function_name: str
     hardware_profile_id: str
     source_analysis: SourceAnalysis
     retrieved_examples_used: list[RetrievedExample] = Field(default_factory=list)
-    estimated_execution_cycles: int | None = None
-    estimated_execution_us: float | None = None
+    cycle_components: list[CycleComponent] = Field(default_factory=list)
+    estimated_source_execution_cycles: int | None = None
+    estimated_source_execution_us: float | None = None
+    formal_guarantee: bool = False
     confidence_percent: int = Field(ge=0, le=100)
     estimation_reasoning_summary: str
     assumptions: list[str] = Field(default_factory=list)
@@ -74,17 +82,43 @@ class PredictionResponse(BaseModel):
 
     @model_validator(mode="after")
     def validate_prediction(self) -> "PredictionResponse":
-        if self.analysis_status == "SUPPORTED":
+        if self.formal_guarantee:
+            raise ValueError("source-level prediction cannot be a formal guarantee")
+        if self.analysis_status in {"SUPPORTED", "PARTIAL"}:
             required = (
-                self.estimated_execution_cycles,
-                self.estimated_execution_us,
+                self.estimated_source_execution_cycles,
+                self.estimated_source_execution_us,
             )
             if any(value is None for value in required):
-                raise ValueError("SUPPORTED requires cycle and time predictions")
-        if self.estimated_execution_cycles is not None and self.estimated_execution_cycles <= 0:
-            raise ValueError("execution cycles must be positive")
-        if self.estimated_execution_us is not None and self.estimated_execution_us <= 0:
-            raise ValueError("execution time must be positive")
+                raise ValueError(
+                    "SUPPORTED and PARTIAL require source cycle and time predictions"
+                )
+        if self.estimated_source_execution_cycles is not None and self.estimated_source_execution_cycles <= 0:
+            raise ValueError("source execution cycles must be positive")
+        if self.estimated_source_execution_us is not None and self.estimated_source_execution_us <= 0:
+            raise ValueError("source execution time must be positive")
+        priced_components = [
+            component.cycles
+            for component in self.cycle_components
+            if component.cycles is not None
+        ]
+        if self.estimated_source_execution_cycles is not None and not self.cycle_components:
+            raise ValueError("source execution estimate requires cycle components")
+        if (
+            self.estimated_source_execution_cycles is not None
+            and priced_components
+            and sum(priced_components) != self.estimated_source_execution_cycles
+        ):
+            raise ValueError(
+                "source execution cycles must equal the sum of priced cycle components"
+            )
+        if any(component.cycles is None for component in self.cycle_components):
+            if self.analysis_status != "PARTIAL":
+                raise ValueError("unpriced cycle components require PARTIAL status")
+            if not self.unresolved or not self.warnings:
+                raise ValueError(
+                    "unpriced cycle components require unresolved and warnings"
+                )
         if self.analysis_status == "UNRESOLVED" and not self.unresolved:
             raise ValueError("UNRESOLVED requires an explanation")
         return self

@@ -8,9 +8,11 @@ C source -> Gemini prediction -> one conservative execution-time estimate
 
 The active workflow is source-only (`--no-rag`). It does not compile the query,
 inspect ELF/assembly, call the existing STAR execution estimator, or perform
-scheduler analysis. Gemini produces `estimated_execution_cycles` and
-`estimated_execution_us`. Python validates and records those values without
-replacing or recalculating them.
+scheduler analysis. Gemini produces `estimated_source_execution_cycles` and
+`estimated_source_execution_us` from explicitly priced cycle components.
+Unknown compiler/PFlash components remain `null` and are excluded from the
+point-estimate sum. Python validates and records the values without replacing
+or recalculating them.
 
 The cached RAG implementation and frozen baseline are retained for a later
 controlled source-only versus RAG comparison; they are not used by the current

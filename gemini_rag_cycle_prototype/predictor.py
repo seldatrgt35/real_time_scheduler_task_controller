@@ -123,13 +123,13 @@ class Predictor:
         if prediction.hardware_profile_id != HARDWARE_PROFILE_ID:
             raise ValueError("prediction used the wrong hardware profile")
         if (
-            prediction.estimated_execution_cycles is not None
-            and prediction.estimated_execution_us is not None
+            prediction.estimated_source_execution_cycles is not None
+            and prediction.estimated_source_execution_us is not None
         ):
-            expected = prediction.estimated_execution_cycles / 48.0
-            if abs(expected - prediction.estimated_execution_us) > max(0.05, expected * 0.01):
+            expected = prediction.estimated_source_execution_cycles / 48.0
+            if abs(expected - prediction.estimated_source_execution_us) > max(0.05, expected * 0.01):
                 prediction.warnings.append(
-                    "Execution cycle/us values are inconsistent at 48 MHz; values were recorded unchanged."
+                    "Source execution cycle/us values are inconsistent at 48 MHz; values were recorded unchanged."
                 )
         prediction.warnings.extend(retrieval.warnings)
         return prediction, raw, retrieval

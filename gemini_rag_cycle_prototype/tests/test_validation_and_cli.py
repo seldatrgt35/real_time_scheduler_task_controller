@@ -20,8 +20,13 @@ def prediction(**overrides) -> dict:
         "hardware_profile_id": "S32K148_GCC11_4_O0_48MHz_source_only",
         "source_analysis": SourceAnalysis().model_dump(),
         "retrieved_examples_used": [],
-        "estimated_execution_cycles": 480,
-        "estimated_execution_us": 10.0,
+        "cycle_components": [
+            {"name": "source_visible_work", "cycles": 300, "evidence": "ledger"},
+            {"name": "resolved_helper_work", "cycles": 180, "evidence": "helper expansion"},
+        ],
+        "estimated_source_execution_cycles": 480,
+        "estimated_source_execution_us": 10.0,
+        "formal_guarantee": False,
         "confidence_percent": 70,
         "estimation_reasoning_summary": "references and source structure",
         "assumptions": [],
@@ -48,15 +53,17 @@ class ValidationAndCliTest(unittest.TestCase):
 
         self.assertFalse(contains_additional_properties(schema))
         properties = schema["properties"]
-        self.assertIn("estimated_execution_cycles", properties)
-        self.assertIn("estimated_execution_us", properties)
+        self.assertIn("estimated_source_execution_cycles", properties)
+        self.assertIn("estimated_source_execution_us", properties)
+        self.assertIn("cycle_components", properties)
+        self.assertNotIn("estimated_execution_cycles", properties)
         self.assertNotIn("estimated_nominal_cycles", properties)
         self.assertNotIn("estimated_upper_cycles", properties)
 
     def test_execution_cycles_must_be_positive(self) -> None:
         with self.assertRaises(ValidationError):
             PredictionResponse.model_validate(
-                prediction(estimated_execution_cycles=0)
+                prediction(estimated_source_execution_cycles=0)
             )
 
     def test_confidence_must_be_in_range(self) -> None:
@@ -65,15 +72,38 @@ class ValidationAndCliTest(unittest.TestCase):
 
     def test_supported_requires_all_predictions(self) -> None:
         with self.assertRaises(ValidationError):
-            PredictionResponse.model_validate(prediction(estimated_execution_us=None))
+            PredictionResponse.model_validate(
+                prediction(estimated_source_execution_us=None)
+            )
+
+    def test_component_sum_must_equal_source_estimate(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "sum of priced cycle components"):
+            PredictionResponse.model_validate(
+                prediction(estimated_source_execution_cycles=481)
+            )
+
+    def test_unpriced_component_requires_partial_and_visible_unknowns(self) -> None:
+        components = [
+            {"name": "source_visible_work", "cycles": 480, "evidence": "ledger"},
+            {"name": "pflash_fetch_overhead", "cycles": None, "evidence": "unknown"},
+        ]
+        with self.assertRaisesRegex(ValidationError, "require PARTIAL"):
+            PredictionResponse.model_validate(prediction(cycle_components=components))
+        parsed = PredictionResponse.model_validate(prediction(
+            analysis_status="PARTIAL",
+            cycle_components=components,
+            unresolved=["PFlash timing is not supplied"],
+            warnings=["Estimate excludes unpriced PFlash contribution"],
+        ))
+        self.assertEqual(480, parsed.estimated_source_execution_cycles)
 
     def test_unresolved_requires_explanation(self) -> None:
         with self.assertRaises(ValidationError):
             PredictionResponse.model_validate(
                 prediction(
                     analysis_status="UNRESOLVED",
-                    estimated_execution_cycles=None,
-                    estimated_execution_us=None,
+                    estimated_source_execution_cycles=None,
+                    estimated_source_execution_us=None,
                 )
             )
 
@@ -110,9 +140,9 @@ class ValidationAndCliTest(unittest.TestCase):
         self.assertEqual("SUPPORTED", result.analysis_status)
         self.assertEqual([], retrieval.hits)
         self.assertIn("No sufficiently similar independent references", client.prompt)
-        self.assertIn("dynamic helper invocations", client.prompt)
-        self.assertIn("mandatory bottom-up cross-check", client.prompt)
-        self.assertIn("merely listing counts without pricing them is insufficient", client.prompt)
+        self.assertIn("dynamic call count", client.prompt)
+        self.assertIn("UNPRICED HARDWARE RULE", client.prompt)
+        self.assertIn("Do not add it to `estimated_source_execution_cycles`", client.prompt)
 
     def test_prompt_requires_nested_loop_callee_cost_expansion(self) -> None:
         root = Path(__file__).resolve().parents[2]
@@ -122,10 +152,10 @@ class ValidationAndCliTest(unittest.TestCase):
             / "prompts"
             / "cycle_prediction_prompt.txt"
         ).read_text(encoding="utf-8")
-        self.assertIn("helper called once in a 6 by 6 loop executes 36 times", template)
-        self.assertIn("callee-body work", template)
-        self.assertIn("product of enclosing loop bounds", template)
-        self.assertIn("compact arithmetic decomposition", template)
+        self.assertIn("once in a 6 by 6 loop executes 36 times", template)
+        self.assertIn("Expand each supplied helper body", template)
+        self.assertIn("Multiply nested-loop bounds", template)
+        self.assertIn("arithmetic matching the component sum", template)
 
     def test_prompt_rejects_unsupported_source_only_hardware_assumptions(self) -> None:
         root = Path(__file__).resolve().parents[2]
@@ -136,10 +166,10 @@ class ValidationAndCliTest(unittest.TestCase):
         profile = (prototype / "config" / "hardware_profile.json").read_text(
             encoding="utf-8"
         )
-        self.assertIn("Internal-SRAM data does not imply", template)
-        self.assertIn("do not claim zero-wait-state instruction", template)
-        self.assertIn("Do not cite a generic", template)
-        self.assertIn("PFlash fetch timing", template)
+        self.assertIn("Null components contribute zero", template)
+        self.assertIn("Assuming one or another number of Flash wait states", template)
+        self.assertIn("Multiplying by 1.3, 1.6", template)
+        self.assertIn("Do not target a desired error percentage", template)
         self.assertIn('"instruction_location": "internal PFlash', profile)
         self.assertIn('"flash_wait_states": "not supplied', profile)
 
