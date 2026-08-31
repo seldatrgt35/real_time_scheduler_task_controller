@@ -66,6 +66,12 @@ class SourceAnalysis(BaseModel):
     worst_case_path: list[str] = Field(default_factory=list)
     estimated_source_memory_reads: int | None = None
     estimated_source_memory_writes: int | None = None
+    dynamic_helper_calls: int | None = None
+    dynamic_nested_helper_calls: int | None = None
+    dynamic_divisions: int | None = None
+    dynamic_branch_evaluations: int | None = None
+    estimated_o0_stack_reads: int | None = None
+    estimated_o0_stack_writes: int | None = None
     dominant_operations: list[str] = Field(default_factory=list)
 
 
@@ -161,4 +167,20 @@ class PredictionResponse(BaseModel):
                 )
         elif self.reference_anchor_task_id is not None or self.reference_anchor_measured_us is not None:
             raise ValueError("SOURCE_ONLY cannot claim a reference anchor")
+        if any(
+            component.name == "holistic_build_profile_estimate"
+            for component in self.cycle_components
+        ):
+            ledger = (
+                self.source_analysis.dynamic_helper_calls,
+                self.source_analysis.dynamic_nested_helper_calls,
+                self.source_analysis.dynamic_divisions,
+                self.source_analysis.dynamic_branch_evaluations,
+                self.source_analysis.estimated_o0_stack_reads,
+                self.source_analysis.estimated_o0_stack_writes,
+            )
+            if any(value is None for value in ledger):
+                raise ValueError(
+                    "holistic source-only estimate requires a complete dynamic O0 cost ledger"
+                )
         return self

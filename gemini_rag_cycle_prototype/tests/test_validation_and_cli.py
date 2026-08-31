@@ -169,10 +169,54 @@ class ValidationAndCliTest(unittest.TestCase):
         )
         self.assertEqual("SUPPORTED", result.analysis_status)
         self.assertEqual([], retrieval.hits)
-        self.assertIn("No sufficiently similar independent references", client.prompt)
-        self.assertIn("dynamic call count", client.prompt)
-        self.assertIn("UNPRICED HARDWARE RULE", client.prompt)
-        self.assertIn("Do not add it to `estimated_source_execution_cycles`", client.prompt)
+        self.assertIn("source-only engineering execution-time estimate", client.prompt)
+        self.assertIn("COMPLETE BUILD-PROFILE ESTIMATE", client.prompt)
+        self.assertIn("holistic_build_profile_estimate", client.prompt)
+        self.assertNotIn("RETRIEVED MEASURED BOARD REFERENCES", client.prompt)
+
+    def test_rag_and_no_rag_use_distinct_prompt_templates(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        prototype = root / "gemini_rag_cycle_prototype" / "prompts"
+        rag = (prototype / "cycle_prediction_prompt.txt").read_text(
+            encoding="utf-8"
+        )
+        source_only = (prototype / "source_only_prediction_prompt.txt").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("REFERENCE_ANCHORED", rag)
+        self.assertIn("RETRIEVED MEASURED BOARD REFERENCES", rag)
+        self.assertIn("holistic_build_profile_estimate", source_only)
+        self.assertIn("Do not treat unknown compiler or PFlash contributions as zero", source_only)
+        self.assertIn("DYNAMIC GCC -O0 COST LEDGER", source_only)
+        self.assertIn("estimated_o0_stack_reads", source_only)
+        self.assertIn("dynamic_nested_helper_calls", source_only)
+        self.assertNotIn("{references}", source_only)
+
+    def test_holistic_source_only_estimate_requires_complete_o0_ledger(self) -> None:
+        payload = prediction()
+        payload["analysis_status"] = "PARTIAL"
+        payload["cycle_components"] = [{
+            "name": "holistic_build_profile_estimate",
+            "cycles": 480,
+            "evidence": "holistic",
+        }]
+        payload["estimated_source_execution_cycles"] = 480
+        payload["estimated_source_execution_us"] = 10.0
+        payload["unresolved"] = ["exact compiler output"]
+        payload["warnings"] = ["engineering estimate"]
+        with self.assertRaisesRegex(ValueError, "complete dynamic O0 cost ledger"):
+            PredictionResponse.model_validate(payload)
+
+        payload["source_analysis"].update({
+            "dynamic_helper_calls": 2,
+            "dynamic_nested_helper_calls": 1,
+            "dynamic_divisions": 1,
+            "dynamic_branch_evaluations": 8,
+            "estimated_o0_stack_reads": 20,
+            "estimated_o0_stack_writes": 12,
+        })
+        validated = PredictionResponse.model_validate(payload)
+        self.assertEqual(20, validated.source_analysis.estimated_o0_stack_reads)
 
     def test_prompt_requires_nested_loop_callee_cost_expansion(self) -> None:
         root = Path(__file__).resolve().parents[2]

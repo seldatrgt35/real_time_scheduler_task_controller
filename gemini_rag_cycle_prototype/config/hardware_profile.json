@@ -5,6 +5,23 @@
   "clock_hz": 48000000,
   "compiler": "ARM GCC 11.4",
   "optimization": "-O0",
+  "compile_flags": [
+    "-mcpu=cortex-m4",
+    "-mthumb",
+    "-O0",
+    "-g3",
+    "-ffunction-sections",
+    "-fdata-sections",
+    "-Wall",
+    "-Wextra",
+    "-Werror"
+  ],
+  "link_flags": [
+    "-nostartfiles",
+    "-Wl,--gc-sections"
+  ],
+  "link_time_optimization": false,
+  "helper_inlining_expectation": "ordinary non-inline helper functions remain callable boundaries at -O0; do not assume inlining",
   "instruction_location": "internal PFlash; ELF .text starts at address 0x00000410",
   "floating_point": "not used by initial query profile",
   "initialization_timed": false,

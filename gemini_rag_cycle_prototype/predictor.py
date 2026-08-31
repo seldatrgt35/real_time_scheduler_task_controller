@@ -56,8 +56,11 @@ class Predictor:
                 encoding="utf-8"
             )
         )
-        self.template = (
+        self.rag_template = (
             prototype / "prompts" / "cycle_prediction_prompt.txt"
+        ).read_text(encoding="utf-8")
+        self.source_only_template = (
+            prototype / "prompts" / "source_only_prediction_prompt.txt"
         ).read_text(encoding="utf-8")
 
     def _references(self, retrieval: RetrievalResult) -> str:
@@ -117,7 +120,8 @@ class Predictor:
             if use_rag
             else RetrievalResult()
         )
-        prompt = self.template.format(
+        template = self.rag_template if use_rag else self.source_only_template
+        prompt = template.format(
             hardware_profile=json.dumps(self.profile, indent=2),
             function_name=function_name,
             source_code=source_code,
