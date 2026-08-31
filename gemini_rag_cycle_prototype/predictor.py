@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from gemini_rag_cycle_prototype.gemini_client import GeminiClient
+from gemini_rag_cycle_prototype.gcc_evidence import retrieve_gcc_evidence
 from gemini_rag_cycle_prototype.rag.index_builder import RagIndex
 from gemini_rag_cycle_prototype.rag.measurement_loader import HARDWARE_PROFILE_ID
 from gemini_rag_cycle_prototype.rag.retriever import RetrievalResult, Retriever
@@ -56,6 +57,12 @@ class Predictor:
                 encoding="utf-8"
             )
         )
+        self.instruction_timing_profile = json.loads(
+            (prototype / "config" / "cortex_m4_timing_profile.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.gcc_pattern_path = prototype / "knowledge" / "gcc_o0_patterns.json"
         self.rag_template = (
             prototype / "prompts" / "cycle_prediction_prompt.txt"
         ).read_text(encoding="utf-8")
@@ -121,8 +128,17 @@ class Predictor:
             else RetrievalResult()
         )
         template = self.rag_template if use_rag else self.source_only_template
+        gcc_evidence = (
+            [] if use_rag else retrieve_gcc_evidence(
+                source_code, self.gcc_pattern_path, function_name=function_name
+            )
+        )
         prompt = template.format(
             hardware_profile=json.dumps(self.profile, indent=2),
+            instruction_timing_profile=json.dumps(
+                self.instruction_timing_profile, indent=2
+            ),
+            gcc_transformation_evidence=json.dumps(gcc_evidence, indent=2),
             function_name=function_name,
             source_code=source_code,
             context_code=context_code or "No additional context files supplied.",

@@ -169,9 +169,10 @@ class ValidationAndCliTest(unittest.TestCase):
         )
         self.assertEqual("SUPPORTED", result.analysis_status)
         self.assertEqual([], retrieval.hits)
-        self.assertIn("source-only engineering execution-time estimate", client.prompt)
-        self.assertIn("COMPLETE BUILD-PROFILE ESTIMATE", client.prompt)
-        self.assertIn("holistic_build_profile_estimate", client.prompt)
+        self.assertIn("PREDICT GCC -O0 THUMB-2 BASIC BLOCKS", client.prompt)
+        self.assertIn("predicted_thumb2_cycle_sum", client.prompt)
+        self.assertIn("INSTRUCTION TIMING EVIDENCE", client.prompt)
+        self.assertIn("RETRIEVED GCC 11.4 -O0 TRANSFORMATION EVIDENCE", client.prompt)
         self.assertNotIn("RETRIEVED MEASURED BOARD REFERENCES", client.prompt)
 
     def test_rag_and_no_rag_use_distinct_prompt_templates(self) -> None:
@@ -185,12 +186,43 @@ class ValidationAndCliTest(unittest.TestCase):
         )
         self.assertIn("REFERENCE_ANCHORED", rag)
         self.assertIn("RETRIEVED MEASURED BOARD REFERENCES", rag)
-        self.assertIn("holistic_build_profile_estimate", source_only)
-        self.assertIn("Do not treat unknown compiler or PFlash contributions as zero", source_only)
-        self.assertIn("DYNAMIC GCC -O0 COST LEDGER", source_only)
-        self.assertIn("estimated_o0_stack_reads", source_only)
-        self.assertIn("dynamic_nested_helper_calls", source_only)
+        self.assertIn("predicted_thumb2_cycle_sum", source_only)
+        self.assertIn("instruction_cycle_ledger", source_only)
+        self.assertIn("PREDICT GCC -O0 THUMB-2 BASIC BLOCKS", source_only)
         self.assertNotIn("{references}", source_only)
+
+    def test_instruction_ledger_arithmetic_and_component_sum_are_enforced(self) -> None:
+        payload = prediction()
+        payload["analysis_status"] = "PARTIAL"
+        payload["cycle_components"] = [{
+            "name": "predicted_thumb2_cycle_sum",
+            "cycles": 10,
+            "evidence": "predicted instructions",
+        }]
+        payload["estimated_source_execution_cycles"] = 10
+        payload["estimated_source_execution_us"] = 10 / 48
+        payload["predicted_assembly_outline"] = ["Task.entry x1: PUSH, LDR, ADD"]
+        payload["instruction_cycle_ledger"] = [{
+            "instruction_class": "alu_move_compare_shift",
+            "dynamic_count": 5,
+            "cycles_each": 1,
+            "total_cycles": 4,
+            "evidence": "predicted basic blocks",
+        }]
+        payload["unresolved"] = ["exact PFlash timing"]
+        payload["warnings"] = ["predicted assembly"]
+        with self.assertRaisesRegex(ValueError, r"dynamic_count \* cycles_each"):
+            PredictionResponse.model_validate(payload)
+
+        payload["instruction_cycle_ledger"][0]["total_cycles"] = 5
+        with self.assertRaisesRegex(ValueError, "instruction ledger total"):
+            PredictionResponse.model_validate(payload)
+
+        payload["cycle_components"][0]["cycles"] = 5
+        payload["estimated_source_execution_cycles"] = 5
+        payload["estimated_source_execution_us"] = 5 / 48
+        validated = PredictionResponse.model_validate(payload)
+        self.assertEqual(5, validated.instruction_cycle_ledger[0].total_cycles)
 
     def test_holistic_source_only_estimate_requires_complete_o0_ledger(self) -> None:
         payload = prediction()

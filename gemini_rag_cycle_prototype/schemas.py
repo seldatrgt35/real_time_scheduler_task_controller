@@ -93,6 +93,22 @@ class CycleComponent(BaseModel):
         return self
 
 
+class InstructionCycleEstimate(BaseModel):
+    instruction_class: str
+    dynamic_count: int = Field(ge=0)
+    cycles_each: int = Field(ge=1)
+    total_cycles: int = Field(ge=0)
+    evidence: str
+
+    @model_validator(mode="after")
+    def validate_arithmetic(self) -> "InstructionCycleEstimate":
+        if self.dynamic_count * self.cycles_each != self.total_cycles:
+            raise ValueError(
+                "instruction cycle total must equal dynamic_count * cycles_each"
+            )
+        return self
+
+
 class PredictionResponse(BaseModel):
     analysis_status: Literal["SUPPORTED", "PARTIAL", "UNRESOLVED"]
     function_name: str
@@ -104,6 +120,10 @@ class PredictionResponse(BaseModel):
     reference_anchor_measured_us: float | None = None
     reference_adjustments: list[str] = Field(default_factory=list)
     cycle_components: list[CycleComponent] = Field(default_factory=list)
+    predicted_assembly_outline: list[str] = Field(default_factory=list)
+    instruction_cycle_ledger: list[InstructionCycleEstimate] = Field(
+        default_factory=list
+    )
     estimated_source_execution_cycles: int | None = None
     estimated_source_execution_us: float | None = None
     formal_guarantee: bool = False
@@ -182,5 +202,22 @@ class PredictionResponse(BaseModel):
             if any(value is None for value in ledger):
                 raise ValueError(
                     "holistic source-only estimate requires a complete dynamic O0 cost ledger"
+                )
+        instruction_components = [
+            component
+            for component in self.cycle_components
+            if component.name == "predicted_thumb2_cycle_sum"
+        ]
+        if instruction_components:
+            if not self.predicted_assembly_outline or not self.instruction_cycle_ledger:
+                raise ValueError(
+                    "predicted Thumb-2 estimate requires assembly outline and instruction ledger"
+                )
+            ledger_total = sum(
+                item.total_cycles for item in self.instruction_cycle_ledger
+            )
+            if ledger_total != instruction_components[0].cycles:
+                raise ValueError(
+                    "instruction ledger total must equal predicted Thumb-2 component"
                 )
         return self

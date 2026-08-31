@@ -1,0 +1,25 @@
+{
+  "profile_id": "cortex_m4_thumb2_engineering_v1",
+  "purpose": "Transparent source-to-predicted-assembly experiment; not a formal timing model",
+  "core_timing_assumption": "Cortex-M4 core timing with no bus contention; use the listed engineering costs exactly",
+  "instruction_classes": [
+    {"name": "alu_move_compare_shift", "cycles_each": 1},
+    {"name": "multiply", "cycles_each": 1},
+    {"name": "integer_divide_worst_case", "cycles_each": 12},
+    {"name": "sram_or_stack_load", "cycles_each": 2},
+    {"name": "sram_or_stack_store", "cycles_each": 1},
+    {"name": "push_or_pop_register_transfer", "cycles_each": 1},
+    {"name": "function_call_bl_with_refill", "cycles_each": 4},
+    {"name": "function_return_with_refill", "cycles_each": 4},
+    {"name": "conditional_branch_taken", "cycles_each": 4},
+    {"name": "conditional_branch_not_taken", "cycles_each": 1},
+    {"name": "unconditional_branch_with_refill", "cycles_each": 4}
+  ],
+  "multi_register_rule": "For PUSH, POP, LDM, or STM, dynamic_count is the number of registers transferred, not merely the number of mnemonics.",
+  "pflash_policy": "Exact S32K148 PFlash/cache/prefetch configuration is not supplied. Do not invent a wait-state count. Core branch-refill costs are included above; any remaining PFlash fetch contribution stays unresolved and is not silently hidden.",
+  "sources": [
+    "Arm Cortex-M4 Technical Reference Manual and instruction timing documentation",
+    "NXP S32K1xx Series Reference Manual",
+    "GNU ARM GCC target and optimization documentation"
+  ]
+}

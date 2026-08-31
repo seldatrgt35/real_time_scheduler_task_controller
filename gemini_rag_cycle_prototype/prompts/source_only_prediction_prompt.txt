@@ -1,116 +1,72 @@
-You are producing a source-only engineering execution-time estimate for a
-not-yet-compiled deterministic automotive C task.
+You are estimating execution time for a deterministic automotive C task before
+it is compiled. Predict the ARM GCC 11.4 `-O0` Thumb-2 instruction shape and
+calculate its dynamic execution cycles using only the supplied evidence.
 
-No measured reference, ELF, assembly, map file, disassembly, compiler output,
-or board result is available. Analyze only the supplied C source, additional
-source context, and build/hardware profile. The result is an LLM baseline, not
-a formally proven WCET bound and not a measurement-grounded estimate.
+This is a transparent engineering experiment, not exact compiler output and
+not a formally proven WCET. You have no ELF, assembly, map, disassembly, board
+measurement, or retrieved whole-task timing reference for the query.
 
-ESTIMATE DEFINITION
-- Return exactly one best engineering point estimate in
-  `estimated_source_execution_cycles` and `estimated_source_execution_us`.
-- Set `estimation_basis=SOURCE_ONLY`, leave both reference anchor fields null,
-  leave `reference_adjustments` empty, and return no retrieved examples.
-- Set `formal_guarantee=false`, `analysis_status=PARTIAL`, and
-  `confidence_percent` no higher than 50.
-- Do not target a desired error percentage and do not add a generic safety
-  margin merely to make the estimate conservative.
+OUTPUT BASIS
+- Set `estimation_basis=SOURCE_ONLY`, `analysis_status=PARTIAL`,
+  `formal_guarantee=false`, and confidence no higher than 50.
+- Return no retrieved whole-task example, no reference anchor, and no reference
+  adjustment.
+- Do not target a desired error percentage or add an arbitrary safety margin.
 
-COMPLETE BUILD-PROFILE ESTIMATE
-- Estimate the complete execution time likely to result from the supplied GCC
-  version, `-O0` optimization, target core, code/data locations, and clock.
-- The point estimate must holistically include the likely effects of loop and
-  branch control, address calculation, volatile accesses, helper call
-  boundaries, function prologue/epilogue, stack-resident locals, register
-  spill/reload behavior typical of `-O0`, instruction selection, and PFlash
-  instruction fetching under the supplied profile.
-- Do not treat unknown compiler or PFlash contributions as zero and do not
-  omit them from the point estimate merely because their exact values cannot
-  be proved from source.
-- This is holistic model judgment. Do not claim that it reconstructs exact
-  generated instructions or exact hardware stalls.
+STEP 1: SELECT THE FEASIBLE SOURCE PATH
+1. Resolve every constant or source-bounded loop.
+2. Use supplied initialization/context to choose the highest-work feasible path.
+   Never execute an infeasible branch merely because it looks more expensive.
+3. Expand all supplied helpers and nested helpers at every dynamic call site.
+4. Include loop initialization, every condition including the final failed
+   condition, increments, short-circuit behavior, and switch dispatch.
 
-SOURCE ANALYSIS
-1. Identify every bounded loop and multiply nested-loop bounds along the full
-   nesting path.
-2. Select the highest-work feasible source path without contradicting source
-   constraints or initialization.
-3. Count dynamic helper calls. Expand every supplied helper body and its own
-   bounded loops at every dynamic call site.
-4. Include loop initialization, all condition checks including final failed
-   checks, increments, addressing, loads, stores, arithmetic, comparisons,
-   branches, call boundaries, and callee work.
-5. Report decisive dynamic counts and dominant costs in `source_analysis` and
-   `estimation_reasoning_summary`.
+STEP 2: PREDICT GCC -O0 THUMB-2 BASIC BLOCKS
+- Produce `predicted_assembly_outline` entries for the caller and every helper.
+  Each entry identifies a basic block, its execution count, and predicted
+  instruction classes/opcodes.
+- Model GCC 11.4 `-O0`, AAPCS argument passing, callable non-inline helpers,
+  prologue/epilogue, parameter homing, stack-resident locals, repeated stack
+  reload/store, array address calculation, and explicit volatile accesses.
+- Use supplied GCC transformation evidence when available. Do not silently
+  inline helpers or optimize repeated source operations away.
+- This is predicted assembly, not a claim of byte-identical compiler output.
 
-DYNAMIC GCC -O0 COST LEDGER
-Before selecting the holistic cycle total, create and cross-check a complete
-dynamic ledger in `source_analysis`. Fill every one of these fields with a
-non-negative integer; use zero only when that event truly does not execute:
-- `dynamic_helper_calls`: all dynamic helper invocations, including calls made
-  by other helpers.
-- `dynamic_nested_helper_calls`: the subset invoked from inside another helper.
-- `dynamic_divisions`: all dynamically executed integer or floating-point
-  divisions in caller and supplied callees.
-- `dynamic_branch_evaluations`: loop conditions including final failed checks,
-  source conditionals, short-circuit terms, switch decisions, and conditionals
-  inside helpers, multiplied by their dynamic execution counts.
-- `estimated_source_memory_reads` and `estimated_source_memory_writes`: dynamic
-  source-visible global, array, pointer, and volatile data accesses. Do not mix
-  estimated compiler-created stack traffic into these two fields.
-- `estimated_o0_stack_reads` and `estimated_o0_stack_writes`: a source-derived
-  estimate of compiler-created stack traffic under GCC `-O0`. Account for each
-  dynamic function boundary, parameter homing, stack-resident locals, repeated
-  reloads before uses and comparisons, stores after assignments, loop counters,
-  and nested helper frames. These are engineering estimates, not claims about
-  exact assembly.
+STEP 3: BUILD THE DYNAMIC INSTRUCTION LEDGER
+- Fill `instruction_cycle_ledger` with one row for each executed instruction
+  class from the supplied timing profile.
+- `dynamic_count` is the complete path count after multiplying block execution
+  counts, loop iterations, helper calls, and nested helper calls.
+- `cycles_each` must exactly equal the supplied timing-profile value.
+- `total_cycles` must equal `dynamic_count * cycles_each`.
+- Separate taken and not-taken conditional branches.
+- For PUSH/POP/LDM/STM follow the multi-register transfer rule.
+- Load/store counts include predicted compiler-created stack traffic and
+  source-visible SRAM traffic.
+- Do not introduce instruction costs that are absent from supplied evidence.
 
-Ledger consistency rules:
-- A helper called N times contributes its parameter/local stack behavior N
-  times. A nested helper is counted both in `dynamic_helper_calls` and in
-  `dynamic_nested_helper_calls`.
-- Do not report only global/volatile memory accesses while claiming that `-O0`
-  stack effects were included. Stack reads and writes must be visible in their
-  dedicated fields.
-- Compare the ledger against the complete call tree. If 20 dynamic helper calls
-  execute, a stack-write estimate smaller than the minimum parameter/local
-  homing implied by those calls is inconsistent and must be corrected.
-- Use the ledger to judge relative whole-task cost and to prevent omitted work;
-  do not multiply its entries by invented fixed cycles per operation.
-
-NO FALSE PRECISION
-- Do not assign fabricated fixed costs such as one cycle per ALU operation,
-  two cycles per load/store, a fixed helper-call cost, or a guessed division
-  latency.
-- Do not present a table that multiplies C operator counts by invented
-  per-operator cycle prices.
-- Do not invent a Flash wait-state count, cache behavior, branch-misprediction
-  penalty, CPI, compiler multiplier, or percentage overhead.
-- Do not describe the estimate as instruction-by-instruction accounting.
-- You may use qualitative knowledge of how GCC `-O0` changes whole-function
-  execution behavior, but the final number must be explicitly labeled as a
-  holistic engineering judgment under the supplied build profile.
-
-CYCLE COMPONENT OUTPUT
-- Use one non-null component named `holistic_build_profile_estimate`. Its
-  `cycles` value must equal `estimated_source_execution_cycles` exactly.
-- Its evidence must summarize the complete dynamic source shape and state that
-  compiler/PFlash effects are included holistically rather than exactly
-  reconstructed.
-- Its evidence and `estimation_reasoning_summary` must cite the completed
-  dynamic ledger, especially helper/nested-helper, division, branch, and
-  estimated stack-access counts. Reject your draft estimate and recount if the
-  narrative claims substantial `-O0` stack traffic but the ledger does not.
-- Do not create separately priced source, helper, compiler, or PFlash
-  components: such a split would imply unsupported precision.
-- Put unavailable exact compiler/Flash details in `unresolved` and `warnings`,
-  while making clear that their likely aggregate effect is included in the
-  holistic estimate rather than treated as zero.
-- Convert cycles to microseconds using the supplied clock and verify the two
-  values agree.
+STEP 4: SUM AND AUDIT
+- Use exactly one non-null cycle component named `predicted_thumb2_cycle_sum`.
+- Its cycles and `estimated_source_execution_cycles` must both equal the sum of
+  every instruction-ledger row.
+- Convert at the supplied clock to `estimated_source_execution_us`.
+- Show the decisive block/helper/path counts and arithmetic in the reasoning.
+- Put unresolved exact GCC choices and S32K148 PFlash/cache/prefetch effects in
+  `unresolved` and `warnings`. Never hide them in an unexplained multiplier.
 
 HARDWARE AND BUILD PROFILE
 {hardware_profile}
+
+INSTRUCTION TIMING EVIDENCE
+{instruction_timing_profile}
+
+RETRIEVED GCC 11.4 -O0 TRANSFORMATION EVIDENCE
+The following records were generated by compiling independent micro-patterns
+with the exact target compiler and flags. Use them as local transformation
+examples for prologue/epilogue, parameter homing, loops, branches, array
+indexing, and helper calls. Do not copy a pattern blindly when the query has a
+different parameter count, leaf/non-leaf status, local layout, or control flow.
+{gcc_transformation_evidence}
 
 QUERY FUNCTION
 {function_name}
