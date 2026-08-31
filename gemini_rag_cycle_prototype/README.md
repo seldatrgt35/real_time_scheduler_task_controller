@@ -15,8 +15,11 @@ Unknown compiler/PFlash components remain `null` and are excluded from the
 point-estimate sum. Python validates and records the values without replacing
 or recalculating them.
 
-Retrieval embeds the requested task body rather than the whole multi-function
-source file. Candidates must pass both embedding and source-structure gates.
+Retrieval embeds only the requested task body rather than the whole
+multi-function source file, helper bodies, macros, or initialization context.
+Helpers contribute to structural reranking; macros, helper source, and
+initialization are attached only after a reference is selected for the Gemini
+prompt. Candidates must pass both embedding and source-structure gates.
 The structure score includes loop nesting, branch/helper/array counts, assignment
 and operator intensity, data types, and memory-access shape.
 The default structural acceptance threshold is `0.75` and can be changed with

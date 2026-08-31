@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from pydantic import ValidationError
 
-from gemini_rag_cycle_prototype.cli import read_required
+from gemini_rag_cycle_prototype.cli import load_current_index, read_required
 from gemini_rag_cycle_prototype.gemini_client import GeminiClient, MissingApiKeyError
 from gemini_rag_cycle_prototype.predictor import Predictor
 from gemini_rag_cycle_prototype.rag.index_builder import RagIndex
@@ -134,6 +134,18 @@ class ValidationAndCliTest(unittest.TestCase):
     def test_missing_source_file_is_reported(self) -> None:
         with self.assertRaises(FileNotFoundError):
             read_required(Path("does-not-exist.c"), "C source")
+
+    def test_stale_rag_index_is_rejected_before_prediction(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "index.json"
+            path.write_text(RagIndex(
+                embedding_model="fake",
+                embedding_dimensions=2,
+                document_format_version=1,
+                records=[],
+            ).model_dump_json(), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "--rebuild-index"):
+                load_current_index(path)
 
     def test_no_rag_prediction_does_not_request_embedding(self) -> None:
         class SourceOnlyClient:

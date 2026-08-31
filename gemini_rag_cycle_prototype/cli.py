@@ -10,7 +10,11 @@ if __package__ in {None, ""}:
 
 from gemini_rag_cycle_prototype.gemini_client import GeminiClient
 from gemini_rag_cycle_prototype.predictor import Predictor
-from gemini_rag_cycle_prototype.rag.index_builder import build_index, load_index
+from gemini_rag_cycle_prototype.rag.index_builder import (
+    EMBEDDING_DOCUMENT_FORMAT_VERSION,
+    build_index,
+    load_index,
+)
 from gemini_rag_cycle_prototype.rag.measurement_loader import MeasurementLoader
 
 
@@ -56,6 +60,18 @@ def repository_relative_or_absolute(path: Path, root: Path) -> str:
         return str(resolved)
 
 
+def load_current_index(path: Path):
+    index = load_index(path)
+    if index.document_format_version != EMBEDDING_DOCUMENT_FORMAT_VERSION:
+        raise ValueError(
+            "RAG index format is stale: "
+            f"expected {EMBEDDING_DOCUMENT_FORMAT_VERSION}, "
+            f"received {index.document_format_version}. "
+            "Run: python -m gemini_rag_cycle_prototype.cli --rebuild-index"
+        )
+    return index
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     root = args.repository_root.resolve()
@@ -90,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     context_parts = [read_required(path, "context file") for path in args.context_file]
     client = client or GeminiClient()
     prediction, raw, retrieval = Predictor(
-        root, load_index(index_path), client
+        root, load_current_index(index_path), client
     ).predict(
         source_code,
         args.function,

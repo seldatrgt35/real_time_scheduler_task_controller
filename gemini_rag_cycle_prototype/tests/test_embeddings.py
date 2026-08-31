@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from gemini_rag_cycle_prototype.gemini_client import GeminiClient
 from gemini_rag_cycle_prototype.rag.index_builder import (
+    EMBEDDING_DOCUMENT_FORMAT_VERSION,
     IndexedRecord,
     RagIndex,
     build_index,
@@ -48,6 +49,8 @@ def record(task_id: str) -> RagRecord:
         task_name=f"Task_{task_id}",
         source_path=f"{task_id}.c",
         source_code=source,
+        callee_source="void Helper(void) { hidden++; }",
+        source_context="#define HIDDEN_COUNT (99U)",
         source_fingerprint=task_id,
         normalized_source=source,
         hardware_profile_id="hardware",
@@ -73,6 +76,7 @@ class GeminiEmbeddingTest(unittest.TestCase):
                 RagIndex(
                     embedding_model="fake",
                     embedding_dimensions=3,
+                    document_format_version=EMBEDDING_DOCUMENT_FORMAT_VERSION,
                     records=[IndexedRecord(
                         record=existing_record,
                         embedding=[1.0, 0.0, 0.0],
@@ -91,6 +95,12 @@ class GeminiEmbeddingTest(unittest.TestCase):
         self.assertEqual(1, len(calls))
         self.assertEqual(1, len(calls[0]))
         self.assertIn("Task_2", calls[0][0])
+        self.assertNotIn("Helper", calls[0][0])
+        self.assertNotIn("HIDDEN_COUNT", calls[0][0])
+        self.assertEqual(
+            EMBEDDING_DOCUMENT_FORMAT_VERSION,
+            rebuilt.document_format_version,
+        )
         self.assertEqual(
             [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
             [item.embedding for item in rebuilt.records],

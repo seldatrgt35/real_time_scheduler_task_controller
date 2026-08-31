@@ -9,6 +9,9 @@ from pydantic import BaseModel
 from gemini_rag_cycle_prototype.schemas import RagRecord
 
 
+EMBEDDING_DOCUMENT_FORMAT_VERSION = 2
+
+
 class Embedder(Protocol):
     def embed_documents(self, texts: list[str]) -> list[list[float]]: ...
     def embed_query(self, text: str) -> list[float]: ...
@@ -22,17 +25,14 @@ class IndexedRecord(BaseModel):
 class RagIndex(BaseModel):
     embedding_model: str
     embedding_dimensions: int
+    document_format_version: int = 1
     records: list[IndexedRecord]
 
 
 def embedding_text(record: RagRecord) -> str:
-    summary = record.structural_summary.model_dump_json()
     return (
         f"Task: {record.task_name}\n"
-        f"Structural summary: {summary}\n"
         f"C source:\n{record.source_code}"
-        f"\nReachable helper source:\n{record.callee_source or 'None'}"
-        f"\nRelevant source context:\n{record.source_context or 'None'}"
     )
 
 
@@ -46,21 +46,18 @@ def build_index(
         if (
             existing.embedding_model == model_name
             and existing.embedding_dimensions == dimensions
+            and existing.document_format_version
+            == EMBEDDING_DOCUMENT_FORMAT_VERSION
         ):
             reusable = {
-                (
-                    item.record.task_id,
-                    item.record.source_fingerprint,
-                    item.record.context_fingerprint,
-                ): item.embedding
+                (item.record.task_id, item.record.source_fingerprint): item.embedding
                 for item in existing.records
                 if len(item.embedding) == dimensions
             }
 
     missing_records = [
         item for item in records
-        if (item.task_id, item.source_fingerprint, item.context_fingerprint)
-        not in reusable
+        if (item.task_id, item.source_fingerprint) not in reusable
     ]
     generated = (
         embedder.embed_documents([embedding_text(item) for item in missing_records])
@@ -78,21 +75,18 @@ def build_index(
                 f"{position}: expected {dimensions}, received {len(embedding)}"
             )
     generated_by_key = {
-        (record.task_id, record.source_fingerprint, record.context_fingerprint): embedding
+        (record.task_id, record.source_fingerprint): embedding
         for record, embedding in zip(missing_records, generated)
     }
     embeddings = [
-        reusable.get((
-            record.task_id, record.source_fingerprint, record.context_fingerprint
-        ))
-        or generated_by_key[(
-            record.task_id, record.source_fingerprint, record.context_fingerprint
-        )]
+        reusable.get((record.task_id, record.source_fingerprint))
+        or generated_by_key[(record.task_id, record.source_fingerprint)]
         for record in records
     ]
     index = RagIndex(
         embedding_model=model_name,
         embedding_dimensions=dimensions,
+        document_format_version=EMBEDDING_DOCUMENT_FORMAT_VERSION,
         records=[
             IndexedRecord(record=record, embedding=embedding)
             for record, embedding in zip(records, embeddings)

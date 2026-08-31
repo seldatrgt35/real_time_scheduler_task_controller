@@ -125,15 +125,13 @@ class Retriever:
         # references from the requested task body, not from the entire file;
         # otherwise every task in one suite produces nearly the same query.
         target_source = extract_function(query_source, query_function) or query_source
-        query_callees, query_context = build_reference_context(
+        query_callees, _query_context = build_reference_context(
             query_source, query_function
         )
         normalized_query = normalize_source(target_source)
         fingerprint = source_fingerprint(target_source)
         query_text = (
             f"Task: {query_function}\nC source:\n{target_source}"
-            f"\nReachable helper source:\n{query_callees or 'None'}"
-            f"\nRelevant source context:\n{query_context or 'None'}"
         )
         query_embedding = self.embedder.embed_query(query_text)
         query_structure = structural_summary(target_source + "\n" + query_callees)
@@ -175,6 +173,10 @@ class Retriever:
                 structural_summary(record.source_code + "\n" + record.callee_source),
             )
             if similarity < minimum_similarity:
+                result.excluded.append({
+                    "task_id": record.task_id,
+                    "reason": "embedding_similarity_below_threshold",
+                })
                 continue
             if structure < minimum_structural_similarity:
                 result.excluded.append({
