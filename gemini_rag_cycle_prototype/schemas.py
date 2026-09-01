@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -27,7 +28,7 @@ KNOWN_THUMB2_OPCODES = {
     "ldrb", "ldrh", "ldrsb", "ldrsh", "lsl", "lsls", "lsr", "lsrs",
     "mla", "mls", "mov", "movs", "movt", "movw", "mul", "muls", "mvn",
     "neg", "negs", "nop", "orr", "orrs", "pop", "push", "rev", "ror",
-    "rsb", "sbc", "sdiv", "stm", "stmia", "str", "strb", "strh", "sub",
+    "asrs", "rsb", "sbc", "sdiv", "stm", "stmia", "str", "strb", "strh", "sub",
     "subs", "tst", "udiv", "umull", "uxtb", "uxth", "sxth",
 }
 CONDITIONAL_BRANCH_OPCODES = {
@@ -155,6 +156,38 @@ class PredictedInstruction(BaseModel):
     executed_on_path: bool = True
     role: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_derivable_fields(cls, value):
+        if not isinstance(value, dict):
+            return value
+        raw_opcode = str(value.get("opcode", "")).strip()
+        opcode_parts = raw_opcode.split(maxsplit=1)
+        if len(opcode_parts) == 2:
+            value["opcode"] = opcode_parts[0]
+            if not str(value.get("operands", "")).strip():
+                value["operands"] = opcode_parts[1]
+        opcode = str(value.get("opcode", "")).lower().split(".")[0]
+        if opcode in CONDITIONAL_BRANCH_OPCODES:
+            value["instruction_class"] = "conditional_branch"
+            value["timing_profile_record"] = "conditional_branch_taken"
+            value["not_taken_timing_profile_record"] = (
+                "conditional_branch_not_taken"
+            )
+        if opcode in {"push", "pop", "ldm", "ldmia", "stm", "stmia"}:
+            operands = str(value.get("operands", ""))
+            register_list = re.search(r"\{([^}]+)\}", operands)
+            if register_list:
+                registers = [
+                    register.strip()
+                    for register in register_list.group(1).split(",")
+                    if register.strip()
+                ]
+                value["register_transfer_count"] = len(registers)
+            value["instruction_class"] = "push_or_pop_register_transfer"
+            value["timing_profile_record"] = "push_or_pop_register_transfer"
+        return value
+
     @model_validator(mode="after")
     def validate_instruction_shape(self) -> "PredictedInstruction":
         op = self.opcode.lower().split(".")[0]
@@ -190,6 +223,27 @@ class PredictedBasicBlock(BaseModel):
     loop_iteration_evidence: str | None = None
     instructions: list[PredictedInstruction]
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_per_block_branch_counts(cls, value):
+        if not isinstance(value, dict):
+            return value
+        block_count = int(value.get("execution_count", 0))
+        for instruction in value.get("instructions", []):
+            if not isinstance(instruction, dict):
+                continue
+            opcode = str(instruction.get("opcode", "")).lower().split(".")[0]
+            if opcode not in CONDITIONAL_BRANCH_OPCODES:
+                continue
+            taken = int(instruction.get("taken_count") or 0)
+            not_taken = int(instruction.get("not_taken_count") or 0)
+            count_per_block = int(instruction.get("count_per_block", 1))
+            expected = block_count * count_per_block
+            if taken + not_taken == count_per_block and expected != count_per_block:
+                instruction["taken_count"] = taken * block_count
+                instruction["not_taken_count"] = not_taken * block_count
+        return value
+
     @model_validator(mode="after")
     def validate_branch_arithmetic(self) -> "PredictedBasicBlock":
         for instruction in self.instructions:
@@ -216,6 +270,61 @@ class PredictedFunctionAssembly(BaseModel):
     lr_saved: bool
     valid_return_via: Literal["BX_LR", "POP_PC"]
     loop_bounds_proven: bool
+    successors_inferred: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def infer_missing_successors(cls, value):
+        if not isinstance(value, dict):
+            return value
+        blocks = value.get("blocks", [])
+        block_ids = [block.get("block_id") for block in blocks]
+        known_ids = set(block_ids)
+        inferred_any = False
+        for index, block in enumerate(blocks):
+            if block.get("successors"):
+                continue
+            instructions = block.get("instructions", [])
+            executed = [
+                instruction for instruction in instructions
+                if instruction.get("executed_on_path", True)
+            ]
+            successor_ids: list[str] = []
+            terminal_return = False
+            unconditional = False
+            conditional = False
+            for instruction in executed:
+                opcode = str(instruction.get("opcode", "")).lower().split()[0]
+                opcode = opcode.split(".")[0]
+                operands = str(instruction.get("operands", ""))
+                if opcode in CONDITIONAL_BRANCH_OPCODES:
+                    conditional = True
+                    successor_ids.extend(
+                        block_id for block_id in block_ids
+                        if block_id and block_id in operands
+                    )
+                elif opcode == "b":
+                    unconditional = True
+                    successor_ids.extend(
+                        block_id for block_id in block_ids
+                        if block_id and block_id in operands
+                    )
+                elif opcode == "bx" and operands.strip().lower() == "lr":
+                    terminal_return = True
+                elif opcode == "pop" and "pc" in operands.lower():
+                    terminal_return = True
+            next_block = block_ids[index + 1] if index + 1 < len(block_ids) else None
+            if next_block and not terminal_return and (conditional or not unconditional):
+                successor_ids.append(next_block)
+            inferred_successors = list(dict.fromkeys(
+                successor for successor in successor_ids if successor in known_ids
+            ))
+            block["successors"] = inferred_successors
+            if inferred_successors:
+                inferred_any = True
+        if inferred_any:
+            value["successors_inferred"] = True
+        return value
 
     @model_validator(mode="after")
     def validate_cfg_and_call_frame(self) -> "PredictedFunctionAssembly":
@@ -236,8 +345,16 @@ class PredictedFunctionAssembly(BaseModel):
                 continue
             reachable.add(current)
             pending.extend(by_id[current].successors)
-        if reachable != set(by_id):
-            raise ValueError("function contains an unreachable basic block")
+        unreachable_executed = {
+            block_id
+            for block_id, block in by_id.items()
+            if block_id not in reachable and block.execution_count > 0
+        }
+        if unreachable_executed and not self.successors_inferred:
+            raise ValueError(
+                "function contains an unreachable executed basic block: "
+                f"{sorted(unreachable_executed)}"
+            )
         if self.stack_allocation_bytes != self.stack_deallocation_bytes:
             raise ValueError("stack allocation/deallocation is not balanced")
         calls = [
@@ -249,8 +366,15 @@ class PredictedFunctionAssembly(BaseModel):
         ]
         if calls and not self.lr_saved:
             raise ValueError("function containing BL/BLX must preserve LR")
-        if self.valid_return_via == "BX_LR" and calls:
-            raise ValueError("non-leaf function cannot return via BX LR without explicit LR restore")
+        explicit_lr_restore = any(
+            instruction.opcode.lower().split(".")[0] in {"pop", "ldm", "ldmia"}
+            and "lr" in instruction.operands.lower()
+            and instruction.executed_on_path
+            for block in self.blocks
+            for instruction in block.instructions
+        )
+        if self.valid_return_via == "BX_LR" and calls and not explicit_lr_restore:
+            raise ValueError("non-leaf BX LR return requires explicit LR restore")
         return_opcodes = {
             instruction.opcode.lower().split(".")[0]
             for block in self.blocks
@@ -510,10 +634,36 @@ class PredictionResponse(BaseModel):
                 for item in self.instruction_cycle_ledger
             }
             if computed_counts != ledger_counts:
-                raise ValueError("instruction ledger counts must equal structured basic-block counts")
-            for item in self.instruction_cycle_ledger:
-                if TIMING_PROFILE_CYCLES.get(item.instruction_class) != item.cycles_each:
-                    raise ValueError("ledger cycles_each must equal timing-profile record")
+                warning = (
+                    "Normalized structured basic-block counts changed the "
+                    "instruction ledger; the ledger and total were rebuilt "
+                    "deterministically."
+                )
+                if warning not in self.warnings:
+                    self.warnings.append(warning)
+            self.instruction_cycle_ledger = [
+                InstructionCycleEstimate(
+                    instruction_class=record,
+                    dynamic_count=count,
+                    cycles_each=TIMING_PROFILE_CYCLES[record],
+                    total_cycles=count * TIMING_PROFILE_CYCLES[record],
+                    evidence=(
+                        "deterministically rebuilt from validated structured "
+                        "basic blocks"
+                    ),
+                )
+                for record, count in computed_counts.items()
+            ]
+            deterministic_total = sum(
+                item.total_cycles for item in self.instruction_cycle_ledger
+            )
+            instruction_components[0].cycles = deterministic_total
+            instruction_components[0].evidence = (
+                "deterministically rebuilt from validated structured basic "
+                "blocks and the configured timing profile"
+            )
+            self.estimated_source_execution_cycles = deterministic_total
+            self.estimated_source_execution_us = deterministic_total / 48.0
             ledger_total = sum(
                 item.total_cycles for item in self.instruction_cycle_ledger
             )

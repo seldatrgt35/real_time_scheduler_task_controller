@@ -1,0 +1,65 @@
+{
+  "task": "ThrottleActuatorMonitor_Task5ms",
+  "compiler_profile": "ARM GCC 11.4 -O0 explicit no-transform flags",
+  "clock_hz": 48000000,
+  "dynamic_instruction_events": 585,
+  "ledger": [
+    {
+      "instruction_class": "push_or_pop_register_transfer",
+      "dynamic_count": 28,
+      "cycles_each": 1,
+      "total_cycles": 28
+    },
+    {
+      "instruction_class": "alu_move_compare_shift",
+      "dynamic_count": 227,
+      "cycles_each": 1,
+      "total_cycles": 227
+    },
+    {
+      "instruction_class": "sram_or_stack_store",
+      "dynamic_count": 87,
+      "cycles_each": 1,
+      "total_cycles": 87
+    },
+    {
+      "instruction_class": "sram_or_stack_load",
+      "dynamic_count": 179,
+      "cycles_each": 2,
+      "total_cycles": 358
+    },
+    {
+      "instruction_class": "conditional_branch_taken",
+      "dynamic_count": 20,
+      "cycles_each": 4,
+      "total_cycles": 80
+    },
+    {
+      "instruction_class": "function_return_with_refill",
+      "dynamic_count": 12,
+      "cycles_each": 4,
+      "total_cycles": 48
+    },
+    {
+      "instruction_class": "conditional_branch_not_taken",
+      "dynamic_count": 13,
+      "cycles_each": 1,
+      "total_cycles": 13
+    },
+    {
+      "instruction_class": "unconditional_branch_with_refill",
+      "dynamic_count": 9,
+      "cycles_each": 4,
+      "total_cycles": 36
+    },
+    {
+      "instruction_class": "function_call_bl_with_refill",
+      "dynamic_count": 12,
+      "cycles_each": 4,
+      "total_cycles": 48
+    }
+  ],
+  "manual_core_cycles": 925,
+  "manual_core_us": 19.270833333333332,
+  "scope": "Core instruction timing ledger for the initialized feasible path; exact S32K148 PFlash fetch effects are not included."
+}

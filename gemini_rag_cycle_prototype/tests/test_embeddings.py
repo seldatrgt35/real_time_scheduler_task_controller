@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -13,7 +14,9 @@ from gemini_rag_cycle_prototype.rag.index_builder import (
     RagIndex,
     build_index,
 )
-from gemini_rag_cycle_prototype.schemas import Measurement, RagRecord, StructuralSummary
+from gemini_rag_cycle_prototype.schemas import (
+    Measurement, PredictionResponse, RagRecord, StructuralSummary,
+)
 
 
 class FakeEmbedContentConfig:
@@ -206,6 +209,33 @@ class GeminiEmbeddingTest(unittest.TestCase):
             with self.assertRaises(InvalidRequest):
                 gemini._generate_content_with_retry("prompt", "config")
         sleep.assert_not_called()
+
+    def test_prediction_requests_large_structured_output_budget(self) -> None:
+        captured = {}
+
+        class GenerateContentConfig:
+            def __init__(self, **values):
+                self.__dict__.update(values)
+
+        fake_types = SimpleNamespace(
+            GenerateContentConfig=GenerateContentConfig,
+            AutomaticFunctionCallingConfig=GenerateContentConfig,
+        )
+        parsed = PredictionResponse.model_construct()
+
+        def generate_content(**kwargs):
+            captured["config"] = kwargs["config"]
+            return SimpleNamespace(text="{}", parsed=parsed)
+
+        gemini = object.__new__(GeminiClient)
+        gemini._types = fake_types
+        gemini._client = SimpleNamespace(
+            models=SimpleNamespace(generate_content=generate_content)
+        )
+        gemini.model = "test-model"
+        with patch.dict(os.environ, {"GEMINI_MAX_OUTPUT_TOKENS": "32768"}):
+            gemini.predict("prompt")
+        self.assertEqual(captured["config"].max_output_tokens, 32768)
 
 
 if __name__ == "__main__":

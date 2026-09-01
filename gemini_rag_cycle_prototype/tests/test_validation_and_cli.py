@@ -10,7 +10,9 @@ from gemini_rag_cycle_prototype.cli import load_current_index, read_required
 from gemini_rag_cycle_prototype.gemini_client import GeminiClient, MissingApiKeyError
 from gemini_rag_cycle_prototype.predictor import Predictor
 from gemini_rag_cycle_prototype.rag.index_builder import RagIndex
-from gemini_rag_cycle_prototype.schemas import PredictionResponse, SourceAnalysis
+from gemini_rag_cycle_prototype.schemas import (
+    PredictionResponse, PredictedInstruction, SourceAnalysis,
+)
 
 
 def prediction(**overrides) -> dict:
@@ -86,6 +88,37 @@ def structured_prediction() -> dict:
 
 
 class ValidationAndCliTest(unittest.TestCase):
+    def test_derivable_branch_and_register_transfer_fields_are_normalized(self) -> None:
+        branch = PredictedInstruction.model_validate({
+            "opcode": "bhi.n", "operands": "target",
+            "instruction_class": "conditional_branch_taken",
+            "count_per_block": 1,
+            "timing_profile_record": "conditional_branch_taken",
+            "not_taken_timing_profile_record": "conditional_branch_taken",
+            "taken_count": 2, "not_taken_count": 1,
+        })
+        self.assertEqual("conditional_branch", branch.instruction_class)
+        self.assertEqual(
+            "conditional_branch_not_taken", branch.not_taken_timing_profile_record
+        )
+        pop = PredictedInstruction.model_validate({
+            "opcode": "pop", "operands": "{r4, r7, pc}",
+            "instruction_class": "function_return",
+            "count_per_block": 1,
+            "timing_profile_record": "function_return_with_refill",
+        })
+        self.assertEqual(3, pop.register_transfer_count)
+        self.assertEqual(
+            "push_or_pop_register_transfer", pop.timing_profile_record
+        )
+        combined = PredictedInstruction.model_validate({
+            "opcode": "mov sp, r7", "operands": "",
+            "instruction_class": "alu_move_compare_shift",
+            "timing_profile_record": "alu_move_compare_shift",
+        })
+        self.assertEqual("mov", combined.opcode)
+        self.assertEqual("sp, r7", combined.operands)
+
     def test_response_schema_is_compatible_with_gemini_developer_api(self) -> None:
         schema = PredictionResponse.model_json_schema()
 
@@ -301,11 +334,20 @@ class ValidationAndCliTest(unittest.TestCase):
             PredictionResponse.model_validate(payload)
         payload = structured_prediction()
         payload["predicted_functions"][0]["blocks"].append({
-            "block_id": "dead", "execution_count": 0, "successors": [],
+            "block_id": "dead", "execution_count": 1, "successors": [],
             "instructions": [],
         })
-        with self.assertRaisesRegex(ValueError, "unreachable basic block"):
+        with self.assertRaisesRegex(ValueError, "unreachable executed basic block"):
             PredictionResponse.model_validate(payload)
+
+    def test_zero_execution_infeasible_block_may_be_off_selected_path(self) -> None:
+        payload = structured_prediction()
+        payload["predicted_functions"][0]["blocks"].append({
+            "block_id": "infeasible", "execution_count": 0, "successors": [],
+            "instructions": [],
+        })
+        validated = PredictionResponse.model_validate(payload)
+        self.assertEqual(0, validated.predicted_functions[0].blocks[1].execution_count)
 
     def test_structured_branch_counts_and_stack_balance_are_enforced(self) -> None:
         payload = structured_prediction()

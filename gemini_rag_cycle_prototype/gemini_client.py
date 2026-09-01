@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import time
 from typing import Any
 
@@ -106,10 +107,17 @@ class GeminiClient:
                 time.sleep(5 * (2 ** attempt))
 
     def predict(self, prompt: str) -> tuple[PredictionResponse, str]:
+        # Structured assembly responses can be much larger than the earlier
+        # summary-only JSON. Without an explicit budget Gemini may stop at its
+        # default output limit and return syntactically incomplete JSON.
+        max_output_tokens = max(
+            8192, int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "65536"))
+        )
         response = self._generate_content_with_retry(
             prompt,
             self._types.GenerateContentConfig(
                 temperature=0.1,
+                max_output_tokens=max_output_tokens,
                 response_mime_type="application/json",
                 response_schema=PredictionResponse,
                 automatic_function_calling=(
@@ -119,11 +127,32 @@ class GeminiClient:
         )
         raw = response.text or ""
         parsed = getattr(response, "parsed", None)
-        prediction = (
-            parsed
-            if isinstance(parsed, PredictionResponse)
-            else PredictionResponse.model_validate(parsed)
-            if parsed is not None
-            else PredictionResponse.model_validate_json(raw)
-        )
+        try:
+            prediction = (
+                parsed
+                if isinstance(parsed, PredictionResponse)
+                else PredictionResponse.model_validate(parsed)
+                if parsed is not None
+                else PredictionResponse.model_validate_json(raw)
+            )
+        except Exception as exc:
+            diagnostic_path = Path(os.getenv(
+                "GEMINI_INVALID_RESPONSE_PATH",
+                "gemini_rag_cycle_prototype/results/last_invalid_gemini_response.json",
+            ))
+            diagnostic_path.parent.mkdir(parents=True, exist_ok=True)
+            diagnostic_path.write_text(raw, encoding="utf-8")
+            finish_reason = None
+            candidates = getattr(response, "candidates", None) or []
+            if candidates:
+                finish_reason = getattr(candidates[0], "finish_reason", None)
+            if not raw.rstrip().endswith(("}", "]")):
+                raise ValueError(
+                    "Gemini returned truncated JSON before validation; "
+                    f"received {len(raw)} characters, finish_reason="
+                    f"{finish_reason!s}, max_output_tokens={max_output_tokens}. "
+                    "The incomplete response was saved to "
+                    f"{diagnostic_path}."
+                ) from exc
+            raise
         return prediction, raw
