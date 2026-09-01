@@ -80,9 +80,13 @@ g_star_manual_results.mean_execution_cycles
 g_star_manual_results.max_execution_cycles
 g_star_manual_results.mean_execution_us_x1000
 g_star_manual_results.max_execution_us_x1000
+g_star_manual_results.scg_csr
+g_star_manual_results.scg_rccr
+g_star_manual_results.lmem_pcccr
 ```
 
 Geçerli koşul: `complete=1`, `completed_samples=40`, `error_flags=0`.
+Son üç register salt okunur kaydedilir; deney bunların değerini değiştirmez.
 
 ## Gemini tahmini
 

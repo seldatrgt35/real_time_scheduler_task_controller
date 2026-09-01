@@ -6,6 +6,9 @@ typedef __UINT64_TYPE__ uint64_t;
 #define STAR_DEMCR      (*(volatile uint32_t *)0xE000EDFCUL)
 #define STAR_DWT_CTRL   (*(volatile uint32_t *)0xE0001000UL)
 #define STAR_DWT_CYCCNT (*(volatile uint32_t *)0xE0001004UL)
+#define STAR_LMEM_PCCCR (*(volatile uint32_t *)0xE0082000UL)
+#define STAR_SCG_CSR    (*(volatile uint32_t *)0x40064010UL)
+#define STAR_SCG_RCCR   (*(volatile uint32_t *)0x40064014UL)
 #define STAR_SAMPLES    (40U)
 #define STAR_WARMUPS    (8U)
 #define STAR_CORE_HZ    (48000000U)
@@ -19,6 +22,9 @@ typedef struct
     uint32_t max_execution_cycles;
     uint32_t mean_execution_us_x1000;
     uint32_t max_execution_us_x1000;
+    uint32_t scg_csr;
+    uint32_t scg_rccr;
+    uint32_t lmem_pcccr;
 } StarManualResults;
 
 volatile uint32_t g_star_manual_complete;
@@ -56,6 +62,10 @@ int main(void)
     g_star_manual_complete = 0U;
     g_star_manual_results.completed_samples = 0U;
     g_star_manual_results.error_flags = 0U;
+    /* Capture, but do not modify, the clock and PFlash cache configuration. */
+    g_star_manual_results.scg_csr = STAR_SCG_CSR;
+    g_star_manual_results.scg_rccr = STAR_SCG_RCCR;
+    g_star_manual_results.lmem_pcccr = STAR_LMEM_PCCCR;
     g_star_manual_results.measurement_overhead_cycles = MeasureOverhead();
 
     for (sample = 0U; sample < STAR_WARMUPS; ++sample)
