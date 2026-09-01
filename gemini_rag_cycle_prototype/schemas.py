@@ -11,8 +11,10 @@ TIMING_PROFILE_CYCLES = {
     "multiply": 1,
     "integer_divide_worst_case": 12,
     "sram_or_stack_load": 2,
-    "sram_or_stack_store": 1,
+    "sram_or_stack_store": 2,
     "push_or_pop_register_transfer": 1,
+    "multi_register_instruction_overhead": 1,
+    "pop_pc_pipeline_refill_worst_case": 3,
     "function_call_bl_with_refill": 4,
     "function_return_with_refill": 4,
     "conditional_branch_taken": 4,
@@ -466,6 +468,17 @@ class PredictionResponse(BaseModel):
                     if transfer_count is not None:
                         dynamic_count *= int(transfer_count)
                     counts[record] = counts.get(record, 0) + dynamic_count
+                    if opcode in {"push", "pop", "ldm", "ldmia", "stm", "stmia"}:
+                        instruction_executions = block_count * int(
+                            instruction.get("count_per_block", 1)
+                        )
+                        overhead = "multi_register_instruction_overhead"
+                        counts[overhead] = counts.get(overhead, 0) + instruction_executions
+                        if opcode == "pop" and "pc" in str(
+                            instruction.get("operands", "")
+                        ).lower():
+                            refill = "pop_pc_pipeline_refill_worst_case"
+                            counts[refill] = counts.get(refill, 0) + instruction_executions
         if not counts:
             return value
         supplied = {
@@ -629,6 +642,21 @@ class PredictionResponse(BaseModel):
                             count *= instruction.register_transfer_count
                         record = instruction.timing_profile_record
                         computed_counts[record] = computed_counts.get(record, 0) + count
+                        if opcode in {"push", "pop", "ldm", "ldmia", "stm", "stmia"}:
+                            instruction_executions = (
+                                block.execution_count * instruction.count_per_block
+                            )
+                            overhead = "multi_register_instruction_overhead"
+                            computed_counts[overhead] = (
+                                computed_counts.get(overhead, 0)
+                                + instruction_executions
+                            )
+                            if opcode == "pop" and "pc" in instruction.operands.lower():
+                                refill = "pop_pc_pipeline_refill_worst_case"
+                                computed_counts[refill] = (
+                                    computed_counts.get(refill, 0)
+                                    + instruction_executions
+                                )
             ledger_counts = {
                 item.instruction_class: item.dynamic_count
                 for item in self.instruction_cycle_ledger

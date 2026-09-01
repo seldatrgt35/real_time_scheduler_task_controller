@@ -31,6 +31,7 @@ Başlangıç verisi sabittir. Böylece seçilen yol tekrar üretilebilir:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File experiments/manual_instruction_baseline/build_s32k148.ps1
+powershell -ExecutionPolicy Bypass -File experiments/manual_instruction_baseline/build_s32k148.ps1 -EnableCodeCache
 ```
 
 Ana seçenek `-O0`'dır. Ayrıca builtin dönüşümü, inline, sibling-call dönüşümü,
@@ -39,7 +40,7 @@ frame-pointer kaldırma, IPA ve LTO açıkça kapatılmıştır. Bu seçenekler 
 epilogue, stack erişimi ve register aktarımı üretir. Doğru kaynak bu nedenle
 oluşturulan disassembly'dir:
 
-`artifacts/s32k148_manual_instruction_baseline/star_s32k148_manual_instruction_baseline.disasm.txt`
+`artifacts/s32k148_manual_instruction_baseline_cache_off/star_s32k148_manual_instruction_baseline_cache_off.disasm.txt`
 
 ## Elle yol sayımı
 
@@ -55,6 +56,12 @@ pool, alignment ve çalışmayan branch gövdeleri dinamik hesaba girmez. Çıkt
 Ledger şu sınıfları ayrı gösterir: ALU/move/compare/shift, load, store,
 push/pop register transferleri, BL, dönüş, taken/not-taken conditional branch
 ve unconditional branch.
+
+ARM Cortex-M4 TRM'ye göre `LDR/STR/STRH/STRB` iki cycle'dır. PUSH/POP
+`1+N`, PC'ye POP ise `1+N+P` cycle'dır. Branch/call refill değeri `P`,
+instruction hizasına ve spekülasyona bağlı olarak 1..3 aralığındadır. Bu
+yüzden script tek bir yapay sayı yerine resmi çekirdek minimum-maksimum
+aralığını üretir.
 
 Önemli: ARM Cortex-M4 TRM instruction timing bilgisini verir; MCU üreticisinin
 bellek sistemi ayrıca ele alınmalıdır. S32K148 Reference Manual da clock/Flash
@@ -82,11 +89,14 @@ g_star_manual_results.mean_execution_us_x1000
 g_star_manual_results.max_execution_us_x1000
 g_star_manual_results.scg_csr
 g_star_manual_results.scg_rccr
+g_star_manual_results.lmem_pcccr_initial
 g_star_manual_results.lmem_pcccr
 ```
 
 Geçerli koşul: `complete=1`, `completed_samples=40`, `error_flags=0`.
-Son üç register salt okunur kaydedilir; deney bunların değerini değiştirmez.
+Cache-kapalı ELF register değerlerini değiştirmez. Cache-açık ELF, NXP'nin
+önerdiği sırayla iki way'i invalidate eder, GO tamamlanmasını bekler ve code
+cache'i açar. Task ölçümünden önce sekiz warmup çalıştırılır.
 
 ## Gemini tahmini
 

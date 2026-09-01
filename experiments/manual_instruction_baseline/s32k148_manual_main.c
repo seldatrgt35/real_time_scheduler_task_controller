@@ -12,6 +12,10 @@ typedef __UINT64_TYPE__ uint64_t;
 #define STAR_SAMPLES    (40U)
 #define STAR_WARMUPS    (8U)
 #define STAR_CORE_HZ    (48000000U)
+#define STAR_LMEM_ENCACHE (0x00000001UL)
+#define STAR_LMEM_INVW0   (0x01000000UL)
+#define STAR_LMEM_INVW1   (0x04000000UL)
+#define STAR_LMEM_GO      (0x80000000UL)
 
 typedef struct
 {
@@ -24,6 +28,7 @@ typedef struct
     uint32_t max_execution_us_x1000;
     uint32_t scg_csr;
     uint32_t scg_rccr;
+    uint32_t lmem_pcccr_initial;
     uint32_t lmem_pcccr;
 } StarManualResults;
 
@@ -51,6 +56,20 @@ static uint32_t MeasureOverhead(void)
     return minimum;
 }
 
+#if defined(STAR_ENABLE_CODE_CACHE)
+static void EnableCodeCache(void)
+{
+    STAR_LMEM_PCCCR = STAR_LMEM_INVW0 | STAR_LMEM_INVW1 |
+        STAR_LMEM_GO | STAR_LMEM_ENCACHE;
+    while ((STAR_LMEM_PCCCR & STAR_LMEM_GO) != 0U)
+    {
+        /* Wait for both cache ways to be invalidated. */
+    }
+    STAR_LMEM_PCCCR &= ~(STAR_LMEM_INVW0 | STAR_LMEM_INVW1);
+    __asm__ volatile ("dsb\n\tisb" ::: "memory");
+}
+#endif
+
 int main(void)
 {
     uint32_t sample;
@@ -65,6 +84,10 @@ int main(void)
     /* Capture, but do not modify, the clock and PFlash cache configuration. */
     g_star_manual_results.scg_csr = STAR_SCG_CSR;
     g_star_manual_results.scg_rccr = STAR_SCG_RCCR;
+    g_star_manual_results.lmem_pcccr_initial = STAR_LMEM_PCCCR;
+#if defined(STAR_ENABLE_CODE_CACHE)
+    EnableCodeCache();
+#endif
     g_star_manual_results.lmem_pcccr = STAR_LMEM_PCCCR;
     g_star_manual_results.measurement_overhead_cycles = MeasureOverhead();
 

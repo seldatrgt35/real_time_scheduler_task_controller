@@ -7,22 +7,13 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DISASSEMBLY = ROOT / "artifacts" / "s32k148_manual_instruction_baseline" / (
-    "star_s32k148_manual_instruction_baseline.disasm.txt"
+DISASSEMBLY = ROOT / "artifacts" / "s32k148_manual_instruction_baseline_cache_off" / (
+    "star_s32k148_manual_instruction_baseline_cache_off.disasm.txt"
 )
 OUTPUT = DISASSEMBLY.with_name("manual_path_cycle_ledger.json")
 
-TIMING = {
-    "alu_move_compare_shift": 1,
-    "sram_or_stack_load": 2,
-    "sram_or_stack_store": 1,
-    "push_or_pop_register_transfer": 1,
-    "function_call_bl_with_refill": 4,
-    "function_return_with_refill": 4,
-    "conditional_branch_taken": 4,
-    "conditional_branch_not_taken": 1,
-    "unconditional_branch_with_refill": 4,
-}
+PIPELINE_REFILL_MIN = 1
+PIPELINE_REFILL_MAX = 3
 
 
 def addresses(first: int, last: int) -> list[int]:
@@ -76,6 +67,29 @@ def classify(opcode: str, operands: str, branch_taken: bool | None) -> tuple[str
             1,
         )
     return "alu_move_compare_shift", 1
+
+
+def official_cycle_range(
+    opcode: str, operands: str, branch_taken: bool | None
+) -> tuple[int, int]:
+    """ARM Cortex-M4 TRM timing, excluding external memory wait states."""
+    op = opcode.split(".")[0]
+    if op.startswith(("ldr", "str")):
+        return 2, 2
+    if op in {"push", "pop"}:
+        registers = re.search(r"\{([^}]+)\}", operands)
+        count = len(registers.group(1).split(",")) if registers else 1
+        base = 1 + count
+        if op == "pop" and "pc" in operands.lower():
+            return base + PIPELINE_REFILL_MIN, base + PIPELINE_REFILL_MAX
+        return base, base
+    if op in {"bl", "blx", "bx", "b"}:
+        return 1 + PIPELINE_REFILL_MIN, 1 + PIPELINE_REFILL_MAX
+    if op.startswith("b"):
+        if branch_taken:
+            return 1 + PIPELINE_REFILL_MIN, 1 + PIPELINE_REFILL_MAX
+        return 1, 1
+    return 1, 1
 
 
 def append_path(
@@ -143,6 +157,8 @@ def build_trace() -> list[tuple[int, bool | None]]:
 def main() -> int:
     instructions = parse()
     counts: Counter[str] = Counter()
+    cycle_minimum = 0
+    cycle_maximum = 0
     trace = build_trace()
     missing = [hex(address) for address, _ in trace if address not in instructions]
     if missing:
@@ -151,27 +167,33 @@ def main() -> int:
         opcode, operands = instructions[address]
         family, units = classify(opcode, operands, taken)
         counts[family] += units
+        instruction_minimum, instruction_maximum = official_cycle_range(
+            opcode, operands, taken
+        )
+        cycle_minimum += instruction_minimum
+        cycle_maximum += instruction_maximum
     rows = [
         {
             "instruction_class": family,
             "dynamic_count": count,
-            "cycles_each": TIMING[family],
-            "total_cycles": count * TIMING[family],
+            "dynamic_units": count,
         }
         for family, count in counts.items()
     ]
-    total = sum(row["total_cycles"] for row in rows)
     result = {
         "task": "ThrottleActuatorMonitor_Task5ms",
         "compiler_profile": "ARM GCC 11.4 -O0 explicit no-transform flags",
         "clock_hz": 48_000_000,
         "dynamic_instruction_events": len(trace),
         "ledger": rows,
-        "manual_core_cycles": total,
-        "manual_core_us": total / 48.0,
+        "manual_core_cycle_minimum": cycle_minimum,
+        "manual_core_cycle_maximum": cycle_maximum,
+        "manual_core_us_minimum": cycle_minimum / 48.0,
+        "manual_core_us_maximum": cycle_maximum / 48.0,
         "scope": (
-            "Core instruction timing ledger for the initialized feasible path; "
-            "exact S32K148 PFlash fetch effects are not included."
+            "ARM Cortex-M4 TRM core timing interval for the initialized path. "
+            "P is allowed to vary from 1 to 3; external PFlash wait effects "
+            "are not included."
         ),
     }
     OUTPUT.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

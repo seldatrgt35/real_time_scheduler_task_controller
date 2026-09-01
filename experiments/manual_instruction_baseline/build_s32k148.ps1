@@ -1,3 +1,4 @@
+param([switch]$EnableCodeCache)
 $ErrorActionPreference = "Stop"
 $gccRoot = "C:\NXP\S32DS.3.6.9\S32DS\build_tools\gcc_v11.4\gcc-11.4-arm32-eabi\bin"
 $gcc = Join-Path $gccRoot "arm-none-eabi-gcc.exe"
@@ -5,12 +6,14 @@ $objcopy = Join-Path $gccRoot "arm-none-eabi-objcopy.exe"
 $objdump = Join-Path $gccRoot "arm-none-eabi-objdump.exe"
 $suite = $PSScriptRoot
 $repositoryRoot = (Resolve-Path (Join-Path $suite "..\..")).Path
-$output = Join-Path $repositoryRoot "artifacts\s32k148_manual_instruction_baseline"
+$variant = if ($EnableCodeCache) { "cache_on" } else { "cache_off" }
+$output = Join-Path $repositoryRoot "artifacts\s32k148_manual_instruction_baseline_$variant"
 New-Item -ItemType Directory -Force -Path $output | Out-Null
-$elf = Join-Path $output "star_s32k148_manual_instruction_baseline.elf"
-$hex = Join-Path $output "star_s32k148_manual_instruction_baseline.hex"
+$baseName = "star_s32k148_manual_instruction_baseline_$variant"
+$elf = Join-Path $output "$baseName.elf"
+$hex = Join-Path $output "$baseName.hex"
 $map = Join-Path $output "star_s32k148_manual_instruction_baseline.map"
-$disassembly = Join-Path $output "star_s32k148_manual_instruction_baseline.disasm.txt"
+$disassembly = Join-Path $output "$baseName.disasm.txt"
 
 # -O0 disables optimization passes. The additional -fno-* options make the
 # experiment explicit and prevent builtin substitution, inlining, sibling-call
@@ -22,6 +25,9 @@ $compileFlags = @(
     "-fno-ipa-cp", "-fno-ipa-sra", "-fno-ipa-icf", "-fno-lto",
     "-ffunction-sections", "-fdata-sections", "-Wall", "-Wextra", "-Werror"
 )
+if ($EnableCodeCache) {
+    $compileFlags += "-DSTAR_ENABLE_CODE_CACHE=1"
+}
 $arguments = @(
     $compileFlags
     "-nostartfiles", "-Wl,--gc-sections", "-Wl,-Map=$map",

@@ -1,0 +1,58 @@
+{
+  "task": "ThrottleActuatorMonitor_Task5ms",
+  "compiler_profile": "ARM GCC 11.4 -O0 explicit no-transform flags",
+  "clock_hz": 48000000,
+  "dynamic_instruction_events": 585,
+  "ledger": [
+    {
+      "instruction_class": "push_or_pop_register_transfer",
+      "dynamic_count": 28,
+      "dynamic_units": 28
+    },
+    {
+      "instruction_class": "alu_move_compare_shift",
+      "dynamic_count": 227,
+      "dynamic_units": 227
+    },
+    {
+      "instruction_class": "sram_or_stack_store",
+      "dynamic_count": 87,
+      "dynamic_units": 87
+    },
+    {
+      "instruction_class": "sram_or_stack_load",
+      "dynamic_count": 179,
+      "dynamic_units": 179
+    },
+    {
+      "instruction_class": "conditional_branch_taken",
+      "dynamic_count": 20,
+      "dynamic_units": 20
+    },
+    {
+      "instruction_class": "function_return_with_refill",
+      "dynamic_count": 12,
+      "dynamic_units": 12
+    },
+    {
+      "instruction_class": "conditional_branch_not_taken",
+      "dynamic_count": 13,
+      "dynamic_units": 13
+    },
+    {
+      "instruction_class": "unconditional_branch_with_refill",
+      "dynamic_count": 9,
+      "dynamic_units": 9
+    },
+    {
+      "instruction_class": "function_call_bl_with_refill",
+      "dynamic_count": 12,
+      "dynamic_units": 12
+    }
+  ],
+  "manual_core_cycle_minimum": 933,
+  "manual_core_cycle_maximum": 1041,
+  "manual_core_us_minimum": 19.4375,
+  "manual_core_us_maximum": 21.6875,
+  "scope": "ARM Cortex-M4 TRM core timing interval for the initialized path. P is allowed to vary from 1 to 3; external PFlash wait effects are not included."
+}
