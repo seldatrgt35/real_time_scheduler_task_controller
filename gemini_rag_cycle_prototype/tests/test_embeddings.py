@@ -237,6 +237,44 @@ class GeminiEmbeddingTest(unittest.TestCase):
             gemini.predict("prompt")
         self.assertEqual(captured["config"].max_output_tokens, 32768)
 
+    def test_prediction_retries_complete_but_invalid_structured_response(self) -> None:
+        calls = []
+
+        class GenerateContentConfig:
+            def __init__(self, **values):
+                self.__dict__.update(values)
+
+        fake_types = SimpleNamespace(
+            GenerateContentConfig=GenerateContentConfig,
+            AutomaticFunctionCallingConfig=GenerateContentConfig,
+        )
+        valid = PredictionResponse.model_construct()
+
+        def generate_content(**kwargs):
+            calls.append(kwargs["contents"])
+            if len(calls) == 1:
+                return SimpleNamespace(text="{}", parsed=None, candidates=[])
+            return SimpleNamespace(text="{}", parsed=valid, candidates=[])
+
+        gemini = object.__new__(GeminiClient)
+        gemini._types = fake_types
+        gemini._client = SimpleNamespace(
+            models=SimpleNamespace(generate_content=generate_content)
+        )
+        gemini.model = "test-model"
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            diagnostic = Path(temporary_directory) / "invalid.json"
+            with patch.dict(os.environ, {
+                "GEMINI_VALIDATION_ATTEMPTS": "2",
+                "GEMINI_INVALID_RESPONSE_PATH": str(diagnostic),
+            }):
+                prediction, _ = gemini.predict("original prompt")
+        self.assertIs(prediction, valid)
+        self.assertEqual(2, len(calls))
+        self.assertEqual("original prompt", calls[0])
+        self.assertIn("VALIDATION REPAIR REQUIRED", calls[1])
+        self.assertIn("Regenerate the entire response from scratch", calls[1])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -30,7 +30,7 @@ KNOWN_THUMB2_OPCODES = {
     "ldrb", "ldrh", "ldrsb", "ldrsh", "lsl", "lsls", "lsr", "lsrs",
     "mla", "mls", "mov", "movs", "movt", "movw", "mul", "muls", "mvn",
     "neg", "negs", "nop", "orr", "orrs", "pop", "push", "rev", "ror",
-    "asrs", "rsb", "sbc", "sdiv", "stm", "stmia", "str", "strb", "strh", "sub",
+    "asrs", "rsb", "rsbs", "sbc", "sdiv", "stm", "stmia", "str", "strb", "strh", "sub",
     "subs", "tst", "udiv", "umull", "uxtb", "uxth", "sxth",
 }
 CONDITIONAL_BRANCH_OPCODES = {

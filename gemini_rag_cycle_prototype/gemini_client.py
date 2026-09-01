@@ -113,46 +113,88 @@ class GeminiClient:
         max_output_tokens = max(
             8192, int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "65536"))
         )
-        response = self._generate_content_with_retry(
-            prompt,
-            self._types.GenerateContentConfig(
-                temperature=0.1,
-                max_output_tokens=max_output_tokens,
-                response_mime_type="application/json",
-                response_schema=PredictionResponse,
-                automatic_function_calling=(
-                    self._types.AutomaticFunctionCallingConfig(disable=True)
-                ),
+        config = self._types.GenerateContentConfig(
+            temperature=0.1,
+            max_output_tokens=max_output_tokens,
+            response_mime_type="application/json",
+            response_schema=PredictionResponse,
+            automatic_function_calling=(
+                self._types.AutomaticFunctionCallingConfig(disable=True)
             ),
         )
-        raw = response.text or ""
-        parsed = getattr(response, "parsed", None)
-        try:
-            prediction = (
-                parsed
-                if isinstance(parsed, PredictionResponse)
-                else PredictionResponse.model_validate(parsed)
-                if parsed is not None
-                else PredictionResponse.model_validate_json(raw)
-            )
-        except Exception as exc:
-            diagnostic_path = Path(os.getenv(
-                "GEMINI_INVALID_RESPONSE_PATH",
-                "gemini_rag_cycle_prototype/results/last_invalid_gemini_response.json",
-            ))
-            diagnostic_path.parent.mkdir(parents=True, exist_ok=True)
-            diagnostic_path.write_text(raw, encoding="utf-8")
-            finish_reason = None
-            candidates = getattr(response, "candidates", None) or []
-            if candidates:
-                finish_reason = getattr(candidates[0], "finish_reason", None)
-            if not raw.rstrip().endswith(("}", "]")):
-                raise ValueError(
-                    "Gemini returned truncated JSON before validation; "
-                    f"received {len(raw)} characters, finish_reason="
-                    f"{finish_reason!s}, max_output_tokens={max_output_tokens}. "
-                    "The incomplete response was saved to "
-                    f"{diagnostic_path}."
-                ) from exc
-            raise
-        return prediction, raw
+        validation_attempts = max(
+            1, int(os.getenv("GEMINI_VALIDATION_ATTEMPTS", "3"))
+        )
+        current_prompt = prompt
+        last_exc: Exception | None = None
+        for validation_attempt in range(validation_attempts):
+            response = self._generate_content_with_retry(current_prompt, config)
+            raw = response.text or ""
+            parsed = getattr(response, "parsed", None)
+            try:
+                prediction = (
+                    parsed
+                    if isinstance(parsed, PredictionResponse)
+                    else PredictionResponse.model_validate(parsed)
+                    if parsed is not None
+                    else PredictionResponse.model_validate_json(raw)
+                )
+                return prediction, raw
+            except Exception as exc:
+                last_exc = exc
+                self._save_invalid_response(raw)
+                if not raw.rstrip().endswith(("}", "]")):
+                    self._raise_truncated_response(
+                        response, raw, max_output_tokens, exc
+                    )
+                if validation_attempt + 1 < validation_attempts:
+                    current_prompt = self._validation_repair_prompt(prompt, exc)
+                    continue
+                raise
+        assert last_exc is not None
+        raise last_exc
+
+    @staticmethod
+    def _validation_repair_prompt(original_prompt: str, error: Exception) -> str:
+        return (
+            original_prompt
+            + "\n\nVALIDATION REPAIR REQUIRED\n"
+            + "Your previous JSON response was rejected by the deterministic "
+              "validator. Regenerate the entire response from scratch; do not "
+              "return a patch or explanation. Every declared function must "
+              "contain its complete reachable basic-block and instruction list, "
+              "including its declared return instruction. The instruction ledger "
+              "must exactly equal the dynamic counts derived from those blocks.\n"
+            + "Validator diagnostics:\n"
+            + str(error)
+        )
+
+    @staticmethod
+    def _invalid_response_path() -> Path:
+        return Path(os.getenv(
+            "GEMINI_INVALID_RESPONSE_PATH",
+            "gemini_rag_cycle_prototype/results/last_invalid_gemini_response.json",
+        ))
+
+    @classmethod
+    def _save_invalid_response(cls, raw: str) -> None:
+        diagnostic_path = cls._invalid_response_path()
+        diagnostic_path.parent.mkdir(parents=True, exist_ok=True)
+        diagnostic_path.write_text(raw, encoding="utf-8")
+
+    @classmethod
+    def _raise_truncated_response(
+        cls, response: Any, raw: str, max_output_tokens: int, exc: Exception
+    ) -> None:
+        diagnostic_path = cls._invalid_response_path()
+        finish_reason = None
+        candidates = getattr(response, "candidates", None) or []
+        if candidates:
+            finish_reason = getattr(candidates[0], "finish_reason", None)
+        raise ValueError(
+            "Gemini returned truncated JSON before validation; "
+            f"received {len(raw)} characters, finish_reason="
+            f"{finish_reason!s}, max_output_tokens={max_output_tokens}. "
+            "The incomplete response was saved to "
+            f"{diagnostic_path}."
+        ) from exc

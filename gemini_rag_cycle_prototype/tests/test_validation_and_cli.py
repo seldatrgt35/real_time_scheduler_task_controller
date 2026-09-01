@@ -111,6 +111,15 @@ class ValidationAndCliTest(unittest.TestCase):
         self.assertEqual(
             "push_or_pop_register_transfer", pop.timing_profile_record
         )
+
+    def test_valid_thumb2_rsbs_opcode_is_accepted(self) -> None:
+        instruction = PredictedInstruction.model_validate({
+            "opcode": "rsbs",
+            "operands": "r3, r3, #0",
+            "instruction_class": "alu_move_compare_shift",
+            "timing_profile_record": "alu_move_compare_shift",
+        })
+        self.assertEqual("rsbs", instruction.opcode)
         combined = PredictedInstruction.model_validate({
             "opcode": "mov sp, r7", "operands": "",
             "instruction_class": "alu_move_compare_shift",
