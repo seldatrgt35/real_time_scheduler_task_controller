@@ -289,18 +289,10 @@ class ValidationAndCliTest(unittest.TestCase):
         }]
         payload["unresolved"] = ["exact PFlash timing"]
         payload["warnings"] = ["predicted assembly"]
-        with self.assertRaisesRegex(ValueError, r"dynamic_count \* cycles_each"):
-            PredictionResponse.model_validate(payload)
-
-        payload["instruction_cycle_ledger"][0]["total_cycles"] = 5
-        with self.assertRaisesRegex(ValueError, "instruction ledger total"):
-            PredictionResponse.model_validate(payload)
-
-        payload["cycle_components"][0]["cycles"] = 9
-        payload["estimated_source_execution_cycles"] = 9
-        payload["estimated_source_execution_us"] = 9 / 48
         validated = PredictionResponse.model_validate(payload)
+        self.assertEqual(9, validated.estimated_source_execution_cycles)
         self.assertEqual(5, validated.instruction_cycle_ledger[0].total_cycles)
+        self.assertIn("replaced deterministically", validated.warnings[-1])
 
     def test_structured_cfg_rejects_unknown_successor_and_unreachable_block(self) -> None:
         payload = structured_prediction()
@@ -365,8 +357,10 @@ class ValidationAndCliTest(unittest.TestCase):
         payload["cycle_components"][0]["cycles"] = 6
         payload["estimated_source_execution_cycles"] = 6
         payload["estimated_source_execution_us"] = 6 / 48
-        with self.assertRaisesRegex(ValueError, "structured basic-block counts"):
-            PredictionResponse.model_validate(payload)
+        validated = PredictionResponse.model_validate(payload)
+        self.assertEqual(5, validated.estimated_source_execution_cycles)
+        self.assertEqual(1, validated.instruction_cycle_ledger[0].dynamic_count)
+        self.assertIn("replaced deterministically", validated.warnings[-1])
 
     def test_holistic_source_only_estimate_requires_complete_o0_ledger(self) -> None:
         payload = prediction()

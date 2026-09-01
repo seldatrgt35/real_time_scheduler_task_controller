@@ -30,6 +30,10 @@ KNOWN_THUMB2_OPCODES = {
     "rsb", "sbc", "sdiv", "stm", "stmia", "str", "strb", "strh", "sub",
     "subs", "tst", "udiv", "umull", "uxtb", "uxth", "sxth",
 }
+CONDITIONAL_BRANCH_OPCODES = {
+    "bcc", "bcs", "beq", "bge", "bgt", "bhi", "bhs", "ble", "blo",
+    "bls", "blt", "bmi", "bne", "bpl", "cbnz", "cbz",
+}
 
 
 class StructuralSummary(BaseModel):
@@ -156,23 +160,24 @@ class PredictedInstruction(BaseModel):
         op = self.opcode.lower().split(".")[0]
         if op not in KNOWN_THUMB2_OPCODES:
             raise ValueError(f"unrecognized Thumb-2 opcode: {self.opcode}")
-        if self.instruction_class == "conditional_branch":
+        is_conditional_branch = op in CONDITIONAL_BRANCH_OPCODES
+        if is_conditional_branch:
             if self.taken_count is None or self.not_taken_count is None:
                 raise ValueError("conditional branch requires taken_count and not_taken_count")
-            if self.timing_profile_record != "conditional_branch_taken" or (
-                self.not_taken_timing_profile_record != "conditional_branch_not_taken"
-            ):
-                raise ValueError("conditional branch requires taken and not-taken timing records")
+            if self.timing_profile_record not in {
+                "conditional_branch_taken", "conditional_branch_not_taken"
+            }:
+                raise ValueError("conditional branch requires a branch timing record")
+            if self.not_taken_timing_profile_record not in {
+                None, "conditional_branch_not_taken"
+            }:
+                raise ValueError("conditional branch has an invalid not-taken timing record")
         elif self.taken_count is not None or self.not_taken_count is not None:
             raise ValueError("branch counts are valid only for conditional branches")
         if op in {"bl", "blx"} and not self.callee:
             raise ValueError("BL/BLX requires a defined callee")
         if op in {"push", "pop", "ldm", "stm"} and self.register_transfer_count is None:
             raise ValueError("multi-register instruction requires register_transfer_count")
-        if not self.executed_on_path and self.role not in {
-            "alignment_padding", "literal_padding", "unreachable"
-        }:
-            raise ValueError("non-executed instruction requires an explicit padding/unreachable role")
         if self.executed_on_path and self.timing_profile_record not in TIMING_PROFILE_CYCLES:
             raise ValueError("instruction has no recognized timing-profile record")
         return self
@@ -188,7 +193,8 @@ class PredictedBasicBlock(BaseModel):
     @model_validator(mode="after")
     def validate_branch_arithmetic(self) -> "PredictedBasicBlock":
         for instruction in self.instructions:
-            if instruction.instruction_class == "conditional_branch":
+            opcode = instruction.opcode.lower().split(".")[0]
+            if opcode in CONDITIONAL_BRANCH_OPCODES:
                 executions = (instruction.taken_count or 0) + (
                     instruction.not_taken_count or 0
                 )
@@ -303,6 +309,85 @@ class PredictionResponse(BaseModel):
     unresolved: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def rebuild_ledger_from_structured_blocks(cls, value):
+        if not isinstance(value, dict) or not value.get("predicted_functions"):
+            return value
+        counts: dict[str, int] = {}
+        for function in value["predicted_functions"]:
+            for block in function.get("blocks", []):
+                block_count = int(block.get("execution_count", 0))
+                for instruction in block.get("instructions", []):
+                    if not instruction.get("executed_on_path", True):
+                        continue
+                    opcode = str(instruction.get("opcode", "")).lower().split(".")[0]
+                    if opcode in CONDITIONAL_BRANCH_OPCODES:
+                        counts["conditional_branch_taken"] = (
+                            counts.get("conditional_branch_taken", 0)
+                            + int(instruction.get("taken_count") or 0)
+                        )
+                        counts["conditional_branch_not_taken"] = (
+                            counts.get("conditional_branch_not_taken", 0)
+                            + int(instruction.get("not_taken_count") or 0)
+                        )
+                        continue
+                    record = instruction.get("timing_profile_record")
+                    if record not in TIMING_PROFILE_CYCLES:
+                        continue
+                    dynamic_count = block_count * int(
+                        instruction.get("count_per_block", 1)
+                    )
+                    transfer_count = instruction.get("register_transfer_count")
+                    if transfer_count is not None:
+                        dynamic_count *= int(transfer_count)
+                    counts[record] = counts.get(record, 0) + dynamic_count
+        if not counts:
+            return value
+        supplied = {
+            item.get("instruction_class"): (
+                item.get("dynamic_count"), item.get("cycles_each"), item.get("total_cycles")
+            )
+            for item in value.get("instruction_cycle_ledger", [])
+            if isinstance(item, dict)
+        }
+        rebuilt = []
+        for record, dynamic_count in counts.items():
+            cycles_each = TIMING_PROFILE_CYCLES[record]
+            rebuilt.append({
+                "instruction_class": record,
+                "dynamic_count": dynamic_count,
+                "cycles_each": cycles_each,
+                "total_cycles": dynamic_count * cycles_each,
+                "evidence": "deterministically rebuilt from structured basic blocks",
+            })
+        total_cycles = sum(item["total_cycles"] for item in rebuilt)
+        value["instruction_cycle_ledger"] = rebuilt
+        for component in value.get("cycle_components", []):
+            if component.get("name") == "predicted_thumb2_cycle_sum":
+                component["cycles"] = total_cycles
+                component["evidence"] = (
+                    "deterministically rebuilt from structured basic blocks "
+                    "and the configured timing profile"
+                )
+        value["estimated_source_execution_cycles"] = total_cycles
+        value["estimated_source_execution_us"] = total_cycles / 48.0
+        rebuilt_signature = {
+            item["instruction_class"]: (
+                item["dynamic_count"], item["cycles_each"], item["total_cycles"]
+            )
+            for item in rebuilt
+        }
+        if supplied != rebuilt_signature:
+            warnings = value.setdefault("warnings", [])
+            warning = (
+                "Gemini instruction-ledger counts disagreed with structured "
+                "basic blocks; the ledger and total were replaced deterministically."
+            )
+            if warning not in warnings:
+                warnings.append(warning)
+        return value
+
     @model_validator(mode="after")
     def validate_prediction(self) -> "PredictionResponse":
         if self.formal_guarantee:
@@ -404,7 +489,8 @@ class PredictionResponse(BaseModel):
                     for instruction in block.instructions:
                         if not instruction.executed_on_path:
                             continue
-                        if instruction.instruction_class == "conditional_branch":
+                        opcode = instruction.opcode.lower().split(".")[0]
+                        if opcode in CONDITIONAL_BRANCH_OPCODES:
                             computed_counts["conditional_branch_taken"] = (
                                 computed_counts.get("conditional_branch_taken", 0)
                                 + (instruction.taken_count or 0)

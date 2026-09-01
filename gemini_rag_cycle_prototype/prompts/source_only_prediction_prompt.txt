@@ -30,7 +30,9 @@ STEP 2: PREDICT GCC -O0 THUMB-2 BASIC BLOCKS
 - Every basic block must contain its exact dynamic `execution_count`, successor
   block IDs, instructions, and loop-bound evidence when it belongs to a loop.
 - PUSH/POP/LDM/STM require `register_transfer_count`. Conditional branches
-  require `taken_count` and `not_taken_count`. BL/BLX require `callee`.
+  require `taken_count` and `not_taken_count`; identify them by their concrete
+  opcode such as BEQ/BNE/BLS/BHI, while their timing records identify taken and
+  not-taken costs. BL/BLX require `callee`.
 - Record stack allocation/deallocation, LR preservation and the actual return
   mechanism for every function.
 - Model GCC 11.4 `-O0`, AAPCS argument passing, callable non-inline helpers,
@@ -75,8 +77,10 @@ MANDATORY STRUCTURAL VALIDATION
 - Every executed instruction must map to a timing-profile record. Unknown
   opcodes are unresolved, never assigned an invented class or cost.
 - Do not double count BX LR and POP {{...,PC}}. Instructions after a terminal
-  return, including alignment NOPs, must be marked non-executed padding and
-  excluded from the dynamic ledger.
+  return, including alignment NOPs, must be marked non-executed padding.
+  Instructions in a feasible CFG block that are skipped on the selected input
+  path may use `executed_on_path=false` without being called padding. All
+  non-executed instructions must be excluded from the dynamic ledger.
 
 HARDWARE AND BUILD PROFILE
 {hardware_profile}
