@@ -41,6 +41,50 @@ def prediction(**overrides) -> dict:
     return base
 
 
+def structured_prediction() -> dict:
+    payload = prediction(
+        analysis_status="PARTIAL",
+        cycle_components=[{
+            "name": "predicted_thumb2_cycle_sum", "cycles": 5,
+            "evidence": "structured instruction",
+        }],
+        estimated_source_execution_cycles=5,
+        estimated_source_execution_us=5 / 48,
+        unresolved=["exact PFlash timing"],
+        warnings=["source-only assembly prediction"],
+    )
+    payload["instruction_cycle_ledger"] = [{
+        "instruction_class": "alu_move_compare_shift",
+        "dynamic_count": 1, "cycles_each": 1, "total_cycles": 1,
+        "evidence": "entry block",
+    }, {
+        "instruction_class": "function_return_with_refill",
+        "dynamic_count": 1, "cycles_each": 4, "total_cycles": 4,
+        "evidence": "BX LR",
+    }]
+    payload["predicted_functions"] = [{
+        "function_name": "Task", "execution_count": 1,
+        "entry_block_id": "entry", "stack_allocation_bytes": 0,
+        "stack_deallocation_bytes": 0, "lr_saved": False,
+        "valid_return_via": "BX_LR", "loop_bounds_proven": True,
+        "blocks": [{
+            "block_id": "entry", "execution_count": 1, "successors": [],
+            "instructions": [{
+                "opcode": "adds", "operands": "r0, #1",
+                "instruction_class": "alu_move_compare_shift",
+                "count_per_block": 1,
+                "timing_profile_record": "alu_move_compare_shift",
+            }, {
+                "opcode": "bx", "operands": "lr",
+                "instruction_class": "function_return",
+                "count_per_block": 1,
+                "timing_profile_record": "function_return_with_refill",
+            }],
+        }],
+    }]
+    return payload
+
+
 class ValidationAndCliTest(unittest.TestCase):
     def test_response_schema_is_compatible_with_gemini_developer_api(self) -> None:
         schema = PredictionResponse.model_json_schema()
@@ -202,12 +246,46 @@ class ValidationAndCliTest(unittest.TestCase):
         payload["estimated_source_execution_cycles"] = 10
         payload["estimated_source_execution_us"] = 10 / 48
         payload["predicted_assembly_outline"] = ["Task.entry x1: PUSH, LDR, ADD"]
+        payload["predicted_functions"] = [{
+            "function_name": "Task",
+            "execution_count": 1,
+            "entry_block_id": "entry",
+            "stack_allocation_bytes": 0,
+            "stack_deallocation_bytes": 0,
+            "lr_saved": False,
+            "valid_return_via": "BX_LR",
+            "loop_bounds_proven": True,
+            "blocks": [{
+                "block_id": "entry",
+                "execution_count": 1,
+                "successors": [],
+                "instructions": [{
+                    "opcode": "adds",
+                    "operands": "r0, #1",
+                    "instruction_class": "alu_move_compare_shift",
+                    "count_per_block": 5,
+                    "timing_profile_record": "alu_move_compare_shift",
+                }, {
+                    "opcode": "bx",
+                    "operands": "lr",
+                    "instruction_class": "function_return",
+                    "count_per_block": 1,
+                    "timing_profile_record": "function_return_with_refill",
+                }],
+            }],
+        }]
         payload["instruction_cycle_ledger"] = [{
             "instruction_class": "alu_move_compare_shift",
             "dynamic_count": 5,
             "cycles_each": 1,
             "total_cycles": 4,
             "evidence": "predicted basic blocks",
+        }, {
+            "instruction_class": "function_return_with_refill",
+            "dynamic_count": 1,
+            "cycles_each": 4,
+            "total_cycles": 4,
+            "evidence": "return",
         }]
         payload["unresolved"] = ["exact PFlash timing"]
         payload["warnings"] = ["predicted assembly"]
@@ -218,11 +296,77 @@ class ValidationAndCliTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "instruction ledger total"):
             PredictionResponse.model_validate(payload)
 
-        payload["cycle_components"][0]["cycles"] = 5
-        payload["estimated_source_execution_cycles"] = 5
-        payload["estimated_source_execution_us"] = 5 / 48
+        payload["cycle_components"][0]["cycles"] = 9
+        payload["estimated_source_execution_cycles"] = 9
+        payload["estimated_source_execution_us"] = 9 / 48
         validated = PredictionResponse.model_validate(payload)
         self.assertEqual(5, validated.instruction_cycle_ledger[0].total_cycles)
+
+    def test_structured_cfg_rejects_unknown_successor_and_unreachable_block(self) -> None:
+        payload = structured_prediction()
+        payload["predicted_functions"][0]["blocks"][0]["successors"] = ["missing"]
+        with self.assertRaisesRegex(ValueError, "unknown successor"):
+            PredictionResponse.model_validate(payload)
+        payload = structured_prediction()
+        payload["predicted_functions"][0]["blocks"].append({
+            "block_id": "dead", "execution_count": 0, "successors": [],
+            "instructions": [],
+        })
+        with self.assertRaisesRegex(ValueError, "unreachable basic block"):
+            PredictionResponse.model_validate(payload)
+
+    def test_structured_branch_counts_and_stack_balance_are_enforced(self) -> None:
+        payload = structured_prediction()
+        instruction = payload["predicted_functions"][0]["blocks"][0]["instructions"][0]
+        instruction.update({
+            "opcode": "bne", "instruction_class": "conditional_branch",
+            "timing_profile_record": "conditional_branch_taken",
+            "not_taken_timing_profile_record": "conditional_branch_not_taken",
+            "taken_count": 1, "not_taken_count": 1,
+        })
+        with self.assertRaisesRegex(ValueError, "taken_count.*branch execution"):
+            PredictionResponse.model_validate(payload)
+        payload = structured_prediction()
+        payload["predicted_functions"][0]["stack_allocation_bytes"] = 8
+        with self.assertRaisesRegex(ValueError, "stack allocation/deallocation"):
+            PredictionResponse.model_validate(payload)
+
+    def test_structured_calls_require_callee_and_matching_execution_count(self) -> None:
+        payload = structured_prediction()
+        instruction = payload["predicted_functions"][0]["blocks"][0]["instructions"][0]
+        instruction.update({
+            "opcode": "bl", "instruction_class": "function_call",
+            "timing_profile_record": "function_call_bl_with_refill",
+            "callee": "Helper",
+        })
+        payload["predicted_functions"][0].update({
+            "lr_saved": True, "valid_return_via": "POP_PC",
+        })
+        payload["predicted_functions"][0]["blocks"][0]["instructions"][1].update({
+            "opcode": "pop", "operands": "{r7, pc}",
+            "instruction_class": "push_or_pop_register_transfer",
+            "timing_profile_record": "push_or_pop_register_transfer",
+            "register_transfer_count": 2,
+        })
+        payload["instruction_cycle_ledger"][0].update({
+            "instruction_class": "function_call_bl_with_refill",
+            "cycles_each": 4, "total_cycles": 4,
+        })
+        payload["cycle_components"][0]["cycles"] = 4
+        payload["estimated_source_execution_cycles"] = 4
+        payload["estimated_source_execution_us"] = 4 / 48
+        with self.assertRaisesRegex(ValueError, "no structured helper body"):
+            PredictionResponse.model_validate(payload)
+
+    def test_structured_ledger_is_recomputed_from_blocks(self) -> None:
+        payload = structured_prediction()
+        payload["instruction_cycle_ledger"][0]["dynamic_count"] = 2
+        payload["instruction_cycle_ledger"][0]["total_cycles"] = 2
+        payload["cycle_components"][0]["cycles"] = 6
+        payload["estimated_source_execution_cycles"] = 6
+        payload["estimated_source_execution_us"] = 6 / 48
+        with self.assertRaisesRegex(ValueError, "structured basic-block counts"):
+            PredictionResponse.model_validate(payload)
 
     def test_holistic_source_only_estimate_requires_complete_o0_ledger(self) -> None:
         payload = prediction()

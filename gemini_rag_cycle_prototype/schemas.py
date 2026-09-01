@@ -5,6 +5,33 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 
+TIMING_PROFILE_CYCLES = {
+    "alu_move_compare_shift": 1,
+    "multiply": 1,
+    "integer_divide_worst_case": 12,
+    "sram_or_stack_load": 2,
+    "sram_or_stack_store": 1,
+    "push_or_pop_register_transfer": 1,
+    "function_call_bl_with_refill": 4,
+    "function_return_with_refill": 4,
+    "conditional_branch_taken": 4,
+    "conditional_branch_not_taken": 1,
+    "unconditional_branch_with_refill": 4,
+}
+
+KNOWN_THUMB2_OPCODES = {
+    "adc", "add", "adds", "adr", "and", "ands", "asr", "b", "bcc",
+    "bcs", "beq", "bge", "bgt", "bhi", "bhs", "bl", "ble", "blo",
+    "bls", "blt", "blx", "bmi", "bne", "bpl", "bx", "cbnz", "cbz",
+    "clz", "cmn", "cmp", "eor", "eors", "it", "ldm", "ldmia", "ldr",
+    "ldrb", "ldrh", "ldrsb", "ldrsh", "lsl", "lsls", "lsr", "lsrs",
+    "mla", "mls", "mov", "movs", "movt", "movw", "mul", "muls", "mvn",
+    "neg", "negs", "nop", "orr", "orrs", "pop", "push", "rev", "ror",
+    "rsb", "sbc", "sdiv", "stm", "stmia", "str", "strb", "strh", "sub",
+    "subs", "tst", "udiv", "umull", "uxtb", "uxth", "sxth",
+}
+
+
 class StructuralSummary(BaseModel):
     loop_count: int = 0
     nested_loop_depth: int = 0
@@ -109,6 +136,148 @@ class InstructionCycleEstimate(BaseModel):
         return self
 
 
+class PredictedInstruction(BaseModel):
+    opcode: str
+    operands: str = ""
+    instruction_class: str
+    count_per_block: int = Field(default=1, ge=1)
+    timing_profile_record: str
+    not_taken_timing_profile_record: str | None = None
+    register_transfer_count: int | None = Field(default=None, ge=1)
+    taken_count: int | None = Field(default=None, ge=0)
+    not_taken_count: int | None = Field(default=None, ge=0)
+    callee: str | None = None
+    stack_effect_bytes: int = 0
+    executed_on_path: bool = True
+    role: str | None = None
+
+    @model_validator(mode="after")
+    def validate_instruction_shape(self) -> "PredictedInstruction":
+        op = self.opcode.lower().split(".")[0]
+        if op not in KNOWN_THUMB2_OPCODES:
+            raise ValueError(f"unrecognized Thumb-2 opcode: {self.opcode}")
+        if self.instruction_class == "conditional_branch":
+            if self.taken_count is None or self.not_taken_count is None:
+                raise ValueError("conditional branch requires taken_count and not_taken_count")
+            if self.timing_profile_record != "conditional_branch_taken" or (
+                self.not_taken_timing_profile_record != "conditional_branch_not_taken"
+            ):
+                raise ValueError("conditional branch requires taken and not-taken timing records")
+        elif self.taken_count is not None or self.not_taken_count is not None:
+            raise ValueError("branch counts are valid only for conditional branches")
+        if op in {"bl", "blx"} and not self.callee:
+            raise ValueError("BL/BLX requires a defined callee")
+        if op in {"push", "pop", "ldm", "stm"} and self.register_transfer_count is None:
+            raise ValueError("multi-register instruction requires register_transfer_count")
+        if not self.executed_on_path and self.role not in {
+            "alignment_padding", "literal_padding", "unreachable"
+        }:
+            raise ValueError("non-executed instruction requires an explicit padding/unreachable role")
+        if self.executed_on_path and self.timing_profile_record not in TIMING_PROFILE_CYCLES:
+            raise ValueError("instruction has no recognized timing-profile record")
+        return self
+
+
+class PredictedBasicBlock(BaseModel):
+    block_id: str
+    execution_count: int = Field(ge=0)
+    successors: list[str] = Field(default_factory=list)
+    loop_iteration_evidence: str | None = None
+    instructions: list[PredictedInstruction]
+
+    @model_validator(mode="after")
+    def validate_branch_arithmetic(self) -> "PredictedBasicBlock":
+        for instruction in self.instructions:
+            if instruction.instruction_class == "conditional_branch":
+                executions = (instruction.taken_count or 0) + (
+                    instruction.not_taken_count or 0
+                )
+                expected = self.execution_count * instruction.count_per_block
+                if executions != expected:
+                    raise ValueError(
+                        "taken_count + not_taken_count must equal branch execution count"
+                    )
+        return self
+
+
+class PredictedFunctionAssembly(BaseModel):
+    function_name: str
+    execution_count: int = Field(ge=1)
+    entry_block_id: str
+    blocks: list[PredictedBasicBlock]
+    stack_allocation_bytes: int = Field(ge=0)
+    stack_deallocation_bytes: int = Field(ge=0)
+    lr_saved: bool
+    valid_return_via: Literal["BX_LR", "POP_PC"]
+    loop_bounds_proven: bool
+
+    @model_validator(mode="after")
+    def validate_cfg_and_call_frame(self) -> "PredictedFunctionAssembly":
+        by_id = {block.block_id: block for block in self.blocks}
+        if len(by_id) != len(self.blocks):
+            raise ValueError("basic block IDs must be unique within a function")
+        if self.entry_block_id not in by_id:
+            raise ValueError("function entry block does not exist")
+        for block in self.blocks:
+            missing = set(block.successors) - set(by_id)
+            if missing:
+                raise ValueError(f"basic block has unknown successor: {sorted(missing)}")
+        reachable: set[str] = set()
+        pending = [self.entry_block_id]
+        while pending:
+            current = pending.pop()
+            if current in reachable:
+                continue
+            reachable.add(current)
+            pending.extend(by_id[current].successors)
+        if reachable != set(by_id):
+            raise ValueError("function contains an unreachable basic block")
+        if self.stack_allocation_bytes != self.stack_deallocation_bytes:
+            raise ValueError("stack allocation/deallocation is not balanced")
+        calls = [
+            instruction
+            for block in self.blocks
+            for instruction in block.instructions
+            if instruction.opcode.lower().split(".")[0] in {"bl", "blx"}
+            and instruction.executed_on_path
+        ]
+        if calls and not self.lr_saved:
+            raise ValueError("function containing BL/BLX must preserve LR")
+        if self.valid_return_via == "BX_LR" and calls:
+            raise ValueError("non-leaf function cannot return via BX LR without explicit LR restore")
+        return_opcodes = {
+            instruction.opcode.lower().split(".")[0]
+            for block in self.blocks
+            for instruction in block.instructions
+            if instruction.executed_on_path
+        }
+        has_bx_lr = any(
+            instruction.opcode.lower().split(".")[0] == "bx"
+            and instruction.operands.strip().lower() == "lr"
+            and instruction.executed_on_path
+            for block in self.blocks
+            for instruction in block.instructions
+        )
+        has_pop_pc = any(
+            instruction.opcode.lower().split(".")[0] == "pop"
+            and "pc" in instruction.operands.lower()
+            and instruction.executed_on_path
+            for block in self.blocks
+            for instruction in block.instructions
+        )
+        if has_bx_lr and has_pop_pc:
+            raise ValueError("BX LR and POP {...,PC} cannot both be counted as the return path")
+        if self.valid_return_via == "BX_LR" and not has_bx_lr:
+            raise ValueError("declared BX LR return is absent")
+        if self.valid_return_via == "POP_PC" and not has_pop_pc:
+            raise ValueError("declared POP PC return is absent")
+        if not self.loop_bounds_proven and any(
+            block.execution_count > self.execution_count for block in self.blocks
+        ):
+            raise ValueError("loop execution counts require proven loop bounds")
+        return self
+
+
 class PredictionResponse(BaseModel):
     analysis_status: Literal["SUPPORTED", "PARTIAL", "UNRESOLVED"]
     function_name: str
@@ -121,6 +290,7 @@ class PredictionResponse(BaseModel):
     reference_adjustments: list[str] = Field(default_factory=list)
     cycle_components: list[CycleComponent] = Field(default_factory=list)
     predicted_assembly_outline: list[str] = Field(default_factory=list)
+    predicted_functions: list[PredictedFunctionAssembly] = Field(default_factory=list)
     instruction_cycle_ledger: list[InstructionCycleEstimate] = Field(
         default_factory=list
     )
@@ -209,10 +379,55 @@ class PredictionResponse(BaseModel):
             if component.name == "predicted_thumb2_cycle_sum"
         ]
         if instruction_components:
-            if not self.predicted_assembly_outline or not self.instruction_cycle_ledger:
+            if not self.predicted_functions or not self.instruction_cycle_ledger:
                 raise ValueError(
-                    "predicted Thumb-2 estimate requires assembly outline and instruction ledger"
+                    "predicted Thumb-2 estimate requires structured functions and instruction ledger"
                 )
+            functions = {function.function_name: function for function in self.predicted_functions}
+            if self.function_name not in functions:
+                raise ValueError("structured assembly does not contain the query function")
+            call_counts: dict[str, int] = {}
+            for function in self.predicted_functions:
+                for block in function.blocks:
+                    for instruction in block.instructions:
+                        if instruction.callee and instruction.executed_on_path:
+                            count = block.execution_count * instruction.count_per_block
+                            call_counts[instruction.callee] = call_counts.get(instruction.callee, 0) + count
+            for callee, count in call_counts.items():
+                if callee not in functions:
+                    raise ValueError(f"BL callee has no structured helper body: {callee}")
+                if functions[callee].execution_count != count:
+                    raise ValueError("helper execution count must equal dynamic BL count")
+            computed_counts: dict[str, int] = {}
+            for function in self.predicted_functions:
+                for block in function.blocks:
+                    for instruction in block.instructions:
+                        if not instruction.executed_on_path:
+                            continue
+                        if instruction.instruction_class == "conditional_branch":
+                            computed_counts["conditional_branch_taken"] = (
+                                computed_counts.get("conditional_branch_taken", 0)
+                                + (instruction.taken_count or 0)
+                            )
+                            computed_counts["conditional_branch_not_taken"] = (
+                                computed_counts.get("conditional_branch_not_taken", 0)
+                                + (instruction.not_taken_count or 0)
+                            )
+                            continue
+                        count = block.execution_count * instruction.count_per_block
+                        if instruction.register_transfer_count is not None:
+                            count *= instruction.register_transfer_count
+                        record = instruction.timing_profile_record
+                        computed_counts[record] = computed_counts.get(record, 0) + count
+            ledger_counts = {
+                item.instruction_class: item.dynamic_count
+                for item in self.instruction_cycle_ledger
+            }
+            if computed_counts != ledger_counts:
+                raise ValueError("instruction ledger counts must equal structured basic-block counts")
+            for item in self.instruction_cycle_ledger:
+                if TIMING_PROFILE_CYCLES.get(item.instruction_class) != item.cycles_each:
+                    raise ValueError("ledger cycles_each must equal timing-profile record")
             ledger_total = sum(
                 item.total_cycles for item in self.instruction_cycle_ledger
             )

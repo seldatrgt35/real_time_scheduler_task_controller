@@ -22,9 +22,17 @@ STEP 1: SELECT THE FEASIBLE SOURCE PATH
    condition, increments, short-circuit behavior, and switch dispatch.
 
 STEP 2: PREDICT GCC -O0 THUMB-2 BASIC BLOCKS
-- Produce `predicted_assembly_outline` entries for the caller and every helper.
-  Each entry identifies a basic block, its execution count, and predicted
-  instruction classes/opcodes.
+- Produce `predicted_functions` for the caller and every dynamically called
+  helper. The text-only `predicted_assembly_outline` is optional commentary;
+  it is not timing evidence.
+- Every structured instruction must contain `opcode`, `operands`,
+  `instruction_class`, `count_per_block`, and `timing_profile_record`.
+- Every basic block must contain its exact dynamic `execution_count`, successor
+  block IDs, instructions, and loop-bound evidence when it belongs to a loop.
+- PUSH/POP/LDM/STM require `register_transfer_count`. Conditional branches
+  require `taken_count` and `not_taken_count`. BL/BLX require `callee`.
+- Record stack allocation/deallocation, LR preservation and the actual return
+  mechanism for every function.
 - Model GCC 11.4 `-O0`, AAPCS argument passing, callable non-inline helpers,
   prologue/epilogue, parameter homing, stack-resident locals, repeated stack
   reload/store, array address calculation, and explicit volatile accesses.
@@ -53,6 +61,22 @@ STEP 4: SUM AND AUDIT
 - Show the decisive block/helper/path counts and arithmetic in the reasoning.
 - Put unresolved exact GCC choices and S32K148 PFlash/cache/prefetch effects in
   `unresolved` and `warnings`. Never hide them in an unexplained multiplier.
+
+MANDATORY STRUCTURAL VALIDATION
+- Every successor must name a block in the same function and every block must
+  be reachable from entry.
+- Every loop iteration count must be proven from source/context.
+- For each conditional branch, taken_count + not_taken_count must equal its
+  dynamic execution count.
+- Every BL/BLX must name a supplied helper; helper execution_count must equal
+  the total dynamic calls to it; every call must have a valid return path.
+- Stack allocation and deallocation must balance and SP must return to its
+  entry level. A function containing BL must preserve LR.
+- Every executed instruction must map to a timing-profile record. Unknown
+  opcodes are unresolved, never assigned an invented class or cost.
+- Do not double count BX LR and POP {{...,PC}}. Instructions after a terminal
+  return, including alignment NOPs, must be marked non-executed padding and
+  excluded from the dynamic ledger.
 
 HARDWARE AND BUILD PROFILE
 {hardware_profile}
