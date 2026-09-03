@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import sys
 import time
 from typing import Any
 
@@ -29,10 +30,21 @@ class GeminiClient:
             raise RuntimeError(
                 "google-genai is not installed; install requirements.txt"
             ) from exc
-        self._types: Any
         from google.genai import types
+        self._types: Any
         self._types = types
-        self._client = genai.Client(api_key=key)
+        request_timeout_ms = max(
+            1000, int(os.getenv("GEMINI_REQUEST_TIMEOUT_MS", "120000"))
+        )
+        self._client = genai.Client(
+            api_key=key,
+            http_options=types.HttpOptions(
+                timeout=request_timeout_ms,
+                # Retry in exactly one place. The SDK otherwise performs five
+                # hidden retries before our explicit policy sees the failure.
+                retry_options=types.HttpRetryOptions(attempts=1),
+            ),
+        )
         self.model = model or os.getenv("GEMINI_MODEL", "gemini-flash-latest")
         self.embedding_model = embedding_model or os.getenv(
             "GEMINI_EMBEDDING_MODEL", "gemini-embedding-2"
@@ -92,6 +104,11 @@ class GeminiClient:
     def _generate_content_with_retry(self, prompt: str, config: Any) -> Any:
         attempts = max(1, int(os.getenv("GEMINI_GENERATION_ATTEMPTS", "3")))
         for attempt in range(attempts):
+            print(
+                f"[Gemini] API attempt {attempt + 1}/{attempts}...",
+                file=sys.stderr,
+                flush=True,
+            )
             try:
                 return self._client.models.generate_content(
                     model=self.model,
@@ -128,6 +145,12 @@ class GeminiClient:
         current_prompt = prompt
         last_exc: Exception | None = None
         for validation_attempt in range(validation_attempts):
+            print(
+                "[Gemini] structured validation attempt "
+                f"{validation_attempt + 1}/{validation_attempts}",
+                file=sys.stderr,
+                flush=True,
+            )
             response = self._generate_content_with_retry(current_prompt, config)
             raw = response.text or ""
             parsed = getattr(response, "parsed", None)
@@ -148,6 +171,12 @@ class GeminiClient:
                         response, raw, max_output_tokens, exc
                     )
                 if validation_attempt + 1 < validation_attempts:
+                    print(
+                        "[Gemini] response rejected; requesting a complete "
+                        "corrected response.",
+                        file=sys.stderr,
+                        flush=True,
+                    )
                     current_prompt = self._validation_repair_prompt(prompt, exc)
                     continue
                 raise
@@ -164,7 +193,22 @@ class GeminiClient:
               "return a patch or explanation. Every declared function must "
               "contain its complete reachable basic-block and instruction list, "
               "including its declared return instruction. The instruction ledger "
-              "must exactly equal the dynamic counts derived from those blocks.\n"
+              "must exactly equal the dynamic counts derived from those blocks. "
+              "Use explicit layout_index, fallthrough_successor and "
+              "branch_successors fields. A CFG edge to the physically next block "
+              "is fallthrough, not an invented B instruction. Re-audit every "
+              "variable-indexed array/struct access for complete GCC -O0 base, "
+              "index, scale, address, value-access and extension operations.\n"
+            + "PARTIAL does not permit an empty estimate. For SUPPORTED or "
+              "PARTIAL you must return non-empty predicted_functions, a "
+              "complete instruction_cycle_ledger, exactly one non-null "
+              "predicted_thumb2_cycle_sum component, and non-null positive "
+              "estimated_source_execution_cycles and "
+              "estimated_source_execution_us. Compiler and PFlash uncertainty "
+              "belongs in unresolved/warnings; it must not cause these required "
+              "source-level estimate fields to be omitted. Use UNRESOLVED only "
+              "when a source loop bound or required helper body is genuinely "
+              "absent.\n"
             + "Validator diagnostics:\n"
             + str(error)
         )

@@ -12,6 +12,13 @@ OUTPUT BASIS
 - Return no retrieved whole-task example, no reference anchor, and no reference
   adjustment.
 - Do not target a desired error percentage or add an arbitrary safety margin.
+- `PARTIAL` means the source-level estimate is present while exact compiler or
+  hardware effects remain unresolved. It does not permit null cycles, null
+  time, an empty `predicted_functions`, an empty ledger, or missing cycle
+  components. Use `UNRESOLVED` only when a required source loop bound or helper
+  body is genuinely unavailable. Ordinary uncertainty about exact GCC layout,
+  register allocation, padding, PFlash or cache behavior is not a reason to
+  abandon the required structured source estimate.
 
 STEP 1: SELECT THE FEASIBLE SOURCE PATH
 1. Resolve every constant or source-bounded loop.
@@ -29,6 +36,18 @@ STEP 2: PREDICT GCC -O0 THUMB-2 BASIC BLOCKS
   `instruction_class`, `count_per_block`, and `timing_profile_record`.
 - Every basic block must contain its exact dynamic `execution_count`, successor
   block IDs, instructions, and loop-bound evidence when it belongs to a loop.
+- Give every block a unique contiguous `layout_index` describing its physical
+  assembly order. Partition CFG successors into `fallthrough_successor` (the
+  immediately following block, or null) and `branch_successors` (targets named
+  by real B/B<cond> instructions). A CFG edge is not automatically an
+  instruction. Never emit B when control naturally reaches the next layout
+  block. For a conditional branch, place one successor immediately afterward
+  as fallthrough and encode only the other successor as the branch target.
+- Choose a conventional GCC `-O0` layout that avoids redundant unconditional
+  branches: loop preheaders may jump to a condition block; loop increments
+  should normally fall through into the condition; one if/else arm normally
+  falls through to the join while the other branches around it. Do not add a B
+  merely to make every CFG edge visually explicit.
 - PUSH/POP/LDM/STM require `register_transfer_count`. Conditional branches
   require `taken_count` and `not_taken_count`; identify them by their concrete
   opcode such as BEQ/BNE/BLS/BHI, while their timing records identify taken and
@@ -41,6 +60,30 @@ STEP 2: PREDICT GCC -O0 THUMB-2 BASIC BLOCKS
 - Use supplied GCC transformation evidence when available. Do not silently
   inline helpers or optimize repeated source operations away.
 - This is predicted assembly, not a claim of byte-identical compiler output.
+
+O0 INDEXED-ACCESS COMPLETENESS AUDIT
+- Before finalizing any function, enumerate every dynamically executed
+  variable-indexed array access and indexed struct-field access, including
+  repeated volatile reads of the same source expression.
+- For each access, show in `predicted_assembly_outline` its dynamic access
+  count and the concrete instructions that provide: base address materializing
+  or reload, stack-resident index reload at `-O0`, element-size scale or scaled
+  addressing, base-plus-index address formation, the value load/store, and
+  sign/zero extension required by the C type.
+- Then verify that the corresponding structured instructions occur with at
+  least that dynamic multiplicity. Do not collapse a source expression such as
+  `array[index].field` into one abstract load when GCC `-O0` requires separate
+  base, index, scale, address and value operations. Do not reuse a base or index
+  across source accesses unless supplied GCC evidence demonstrates that exact
+  reuse at `-O0`.
+- This audit is general: apply it to every query containing variable indexing,
+  regardless of task name, domain, helper name or loop shape.
+
+SOURCE-DERIVED INDEXED-ACCESS OBLIGATIONS
+The framework extracted these expressions from only the selected function and
+its reachable helpers. Audit every listed expression. An empty list means no
+variable-indexed access obligation was detected.
+{indexed_access_obligations}
 
 STEP 3: BUILD THE DYNAMIC INSTRUCTION LEDGER
 - Fill `instruction_cycle_ledger` with one row for each executed instruction
@@ -67,6 +110,11 @@ STEP 4: SUM AND AUDIT
 MANDATORY STRUCTURAL VALIDATION
 - Every successor must name a block in the same function and every block must
   be reachable from entry.
+- Layout indices must be contiguous. `fallthrough_successor` must equal the
+  physically next layout block. `branch_successors` must match concrete branch
+  operands. Conditional blocks require exactly one branch target and one
+  fallthrough target. An unconditional B to the immediately next block is
+  invalid because that edge must be represented as fallthrough.
 - Every loop iteration count must be proven from source/context.
 - For each conditional branch, taken_count + not_taken_count must equal its
   dynamic execution count.

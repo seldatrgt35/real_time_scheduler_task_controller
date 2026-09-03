@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 
 from gemini_rag_cycle_prototype.gemini_client import GeminiClient
 from gemini_rag_cycle_prototype.gcc_evidence import retrieve_gcc_evidence
 from gemini_rag_cycle_prototype.rag.index_builder import RagIndex
 from gemini_rag_cycle_prototype.rag.measurement_loader import HARDWARE_PROFILE_ID
+from gemini_rag_cycle_prototype.rag.measurement_loader import (
+    extract_function, extract_reachable_helpers,
+)
 from gemini_rag_cycle_prototype.rag.retriever import RetrievalResult, Retriever
 from gemini_rag_cycle_prototype.schemas import PredictionResponse
 
@@ -16,6 +20,27 @@ class LeakageError(RuntimeError):
 
 
 STRONG_REFERENCE_SCORE = 0.85
+
+
+def indexed_access_obligations(source_code: str, function_name: str) -> list[str]:
+    """List variable-indexed accesses in the selected caller/callee region."""
+    relevant = "\n".join(filter(None, (
+        extract_function(source_code, function_name),
+        extract_reachable_helpers(source_code, function_name),
+    )))
+    pattern = re.compile(
+        r"\b[A-Za-z_]\w*(?:\s*\[[^\]]+\])+"
+        r"(?:\s*(?:\.|->)\s*[A-Za-z_]\w*)?"
+    )
+    obligations: list[str] = []
+    for match in pattern.finditer(relevant):
+        expression = re.sub(r"\s+", "", match.group(0))
+        indexes = re.findall(r"\[([^\]]+)\]", expression)
+        if not any(re.search(r"[A-Za-z_]", index) for index in indexes):
+            continue
+        if expression not in obligations:
+            obligations.append(expression)
+    return obligations
 
 
 def canonicalize_reference_ids(
@@ -139,6 +164,9 @@ class Predictor:
                 self.instruction_timing_profile, indent=2
             ),
             gcc_transformation_evidence=json.dumps(gcc_evidence, indent=2),
+            indexed_access_obligations=json.dumps(
+                indexed_access_obligations(source_code, function_name), indent=2
+            ),
             function_name=function_name,
             source_code=source_code,
             context_code=context_code or "No additional context files supplied.",

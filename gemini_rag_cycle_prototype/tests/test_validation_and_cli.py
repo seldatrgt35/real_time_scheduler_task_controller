@@ -8,10 +8,11 @@ from pydantic import ValidationError
 
 from gemini_rag_cycle_prototype.cli import load_current_index, read_required
 from gemini_rag_cycle_prototype.gemini_client import GeminiClient, MissingApiKeyError
-from gemini_rag_cycle_prototype.predictor import Predictor
+from gemini_rag_cycle_prototype.predictor import Predictor, indexed_access_obligations
 from gemini_rag_cycle_prototype.rag.index_builder import RagIndex
 from gemini_rag_cycle_prototype.schemas import (
-    PredictionResponse, PredictedInstruction, SourceAnalysis,
+    PredictionResponse, PredictedFunctionAssembly, PredictedInstruction,
+    SourceAnalysis,
 )
 
 
@@ -88,6 +89,92 @@ def structured_prediction() -> dict:
 
 
 class ValidationAndCliTest(unittest.TestCase):
+    def test_indexed_access_obligations_cover_caller_and_reachable_helper(self) -> None:
+        source = """
+        static int Helper(unsigned index) { return table[index].value; }
+        void Task(void) {
+            unsigned channel;
+            for (channel = 0; channel < 4; ++channel) {
+                output[channel] = Helper(order[channel]);
+            }
+        }
+        void Unrelated(unsigned other) { sink[other] = 1; }
+        """
+        self.assertEqual(
+            ["output[channel]", "order[channel]", "table[index].value"],
+            indexed_access_obligations(source, "Task"),
+        )
+
+    def test_unconditional_branch_to_layout_next_is_rejected(self) -> None:
+        function = {
+            "function_name": "Task", "execution_count": 1,
+            "entry_block_id": "entry", "stack_allocation_bytes": 0,
+            "stack_deallocation_bytes": 0, "lr_saved": False,
+            "valid_return_via": "BX_LR", "loop_bounds_proven": True,
+            "blocks": [{
+                "block_id": "entry", "layout_index": 0,
+                "execution_count": 1, "successors": ["exit"],
+                "fallthrough_successor": None,
+                "branch_successors": ["exit"],
+                "instructions": [{
+                    "opcode": "b", "operands": "exit",
+                    "instruction_class": "unconditional_branch",
+                    "timing_profile_record": "unconditional_branch_with_refill",
+                }],
+            }, {
+                "block_id": "exit", "layout_index": 1,
+                "execution_count": 1, "successors": [],
+                "fallthrough_successor": None, "branch_successors": [],
+                "instructions": [{
+                    "opcode": "bx", "operands": "lr",
+                    "instruction_class": "function_return",
+                    "timing_profile_record": "function_return_with_refill",
+                }],
+            }],
+        }
+        with self.assertRaisesRegex(ValueError, "physically next block"):
+            PredictedFunctionAssembly.model_validate(function)
+
+    def test_conditional_branch_partitions_target_and_fallthrough(self) -> None:
+        function = {
+            "function_name": "Task", "execution_count": 1,
+            "entry_block_id": "condition", "stack_allocation_bytes": 0,
+            "stack_deallocation_bytes": 0, "lr_saved": False,
+            "valid_return_via": "BX_LR", "loop_bounds_proven": True,
+            "blocks": [{
+                "block_id": "condition", "layout_index": 0,
+                "execution_count": 1,
+                "successors": ["fallthrough", "taken"],
+                "fallthrough_successor": "fallthrough",
+                "branch_successors": ["taken"],
+                "instructions": [{
+                    "opcode": "bne", "operands": "taken",
+                    "instruction_class": "conditional_branch",
+                    "timing_profile_record": "conditional_branch_taken",
+                    "not_taken_timing_profile_record": "conditional_branch_not_taken",
+                    "taken_count": 0, "not_taken_count": 1,
+                }],
+            }, {
+                "block_id": "fallthrough", "layout_index": 1,
+                "execution_count": 1, "successors": [],
+                "fallthrough_successor": None, "branch_successors": [],
+                "instructions": [{
+                    "opcode": "bx", "operands": "lr",
+                    "instruction_class": "function_return",
+                    "timing_profile_record": "function_return_with_refill",
+                }],
+            }, {
+                "block_id": "taken", "layout_index": 2,
+                "execution_count": 0, "successors": [],
+                "fallthrough_successor": None, "branch_successors": [],
+                "instructions": [],
+            }],
+        }
+        validated = PredictedFunctionAssembly.model_validate(function)
+        self.assertEqual(
+            "fallthrough", validated.blocks[0].fallthrough_successor
+        )
+
     def test_derivable_branch_and_register_transfer_fields_are_normalized(self) -> None:
         branch = PredictedInstruction.model_validate({
             "opcode": "bhi.n", "operands": "target",

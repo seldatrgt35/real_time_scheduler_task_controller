@@ -221,7 +221,10 @@ class PredictedInstruction(BaseModel):
 class PredictedBasicBlock(BaseModel):
     block_id: str
     execution_count: int = Field(ge=0)
+    layout_index: int | None = Field(default=None, ge=0)
     successors: list[str] = Field(default_factory=list)
+    fallthrough_successor: str | None = None
+    branch_successors: list[str] = Field(default_factory=list)
     loop_iteration_evidence: str | None = None
     instructions: list[PredictedInstruction]
 
@@ -280,6 +283,9 @@ class PredictedFunctionAssembly(BaseModel):
         if not isinstance(value, dict):
             return value
         blocks = value.get("blocks", [])
+        for index, block in enumerate(blocks):
+            if block.get("layout_index") is None:
+                block["layout_index"] = index
         block_ids = [block.get("block_id") for block in blocks]
         known_ids = set(block_ids)
         inferred_any = False
@@ -335,10 +341,94 @@ class PredictedFunctionAssembly(BaseModel):
             raise ValueError("basic block IDs must be unique within a function")
         if self.entry_block_id not in by_id:
             raise ValueError("function entry block does not exist")
+        layout_indices = [block.layout_index for block in self.blocks]
+        if any(index is None for index in layout_indices):
+            raise ValueError("every basic block requires a layout index")
+        if sorted(layout_indices) != list(range(len(self.blocks))):
+            raise ValueError(
+                "basic block layout indices must be unique and contiguous"
+            )
+        layout = sorted(self.blocks, key=lambda block: block.layout_index or 0)
+        next_by_id = {
+            block.block_id: (
+                layout[index + 1].block_id
+                if index + 1 < len(layout) else None
+            )
+            for index, block in enumerate(layout)
+        }
         for block in self.blocks:
             missing = set(block.successors) - set(by_id)
             if missing:
                 raise ValueError(f"basic block has unknown successor: {sorted(missing)}")
+            physical_next = next_by_id[block.block_id]
+            if (
+                block.fallthrough_successor is not None
+                and block.fallthrough_successor != physical_next
+            ):
+                raise ValueError(
+                    "fallthrough successor must be the physically next basic block"
+                )
+            if set(block.branch_successors) - set(block.successors):
+                raise ValueError("branch successor must also be a CFG successor")
+            if (
+                block.fallthrough_successor is not None
+                and block.fallthrough_successor not in block.successors
+            ):
+                raise ValueError("fallthrough must also be a CFG successor")
+            branch_targets: list[str] = []
+            conditional_count = 0
+            unconditional_count = 0
+            for instruction in block.instructions:
+                if not instruction.executed_on_path:
+                    continue
+                opcode = instruction.opcode.lower().split(".")[0]
+                operands = instruction.operands
+                targets = [
+                    target for target in by_id
+                    if re.search(
+                        rf"(?<![A-Za-z0-9_]){re.escape(target)}(?![A-Za-z0-9_])",
+                        operands,
+                    )
+                ]
+                if opcode in CONDITIONAL_BRANCH_OPCODES:
+                    conditional_count += instruction.count_per_block
+                    branch_targets.extend(targets)
+                elif opcode == "b":
+                    unconditional_count += instruction.count_per_block
+                    branch_targets.extend(targets)
+                    if physical_next is not None and physical_next in targets:
+                        raise ValueError(
+                            "unconditional branch to the physically next block "
+                            "must be represented as fallthrough"
+                        )
+            if conditional_count > 0:
+                if block.fallthrough_successor is None:
+                    raise ValueError(
+                        "conditional branch requires an explicit fallthrough successor"
+                    )
+                if len(block.successors) != 2:
+                    raise ValueError(
+                        "conditional branch block requires exactly two successors"
+                    )
+            if unconditional_count > 0 and block.fallthrough_successor is not None:
+                raise ValueError(
+                    "unconditional branch block cannot also declare fallthrough"
+                )
+            declared_branch_targets = set(block.branch_successors)
+            discovered_branch_targets = set(branch_targets)
+            if declared_branch_targets and (
+                declared_branch_targets != discovered_branch_targets
+            ):
+                raise ValueError(
+                    "declared branch successors do not match instruction targets"
+                )
+            represented = declared_branch_targets or discovered_branch_targets
+            if block.fallthrough_successor is not None:
+                represented = represented | {block.fallthrough_successor}
+            if represented and represented != set(block.successors):
+                raise ValueError(
+                    "CFG successors must be partitioned into branch and fallthrough successors"
+                )
         reachable: set[str] = set()
         pending = [self.entry_block_id]
         while pending:

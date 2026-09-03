@@ -274,6 +274,7 @@ class GeminiEmbeddingTest(unittest.TestCase):
         self.assertEqual("original prompt", calls[0])
         self.assertIn("VALIDATION REPAIR REQUIRED", calls[1])
         self.assertIn("Regenerate the entire response from scratch", calls[1])
+        self.assertIn("PARTIAL does not permit an empty estimate", calls[1])
 
 
 if __name__ == "__main__":

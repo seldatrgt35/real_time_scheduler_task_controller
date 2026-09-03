@@ -126,6 +126,11 @@ MANDATORY PROCEDURE
 HARDWARE PROFILE
 {hardware_profile}
 
+SOURCE-DERIVED INDEXED-ACCESS OBLIGATIONS
+These expressions were extracted from only the selected function and its
+reachable helpers. Use them when reconciling source-shape differences.
+{indexed_access_obligations}
+
 QUERY FUNCTION
 {function_name}
 
