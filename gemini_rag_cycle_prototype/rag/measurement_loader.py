@@ -59,7 +59,9 @@ def source_fingerprint(source: str) -> str:
 
 def extract_function(source: str, function_name: str) -> str | None:
     match = re.search(
-        rf"\b(?:void|[A-Za-z_]\w*(?:\s*\*)?)\s+{re.escape(function_name)}\s*\([^;]*?\)\s*\{{",
+        rf"(?:__attribute__\s*\(\([^)]*\)\)\s*)?"
+        rf"(?:static\s+)?\b(?:void|[A-Za-z_]\w*(?:\s*\*)?)\s+"
+        rf"{re.escape(function_name)}\s*\([^;]*?\)\s*\{{",
         source,
         flags=re.S,
     )

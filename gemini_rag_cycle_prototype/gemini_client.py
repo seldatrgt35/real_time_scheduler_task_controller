@@ -6,7 +6,9 @@ import sys
 import time
 from typing import Any
 
-from gemini_rag_cycle_prototype.schemas import PredictionResponse
+from gemini_rag_cycle_prototype.schemas import (
+    PredictionResponse, PredictedFunctionAssembly,
+)
 
 
 class MissingApiKeyError(RuntimeError):
@@ -34,8 +36,9 @@ class GeminiClient:
         self._types: Any
         self._types = types
         request_timeout_ms = max(
-            1000, int(os.getenv("GEMINI_REQUEST_TIMEOUT_MS", "120000"))
+            1000, int(os.getenv("GEMINI_REQUEST_TIMEOUT_MS", "300000"))
         )
+        self.request_timeout_ms = request_timeout_ms
         self._client = genai.Client(
             api_key=key,
             http_options=types.HttpOptions(
@@ -142,6 +145,17 @@ class GeminiClient:
         validation_attempts = max(
             1, int(os.getenv("GEMINI_VALIDATION_ATTEMPTS", "3"))
         )
+        generation_attempts = max(
+            1, int(os.getenv("GEMINI_GENERATION_ATTEMPTS", "3"))
+        )
+        print(
+            f"[Gemini] model={self.model}, timeout_ms="
+            f"{getattr(self, 'request_timeout_ms', 'unknown')}, "
+            f"generation_attempts={generation_attempts}, "
+            f"validation_attempts={validation_attempts}",
+            file=sys.stderr,
+            flush=True,
+        )
         current_prompt = prompt
         last_exc: Exception | None = None
         for validation_attempt in range(validation_attempts):
@@ -182,6 +196,57 @@ class GeminiClient:
                 raise
         assert last_exc is not None
         raise last_exc
+
+    def predict_function(
+        self, prompt: str
+    ) -> tuple[PredictedFunctionAssembly, str]:
+        """Generate one function only, keeping structured responses bounded."""
+        max_output_tokens = max(
+            8192, int(os.getenv("GEMINI_FUNCTION_MAX_OUTPUT_TOKENS", "32768"))
+        )
+        config = self._types.GenerateContentConfig(
+            temperature=0.1,
+            max_output_tokens=max_output_tokens,
+            response_mime_type="application/json",
+            response_schema=PredictedFunctionAssembly,
+            automatic_function_calling=(
+                self._types.AutomaticFunctionCallingConfig(disable=True)
+            ),
+        )
+        attempts = max(1, int(os.getenv("GEMINI_VALIDATION_ATTEMPTS", "3")))
+        current_prompt = prompt
+        for attempt in range(attempts):
+            print(
+                f"[Gemini] function validation attempt {attempt + 1}/{attempts}",
+                file=sys.stderr, flush=True,
+            )
+            response = self._generate_content_with_retry(current_prompt, config)
+            raw = response.text or ""
+            parsed = getattr(response, "parsed", None)
+            try:
+                result = (
+                    parsed if isinstance(parsed, PredictedFunctionAssembly)
+                    else PredictedFunctionAssembly.model_validate(parsed)
+                    if parsed is not None
+                    else PredictedFunctionAssembly.model_validate_json(raw)
+                )
+                return result, raw
+            except Exception as exc:
+                self._save_invalid_response(raw)
+                if not raw.rstrip().endswith(("}", "]")):
+                    self._raise_truncated_response(
+                        response, raw, max_output_tokens, exc
+                    )
+                if attempt + 1 >= attempts:
+                    raise
+                current_prompt = (
+                    prompt
+                    + "\n\nVALIDATION REPAIR REQUIRED\nRegenerate the complete "
+                      "single-function JSON object from scratch. Preserve the "
+                      "required execution_count. Correct this validator error:\n"
+                    + str(exc)
+                )
+        raise AssertionError("unreachable function prediction state")
 
     @staticmethod
     def _validation_repair_prompt(original_prompt: str, error: Exception) -> str:

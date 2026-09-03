@@ -8,7 +8,9 @@ from pydantic import ValidationError
 
 from gemini_rag_cycle_prototype.cli import load_current_index, read_required
 from gemini_rag_cycle_prototype.gemini_client import GeminiClient, MissingApiKeyError
-from gemini_rag_cycle_prototype.predictor import Predictor, indexed_access_obligations
+from gemini_rag_cycle_prototype.predictor import (
+    Predictor, indexed_access_obligations, source_analysis_bundle,
+)
 from gemini_rag_cycle_prototype.rag.index_builder import RagIndex
 from gemini_rag_cycle_prototype.schemas import (
     PredictionResponse, PredictedFunctionAssembly, PredictedInstruction,
@@ -104,6 +106,21 @@ class ValidationAndCliTest(unittest.TestCase):
             ["output[channel]", "order[channel]", "table[index].value"],
             indexed_access_obligations(source, "Task"),
         )
+
+    def test_source_analysis_bundle_excludes_unrelated_task_body(self) -> None:
+        source = """
+        #define COUNT (4U)
+        static int state[COUNT];
+        static int Helper(unsigned i) { return state[i]; }
+        void Initialize(void) { state[0] = 1; }
+        void Task(void) { state[1] = Helper(0U); }
+        void Unrelated(void) { state[2] = 99; }
+        """
+        analysis_source, context = source_analysis_bundle(source, "Task")
+        self.assertIn("void Task", analysis_source)
+        self.assertIn("static int Helper", analysis_source)
+        self.assertNotIn("void Unrelated", analysis_source)
+        self.assertIn("void Initialize", context)
 
     def test_unconditional_branch_to_layout_next_is_rejected(self) -> None:
         function = {
