@@ -210,6 +210,32 @@ class GeminiEmbeddingTest(unittest.TestCase):
                 gemini._generate_content_with_retry("prompt", "config")
         sleep.assert_not_called()
 
+    def test_generation_retries_transport_read_timeout(self) -> None:
+        class ReadTimeout(Exception):
+            pass
+
+        calls = []
+
+        def generate_content(**kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                raise ReadTimeout("read timed out")
+            return "response"
+
+        gemini = GeminiClient.__new__(GeminiClient)
+        gemini._client = SimpleNamespace(
+            models=SimpleNamespace(generate_content=generate_content)
+        )
+        gemini.model = "test-model"
+        with patch.dict(os.environ, {"GEMINI_GENERATION_ATTEMPTS": "2"}):
+            with patch(
+                "gemini_rag_cycle_prototype.gemini_client.time.sleep"
+            ) as sleep:
+                result = gemini._generate_content_with_retry("prompt", "config")
+        self.assertEqual("response", result)
+        self.assertEqual(2, len(calls))
+        sleep.assert_called_once_with(5)
+
     def test_prediction_requests_large_structured_output_budget(self) -> None:
         captured = {}
 

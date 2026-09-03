@@ -1,0 +1,51 @@
+Estimate source-level execution cycles for this deterministic automotive C task.
+Model ARM GCC 11.4 `-O0` Thumb-2 using only the supplied evidence. This is not
+exact compiler output and not a formal WCET guarantee.
+
+Preserve the existing analysis method, but return a compact dynamic instruction
+ledger instead of repeating every instruction and basic block in JSON.
+
+- Select the highest-work feasible source path. Prove every loop bound.
+- Count loop initialization, every condition including the final failure,
+  increments, short-circuit branches and switch dispatch.
+- Expand every reachable helper and nested helper at every dynamic call site.
+- Put every called helper and its total dynamic call count in `helper_calls`.
+- Predict GCC 11.4 `-O0` AAPCS calls, prologue/epilogue, parameter homing,
+  stack locals, repeated loads/stores, volatile accesses, array address
+  formation, extensions and branches. Do not optimize source work away.
+- Audit every indexed-access obligation below at full dynamic multiplicity.
+- Aggregate all predicted instructions into one `instruction_cycle_ledger` row
+  per supplied timing class. Do not emit per-instruction/basic-block objects.
+- Use only supplied timing values. Each total is count * cycles_each.
+- The estimated cycle value equals the complete ledger sum; microseconds equal
+  cycles / 48. Unknown exact layout/PFlash effects remain warnings and never an
+  invented multiplier or margin.
+- Return PARTIAL and confidence <= 50 when the estimate is available. Use
+  UNRESOLVED only for a genuinely absent source loop bound or helper body.
+- `retrieved_examples_used` must be empty. GCC transformation pattern names are
+  evidence labels, not retrieved board-measurement references.
+
+SOURCE-DERIVED INDEXED-ACCESS OBLIGATIONS
+{indexed_access_obligations}
+
+HARDWARE AND BUILD PROFILE
+{hardware_profile}
+
+INSTRUCTION TIMING EVIDENCE
+{instruction_timing_profile}
+
+GCC 11.4 -O0 TRANSFORMATION EVIDENCE
+{gcc_transformation_evidence}
+
+QUERY FUNCTION
+{function_name}
+
+QUERY SOURCE
+```c
+{source_code}
+```
+
+ADDITIONAL SOURCE CONTEXT
+{context_code}
+
+Return only an object matching the required compact JSON schema.

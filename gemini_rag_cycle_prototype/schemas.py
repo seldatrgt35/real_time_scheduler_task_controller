@@ -143,6 +143,57 @@ class InstructionCycleEstimate(BaseModel):
         return self
 
 
+class HelperCallEstimate(BaseModel):
+    function_name: str
+    dynamic_calls: int = Field(ge=1)
+    evidence: str
+
+
+class CompactPredictionResponse(BaseModel):
+    analysis_status: Literal["PARTIAL", "UNRESOLVED"]
+    function_name: str
+    hardware_profile_id: str
+    source_analysis: SourceAnalysis
+    retrieved_examples_used: list[RetrievedExample] = Field(default_factory=list)
+    estimation_basis: Literal["SOURCE_ONLY"] = "SOURCE_ONLY"
+    reference_anchor_task_id: None = None
+    reference_anchor_measured_us: None = None
+    reference_adjustments: list[str] = Field(default_factory=list)
+    helper_calls: list[HelperCallEstimate] = Field(default_factory=list)
+    instruction_cycle_ledger: list[InstructionCycleEstimate] = Field(default_factory=list)
+    estimated_source_execution_cycles: int | None = None
+    estimated_source_execution_us: float | None = None
+    formal_guarantee: bool = False
+    confidence_percent: int = Field(ge=0, le=50)
+    estimation_reasoning_summary: str
+    assumptions: list[str] = Field(default_factory=list)
+    unresolved: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_compact_estimate(self) -> "CompactPredictionResponse":
+        if self.formal_guarantee:
+            raise ValueError("source-level prediction cannot be a formal guarantee")
+        if self.analysis_status == "UNRESOLVED":
+            if not self.unresolved:
+                raise ValueError("UNRESOLVED requires an explanation")
+            return self
+        if not self.instruction_cycle_ledger:
+            raise ValueError("PARTIAL requires a non-empty instruction ledger")
+        for item in self.instruction_cycle_ledger:
+            expected = TIMING_PROFILE_CYCLES.get(item.instruction_class)
+            if expected is None or item.cycles_each != expected:
+                raise ValueError(f"invalid timing value for {item.instruction_class}")
+        total = sum(item.total_cycles for item in self.instruction_cycle_ledger)
+        if self.estimated_source_execution_cycles != total:
+            raise ValueError("estimated cycles must equal instruction-ledger sum")
+        if self.estimated_source_execution_us is None or abs(
+            self.estimated_source_execution_us - total / 48.0
+        ) > 1e-6:
+            raise ValueError("estimated time must equal cycles divided by 48 MHz")
+        return self
+
+
 class PredictedInstruction(BaseModel):
     opcode: str
     operands: str = ""
@@ -362,6 +413,8 @@ class PredictedFunctionAssembly(BaseModel):
                 raise ValueError(f"basic block has unknown successor: {sorted(missing)}")
             physical_next = next_by_id[block.block_id]
             if (
+                not self.successors_inferred
+                and
                 block.fallthrough_successor is not None
                 and block.fallthrough_successor != physical_next
             ):
@@ -379,8 +432,9 @@ class PredictedFunctionAssembly(BaseModel):
             conditional_count = 0
             unconditional_count = 0
             for instruction in block.instructions:
-                if not instruction.executed_on_path:
-                    continue
+                # CFG topology is static.  A block/instruction can be absent from
+                # the selected dynamic path and still own a real branch edge.
+                # Do not discard it here merely because its dynamic count is zero.
                 opcode = instruction.opcode.lower().split(".")[0]
                 operands = instruction.operands
                 targets = [
@@ -396,7 +450,11 @@ class PredictedFunctionAssembly(BaseModel):
                 elif opcode == "b":
                     unconditional_count += instruction.count_per_block
                     branch_targets.extend(targets)
-                    if physical_next is not None and physical_next in targets:
+                    if (
+                        not self.successors_inferred
+                        and physical_next is not None
+                        and physical_next in targets
+                    ):
                         raise ValueError(
                             "unconditional branch to the physically next block "
                             "must be represented as fallthrough"

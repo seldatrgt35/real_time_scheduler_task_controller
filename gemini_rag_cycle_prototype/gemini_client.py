@@ -6,9 +6,7 @@ import sys
 import time
 from typing import Any
 
-from gemini_rag_cycle_prototype.schemas import (
-    PredictionResponse, PredictedFunctionAssembly,
-)
+from gemini_rag_cycle_prototype.schemas import PredictionResponse
 
 
 class MissingApiKeyError(RuntimeError):
@@ -122,26 +120,53 @@ class GeminiClient:
                 # Retry only temporary service/rate conditions. Authentication,
                 # schema and other client errors must fail immediately.
                 code = getattr(exc, "code", None)
-                if code not in {429, 500, 502, 503, 504} or attempt + 1 >= attempts:
+                transient_transport_error = isinstance(
+                    exc, (TimeoutError, ConnectionError)
+                ) or exc.__class__.__name__ in {
+                    "ConnectError", "ConnectTimeout", "ReadError", "ReadTimeout",
+                    "RemoteProtocolError", "WriteError", "WriteTimeout",
+                }
+                if (
+                    code not in {429, 500, 502, 503, 504}
+                    and not transient_transport_error
+                ) or attempt + 1 >= attempts:
                     raise
-                time.sleep(5 * (2 ** attempt))
+                delay = 5 * (2 ** attempt)
+                print(
+                    f"[Gemini] transient {exc.__class__.__name__}; retrying "
+                    f"in {delay}s.", file=sys.stderr, flush=True,
+                )
+                time.sleep(delay)
 
-    def predict(self, prompt: str) -> tuple[PredictionResponse, str]:
+    def predict(self, prompt: str, response_schema=PredictionResponse):
         # Structured assembly responses can be much larger than the earlier
         # summary-only JSON. Without an explicit budget Gemini may stop at its
         # default output limit and return syntactically incomplete JSON.
         max_output_tokens = max(
             8192, int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "65536"))
         )
-        config = self._types.GenerateContentConfig(
+        config_values = dict(
             temperature=0.1,
             max_output_tokens=max_output_tokens,
             response_mime_type="application/json",
-            response_schema=PredictionResponse,
+            response_schema=response_schema,
             automatic_function_calling=(
                 self._types.AutomaticFunctionCallingConfig(disable=True)
             ),
         )
+        thinking_level = os.getenv("GEMINI_THINKING_LEVEL", "medium").lower()
+        if (
+            self.model.startswith("gemini-3")
+            and hasattr(self._types, "ThinkingConfig")
+        ):
+            if thinking_level not in {"minimal", "low", "medium", "high"}:
+                raise ValueError(
+                    "GEMINI_THINKING_LEVEL must be minimal, low, medium, or high"
+                )
+            config_values["thinking_config"] = self._types.ThinkingConfig(
+                thinking_level=thinking_level
+            )
+        config = self._types.GenerateContentConfig(**config_values)
         validation_attempts = max(
             1, int(os.getenv("GEMINI_VALIDATION_ATTEMPTS", "3"))
         )
@@ -152,7 +177,8 @@ class GeminiClient:
             f"[Gemini] model={self.model}, timeout_ms="
             f"{getattr(self, 'request_timeout_ms', 'unknown')}, "
             f"generation_attempts={generation_attempts}, "
-            f"validation_attempts={validation_attempts}",
+            f"validation_attempts={validation_attempts}, "
+            f"thinking_level={thinking_level}",
             file=sys.stderr,
             flush=True,
         )
@@ -171,10 +197,10 @@ class GeminiClient:
             try:
                 prediction = (
                     parsed
-                    if isinstance(parsed, PredictionResponse)
-                    else PredictionResponse.model_validate(parsed)
+                    if isinstance(parsed, response_schema)
+                    else response_schema.model_validate(parsed)
                     if parsed is not None
-                    else PredictionResponse.model_validate_json(raw)
+                    else response_schema.model_validate_json(raw)
                 )
                 return prediction, raw
             except Exception as exc:
@@ -196,57 +222,6 @@ class GeminiClient:
                 raise
         assert last_exc is not None
         raise last_exc
-
-    def predict_function(
-        self, prompt: str
-    ) -> tuple[PredictedFunctionAssembly, str]:
-        """Generate one function only, keeping structured responses bounded."""
-        max_output_tokens = max(
-            8192, int(os.getenv("GEMINI_FUNCTION_MAX_OUTPUT_TOKENS", "32768"))
-        )
-        config = self._types.GenerateContentConfig(
-            temperature=0.1,
-            max_output_tokens=max_output_tokens,
-            response_mime_type="application/json",
-            response_schema=PredictedFunctionAssembly,
-            automatic_function_calling=(
-                self._types.AutomaticFunctionCallingConfig(disable=True)
-            ),
-        )
-        attempts = max(1, int(os.getenv("GEMINI_VALIDATION_ATTEMPTS", "3")))
-        current_prompt = prompt
-        for attempt in range(attempts):
-            print(
-                f"[Gemini] function validation attempt {attempt + 1}/{attempts}",
-                file=sys.stderr, flush=True,
-            )
-            response = self._generate_content_with_retry(current_prompt, config)
-            raw = response.text or ""
-            parsed = getattr(response, "parsed", None)
-            try:
-                result = (
-                    parsed if isinstance(parsed, PredictedFunctionAssembly)
-                    else PredictedFunctionAssembly.model_validate(parsed)
-                    if parsed is not None
-                    else PredictedFunctionAssembly.model_validate_json(raw)
-                )
-                return result, raw
-            except Exception as exc:
-                self._save_invalid_response(raw)
-                if not raw.rstrip().endswith(("}", "]")):
-                    self._raise_truncated_response(
-                        response, raw, max_output_tokens, exc
-                    )
-                if attempt + 1 >= attempts:
-                    raise
-                current_prompt = (
-                    prompt
-                    + "\n\nVALIDATION REPAIR REQUIRED\nRegenerate the complete "
-                      "single-function JSON object from scratch. Preserve the "
-                      "required execution_count. Correct this validator error:\n"
-                    + str(exc)
-                )
-        raise AssertionError("unreachable function prediction state")
 
     @staticmethod
     def _validation_repair_prompt(original_prompt: str, error: Exception) -> str:

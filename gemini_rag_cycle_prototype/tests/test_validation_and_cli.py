@@ -107,20 +107,18 @@ class ValidationAndCliTest(unittest.TestCase):
             indexed_access_obligations(source, "Task"),
         )
 
-    def test_source_analysis_bundle_excludes_unrelated_task_body(self) -> None:
+    def test_source_bundle_keeps_all_reachable_helpers(self) -> None:
         source = """
-        #define COUNT (4U)
-        static int state[COUNT];
-        static int Helper(unsigned i) { return state[i]; }
-        void Initialize(void) { state[0] = 1; }
-        void Task(void) { state[1] = Helper(0U); }
-        void Unrelated(void) { state[2] = 99; }
+        static int HelperB(int x) { return x + 1; }
+        static int HelperA(int x) { return HelperB(x); }
+        void Target(void) { sink = HelperA(1) + HelperB(2); }
+        void Unrelated(void) { sink = 99; }
         """
-        analysis_source, context = source_analysis_bundle(source, "Task")
-        self.assertIn("void Task", analysis_source)
-        self.assertIn("static int Helper", analysis_source)
+        analysis_source, _ = source_analysis_bundle(source, "Target")
+        self.assertIn("void Target", analysis_source)
+        self.assertIn("static int HelperA", analysis_source)
+        self.assertIn("static int HelperB", analysis_source)
         self.assertNotIn("void Unrelated", analysis_source)
-        self.assertIn("void Initialize", context)
 
     def test_unconditional_branch_to_layout_next_is_rejected(self) -> None:
         function = {
@@ -191,6 +189,72 @@ class ValidationAndCliTest(unittest.TestCase):
         self.assertEqual(
             "fallthrough", validated.blocks[0].fallthrough_successor
         )
+
+    def test_static_branch_successor_is_valid_in_nonexecuted_block(self) -> None:
+        payload = {
+            "function_name": "PathWithUntakenElse",
+            "execution_count": 1,
+            "entry_block_id": "entry",
+            "blocks": [
+                {
+                    "block_id": "entry", "execution_count": 1,
+                    "layout_index": 0, "successors": ["unused", "selected"],
+                    "fallthrough_successor": "unused",
+                    "branch_successors": ["selected"],
+                    "instructions": [{
+                        "opcode": "beq", "operands": "selected",
+                        "instruction_class": "conditional_branch",
+                        "timing_profile_record": "conditional_branch_taken",
+                        "not_taken_timing_profile_record": "conditional_branch_not_taken",
+                        "taken_count": 1, "not_taken_count": 0,
+                        "executed_on_path": True,
+                    }],
+                },
+                {
+                    "block_id": "unused", "execution_count": 0,
+                    "layout_index": 1, "successors": ["exit"],
+                    "fallthrough_successor": None,
+                    "branch_successors": ["exit"],
+                    "instructions": [{
+                        "opcode": "b", "operands": "exit",
+                        "instruction_class": "unconditional_branch",
+                        "timing_profile_record": "unconditional_branch_with_refill",
+                        "executed_on_path": False,
+                    }],
+                },
+                {
+                    "block_id": "selected", "execution_count": 1,
+                    "layout_index": 2, "successors": ["exit"],
+                    "fallthrough_successor": "exit", "branch_successors": [],
+                    "instructions": [{
+                        "opcode": "mov", "operands": "r0, r0",
+                        "instruction_class": "alu_or_compare",
+                        "timing_profile_record": "alu_move_compare_shift",
+                        "executed_on_path": True,
+                    }],
+                },
+                {
+                    "block_id": "exit", "execution_count": 1,
+                    "layout_index": 3, "successors": [],
+                    "fallthrough_successor": None, "branch_successors": [],
+                    "instructions": [{
+                        "opcode": "bx", "operands": "lr",
+                        "instruction_class": "function_return",
+                        "timing_profile_record": "function_return_with_refill",
+                        "executed_on_path": True,
+                    }],
+                },
+            ],
+            "stack_allocation_bytes": 0,
+            "stack_deallocation_bytes": 0,
+            "lr_saved": False,
+            "valid_return_via": "BX_LR",
+            "loop_bounds_proven": True,
+            "successors_inferred": False,
+        }
+
+        validated = PredictedFunctionAssembly.model_validate(payload)
+        self.assertEqual(["exit"], validated.blocks[1].branch_successors)
 
     def test_derivable_branch_and_register_transfer_fields_are_normalized(self) -> None:
         branch = PredictedInstruction.model_validate({
@@ -342,9 +406,17 @@ class ValidationAndCliTest(unittest.TestCase):
             def embed_query(self, text):
                 raise AssertionError("query embedding must not be requested")
 
-            def predict(self, prompt):
+            def predict(self, prompt, response_schema=PredictionResponse):
                 self.prompt = prompt
-                return PredictionResponse.model_validate(prediction()), "{}"
+                return response_schema.model_construct(
+                    analysis_status="PARTIAL",
+                    retrieved_examples_used=[], estimation_basis="SOURCE_ONLY",
+                    reference_anchor_task_id=None,
+                    reference_anchor_measured_us=None,
+                    reference_adjustments=[], warnings=[],
+                    confidence_percent=45,
+                    hardware_profile_id="S32K148_GCC11_4_O0_48MHz_source_only",
+                ), "{}"
 
         root = Path(__file__).resolve().parents[2]
         client = SourceOnlyClient()
@@ -357,12 +429,12 @@ class ValidationAndCliTest(unittest.TestCase):
         ).predict(
             "void Task(void) {}", "Task", use_rag=False
         )
-        self.assertEqual("SUPPORTED", result.analysis_status)
+        self.assertEqual("PARTIAL", result.analysis_status)
         self.assertEqual([], retrieval.hits)
-        self.assertIn("PREDICT GCC -O0 THUMB-2 BASIC BLOCKS", client.prompt)
-        self.assertIn("predicted_thumb2_cycle_sum", client.prompt)
+        self.assertIn("compact dynamic instruction", client.prompt)
+        self.assertIn("instruction_cycle_ledger", client.prompt)
         self.assertIn("INSTRUCTION TIMING EVIDENCE", client.prompt)
-        self.assertIn("RETRIEVED GCC 11.4 -O0 TRANSFORMATION EVIDENCE", client.prompt)
+        self.assertIn("GCC 11.4 -O0 TRANSFORMATION EVIDENCE", client.prompt)
         self.assertNotIn("RETRIEVED MEASURED BOARD REFERENCES", client.prompt)
 
     def test_rag_and_no_rag_use_distinct_prompt_templates(self) -> None:

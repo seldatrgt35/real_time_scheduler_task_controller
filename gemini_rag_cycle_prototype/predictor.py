@@ -13,7 +13,7 @@ from gemini_rag_cycle_prototype.rag.measurement_loader import (
     extract_reachable_helpers, extract_relevant_defines, function_names,
 )
 from gemini_rag_cycle_prototype.rag.retriever import RetrievalResult, Retriever
-from gemini_rag_cycle_prototype.schemas import PredictionResponse
+from gemini_rag_cycle_prototype.schemas import CompactPredictionResponse, PredictionResponse
 
 
 class LeakageError(RuntimeError):
@@ -47,17 +47,18 @@ def indexed_access_obligations(source_code: str, function_name: str) -> list[str
 def source_analysis_bundle(
     source_code: str, function_name: str, supplied_context: str = ""
 ) -> tuple[str, str]:
-    """Remove unrelated task bodies while preserving declarations and context."""
+    """Keep the complete target call graph, globals and initialization context."""
     target = extract_function(source_code, function_name)
     if target is None:
         return source_code, supplied_context
     helpers = extract_reachable_helpers(source_code, function_name)
     relevant = "\n\n".join(filter(None, (target, helpers)))
-    starts = [
-        source_code.find(body)
+    bodies = [
+        body
         for name in function_names(source_code)
         if (body := extract_function(source_code, name)) is not None
     ]
+    starts = [source_code.find(body) for body in bodies]
     preamble = source_code[:min(starts)] if starts else ""
     defines = extract_relevant_defines(source_code, relevant)
     analysis_source = "\n\n".join(filter(None, (preamble, defines, relevant)))
@@ -121,128 +122,9 @@ class Predictor:
         self.source_only_template = (
             prototype / "prompts" / "source_only_prediction_prompt.txt"
         ).read_text(encoding="utf-8")
-        self.function_template = (
-            prototype / "prompts" / "function_assembly_prompt.txt"
+        self.compact_source_only_template = (
+            prototype / "prompts" / "compact_source_only_prediction_prompt.txt"
         ).read_text(encoding="utf-8")
-
-    def _predict_split_source_only(
-        self, source_code: str, function_name: str, context_code: str
-    ) -> tuple[PredictionResponse, str]:
-        available = set(function_names(source_code))
-        if function_name not in available:
-            raise ValueError(f"query function not found: {function_name}")
-        expected_counts = {function_name: 1}
-        pending = [function_name]
-        predicted = {}
-        raw_fragments = []
-        while pending:
-            name = pending.pop(0)
-            if name in predicted:
-                continue
-            function_source = extract_function(source_code, name)
-            if function_source is None:
-                raise ValueError(f"reachable helper body not found: {name}")
-            _, source_context = source_analysis_bundle(
-                source_code, name, context_code
-            )
-            evidence = retrieve_gcc_evidence(
-                source_code, self.gcc_pattern_path,
-                function_name=name, limit=3,
-            )
-            prompt = self.function_template.format(
-                function_name=name,
-                execution_count=expected_counts[name],
-                function_source=function_source,
-                source_context=(
-                    source_context or "No additional source context supplied."
-                ),
-                instruction_timing_profile=json.dumps(
-                    self.instruction_timing_profile, separators=(",", ":")
-                ),
-                gcc_transformation_evidence=json.dumps(
-                    evidence, separators=(",", ":")
-                ),
-            )
-            fragment, raw = self.client.predict_function(prompt)
-            if fragment.function_name != name:
-                raise ValueError(
-                    f"function fragment mismatch: expected {name}, "
-                    f"received {fragment.function_name}"
-                )
-            if fragment.execution_count != expected_counts[name]:
-                raise ValueError(
-                    f"function execution count mismatch for {name}: expected "
-                    f"{expected_counts[name]}, received {fragment.execution_count}"
-                )
-            predicted[name] = fragment
-            raw_fragments.append(raw)
-            for block in fragment.blocks:
-                for instruction in block.instructions:
-                    callee = instruction.callee
-                    if not callee or not instruction.executed_on_path:
-                        continue
-                    if callee not in available:
-                        raise ValueError(
-                            f"BL callee has no supplied source body: {callee}"
-                        )
-                    dynamic_calls = (
-                        block.execution_count * instruction.count_per_block
-                    )
-                    new_count = expected_counts.get(callee, 0) + dynamic_calls
-                    if callee in predicted and new_count != expected_counts[callee]:
-                        raise ValueError(
-                            "shared callee count changed after its fragment was "
-                            f"generated: {callee}"
-                        )
-                    expected_counts[callee] = new_count
-                    if callee not in pending and callee not in predicted:
-                        pending.append(callee)
-        payload = {
-            "analysis_status": "PARTIAL",
-            "function_name": function_name,
-            "hardware_profile_id": self.profile["hardware_profile_id"],
-            "source_analysis": {
-                "dynamic_helper_calls": sum(
-                    count for name, count in expected_counts.items()
-                    if name != function_name
-                ),
-            },
-            "retrieved_examples_used": [],
-            "estimation_basis": "SOURCE_ONLY",
-            "reference_anchor_task_id": None,
-            "reference_anchor_measured_us": None,
-            "reference_adjustments": [],
-            "cycle_components": [{
-                "name": "predicted_thumb2_cycle_sum", "cycles": 1,
-                "evidence": "merged single-function structured fragments",
-            }],
-            "predicted_assembly_outline": [
-                f"{name}: {len(fragment.blocks)} validated blocks, "
-                f"execution_count={fragment.execution_count}"
-                for name, fragment in predicted.items()
-            ],
-            "predicted_functions": [
-                fragment.model_dump() for fragment in predicted.values()
-            ],
-            "instruction_cycle_ledger": [],
-            "estimated_source_execution_cycles": 1,
-            "estimated_source_execution_us": 1 / 48.0,
-            "formal_guarantee": False,
-            "confidence_percent": 45,
-            "estimation_reasoning_summary": (
-                "Each reachable function was generated and validated "
-                "independently; the ledger was merged deterministically."
-            ),
-            "assumptions": [],
-            "unresolved": [
-                "Exact compiler binary and PFlash effects are not supplied."
-            ],
-            "warnings": [
-                "SOURCE_ONLY split-function predicted assembly."
-            ],
-        }
-        return PredictionResponse.model_validate(payload), "\n\n".join(raw_fragments)
-
     def _references(self, retrieval: RetrievalResult) -> str:
         output = []
         for number, hit in enumerate(retrieval.hits, start=1):
@@ -300,12 +182,7 @@ class Predictor:
             if use_rag
             else RetrievalResult()
         )
-        if not use_rag and hasattr(self.client, "predict_function"):
-            prediction, raw = self._predict_split_source_only(
-                source_code, function_name, context_code
-            )
-            return prediction, raw, retrieval
-        template = self.rag_template if use_rag else self.source_only_template
+        template = self.rag_template if use_rag else self.compact_source_only_template
         gcc_evidence = (
             [] if use_rag else retrieve_gcc_evidence(
                 source_code, self.gcc_pattern_path, function_name=function_name
@@ -330,7 +207,24 @@ class Predictor:
             ),
             references=self._references(retrieval),
         )
-        prediction, raw = self.client.predict(prompt)
+        prediction, raw = self.client.predict(
+            prompt,
+            response_schema=(PredictionResponse if use_rag else CompactPredictionResponse),
+        )
+        if not use_rag:
+            if prediction.retrieved_examples_used:
+                prediction.warnings.append(
+                    "GCC transformation-pattern IDs returned in the board-RAG "
+                    "citation field were cleared; source-only retrieval is disabled."
+                )
+                prediction.retrieved_examples_used = []
+            if prediction.confidence_percent > 50:
+                raise ValueError(
+                    "source-only estimation cannot exceed 50 percent confidence"
+                )
+            if prediction.hardware_profile_id != HARDWARE_PROFILE_ID:
+                raise ValueError("prediction used the wrong hardware profile")
+            return prediction, raw, retrieval
         returned_ids = {
             example.task_id for example in prediction.retrieved_examples_used
         }
