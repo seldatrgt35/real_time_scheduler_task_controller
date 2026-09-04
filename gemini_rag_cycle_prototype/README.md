@@ -84,7 +84,9 @@ include `OLLAMA_BASE_URL`, `OLLAMA_REQUEST_TIMEOUT_SECONDS`, `OLLAMA_NUM_CTX`,
 writes a `.run.json` sidecar containing provider/model provenance and duration.
 Generation is read as a stream to keep long CPU-only runs alive. Defaults use a
 16K context and a 6144-token output budget; the complete prompt and timing data
-are unchanged.
+are unchanged. The default request timeout is 3600 seconds because a 14B model
+running entirely on CPU may spend more than 15 minutes processing the prompt
+before the first streamed response token is available.
 
 ## Discover measured data
 

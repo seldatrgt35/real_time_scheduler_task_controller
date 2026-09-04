@@ -69,6 +69,63 @@ class OllamaClientTest(unittest.TestCase):
         self.assertIsInstance(client, OllamaClient)
         self.assertEqual(client.model, "qwen-local")
 
+    def test_opcode_used_as_timing_class_is_normalized(self):
+        from gemini_rag_cycle_prototype.schemas import InstructionCycleEstimate
+
+        item = InstructionCycleEstimate.model_validate({
+            "instruction_class": "sub",
+            "dynamic_count": 4,
+            "cycles_each": 1,
+            "total_cycles": 4,
+            "evidence": "estimated Thumb-2 instruction",
+        })
+        self.assertEqual(item.instruction_class, "alu_move_compare_shift")
+
+    def test_pop_alias_selects_transfer_or_pc_refill_from_timing(self):
+        from gemini_rag_cycle_prototype.schemas import InstructionCycleEstimate
+
+        common = {
+            "instruction_class": "pop", "dynamic_count": 2,
+            "evidence": "estimated Thumb-2 instruction",
+        }
+        transfer = InstructionCycleEstimate.model_validate({
+            **common, "cycles_each": 1, "total_cycles": 2,
+        })
+        refill = InstructionCycleEstimate.model_validate({
+            **common, "cycles_each": 3, "total_cycles": 6,
+        })
+        self.assertEqual(
+            transfer.instruction_class, "push_or_pop_register_transfer"
+        )
+        self.assertEqual(
+            refill.instruction_class, "pop_pc_pipeline_refill_worst_case"
+        )
+
+    def test_compact_response_normalizes_redundant_aggregate_arithmetic(self):
+        from gemini_rag_cycle_prototype.schemas import CompactPredictionResponse
+
+        payload = {
+            "analysis_status": "PARTIAL",
+            "function_name": "Task",
+            "hardware_profile_id": "s32k148-cortex-m4-48mhz-gcc-o0-pflash",
+            "source_analysis": {},
+            "instruction_cycle_ledger": [{
+                "instruction_class": "sub",
+                "dynamic_count": 4,
+                "cycles_each": 1,
+                "total_cycles": 4,
+                "evidence": "source analysis",
+            }],
+            "estimated_source_execution_cycles": 99,
+            "estimated_source_execution_us": 99.0,
+            "confidence_percent": 40,
+            "estimation_reasoning_summary": "test",
+        }
+        parsed = CompactPredictionResponse.model_validate(payload)
+        self.assertEqual(parsed.estimated_source_execution_cycles, 4)
+        self.assertEqual(parsed.estimated_source_execution_us, 4 / 48.0)
+        self.assertIn("normalized", parsed.warnings[-1])
+
 
 if __name__ == "__main__":
     unittest.main()

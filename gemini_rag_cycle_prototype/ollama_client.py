@@ -37,7 +37,7 @@ class OllamaClient:
             "OLLAMA_BASE_URL", "http://127.0.0.1:11434"
         )).rstrip("/")
         self.request_timeout_seconds = max(
-            1, int(os.getenv("OLLAMA_REQUEST_TIMEOUT_SECONDS", "900"))
+            1, int(os.getenv("OLLAMA_REQUEST_TIMEOUT_SECONDS", "3600"))
         )
         self.temperature = float(os.getenv("OLLAMA_TEMPERATURE", "0"))
         self.seed = int(os.getenv("OLLAMA_SEED", "42"))
@@ -170,7 +170,11 @@ class OllamaClient:
                 return response_schema.model_validate_json(raw), raw
             except Exception as exc:
                 last_error = exc
-                self._save_invalid_response(raw)
+                print(
+                    "[Ollama] response rejected by validator:\n" + str(exc),
+                    file=sys.stderr, flush=True,
+                )
+                self._save_invalid_response(raw, attempt + 1, exc)
                 if attempt + 1 < attempts:
                     current_prompt = self._repair_prompt(prompt, exc)
                     continue
@@ -185,15 +189,33 @@ class OllamaClient:
             + "\n\nVALIDATION REPAIR REQUIRED\n"
             + "Regenerate the complete JSON response from scratch. Return JSON "
               "only and satisfy the supplied response schema. Do not return a "
-              "patch or explanation. Validator diagnostics:\n"
+              "patch or explanation. For every instruction ledger entry, "
+              "total_cycles must equal dynamic_count * cycles_each. Use only "
+              "instruction classes and exact cycles_each values present in the "
+              "supplied timing profile. estimated_source_execution_cycles must "
+              "equal the sum of all ledger total_cycles values, and "
+              "estimated_source_execution_us must equal that sum divided by "
+              "48.0 exactly. PARTIAL requires a non-empty ledger and both "
+              "estimates. confidence_percent must not exceed 50.\n"
+              "Validator diagnostics:\n"
             + str(error)
         )
 
     @staticmethod
-    def _save_invalid_response(raw: str) -> None:
-        path = Path(os.getenv(
+    def _save_invalid_response(
+        raw: str, attempt: int, error: Exception | None = None
+    ) -> None:
+        base_path = Path(os.getenv(
             "OLLAMA_INVALID_RESPONSE_PATH",
             "gemini_rag_cycle_prototype/results/last_invalid_ollama_response.json",
         ))
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(raw, encoding="utf-8")
+        base_path.parent.mkdir(parents=True, exist_ok=True)
+        base_path.write_text(raw, encoding="utf-8")
+        attempt_path = base_path.with_name(
+            f"{base_path.stem}.attempt-{attempt}{base_path.suffix}"
+        )
+        attempt_path.write_text(raw, encoding="utf-8")
+        if error is not None:
+            attempt_path.with_suffix(".error.txt").write_text(
+                str(error), encoding="utf-8"
+            )

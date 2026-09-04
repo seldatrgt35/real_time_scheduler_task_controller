@@ -38,6 +38,54 @@ CONDITIONAL_BRANCH_OPCODES = {
     "bls", "blt", "bmi", "bne", "bpl", "cbnz", "cbz",
 }
 
+ALU_TIMING_OPCODES = {
+    "adc", "add", "adds", "adr", "and", "ands", "asr", "asrs", "clz",
+    "cmn", "cmp", "eor", "eors", "lsl", "lsls", "lsr", "lsrs", "mla",
+    "mls", "mov", "movs", "movt", "movw", "mvn", "neg", "negs", "orr",
+    "orrs", "rev", "ror", "rsb", "rsbs", "sbc", "sub", "subs", "tst",
+    "uxtb", "uxth", "sxth",
+}
+LOAD_TIMING_OPCODES = {"ldr", "ldrb", "ldrh", "ldrsb", "ldrsh"}
+STORE_TIMING_OPCODES = {"str", "strb", "strh"}
+
+
+def compact_timing_class_alias(value: str, cycles_each: int | None) -> str:
+    """Map opcode aliases to the timing taxonomy supplied to the model."""
+    opcode = value.strip().lower().split(".")[0]
+    if opcode in ALU_TIMING_OPCODES:
+        return "alu_move_compare_shift"
+    if opcode in {"mul", "muls", "umull"}:
+        return "multiply"
+    if opcode in {"sdiv", "udiv"}:
+        return "integer_divide_worst_case"
+    if opcode in LOAD_TIMING_OPCODES:
+        return "sram_or_stack_load"
+    if opcode in STORE_TIMING_OPCODES:
+        return "sram_or_stack_store"
+    if opcode == "push":
+        return "push_or_pop_register_transfer"
+    if opcode == "pop":
+        return (
+            "pop_pc_pipeline_refill_worst_case"
+            if cycles_each
+            == TIMING_PROFILE_CYCLES["pop_pc_pipeline_refill_worst_case"]
+            else "push_or_pop_register_transfer"
+        )
+    if opcode == "bl":
+        return "function_call_bl_with_refill"
+    if opcode in {"bx", "blx"}:
+        return "function_return_with_refill"
+    if opcode == "b":
+        return "unconditional_branch_with_refill"
+    if opcode in CONDITIONAL_BRANCH_OPCODES:
+        return (
+            "conditional_branch_not_taken"
+            if cycles_each
+            == TIMING_PROFILE_CYCLES["conditional_branch_not_taken"]
+            else "conditional_branch_taken"
+        )
+    return value
+
 
 class StructuralSummary(BaseModel):
     loop_count: int = 0
@@ -134,6 +182,16 @@ class InstructionCycleEstimate(BaseModel):
     total_cycles: int = Field(ge=0)
     evidence: str
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_opcode_class_alias(cls, value):
+        if not isinstance(value, dict):
+            return value
+        value["instruction_class"] = compact_timing_class_alias(
+            str(value.get("instruction_class", "")), value.get("cycles_each")
+        )
+        return value
+
     @model_validator(mode="after")
     def validate_arithmetic(self) -> "InstructionCycleEstimate":
         if self.dynamic_count * self.cycles_each != self.total_cycles:
@@ -169,6 +227,39 @@ class CompactPredictionResponse(BaseModel):
     assumptions: list[str] = Field(default_factory=list)
     unresolved: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_redundant_ledger_totals(cls, value):
+        """Derive aggregate fields from the model's validated ledger inputs.
+
+        The model remains responsible for instruction classes and dynamic
+        counts. Python owns only redundant arithmetic so a correct ledger is
+        not discarded because the language model made an addition error.
+        """
+        if not isinstance(value, dict) or value.get("analysis_status") != "PARTIAL":
+            return value
+        ledger = value.get("instruction_cycle_ledger")
+        if not isinstance(ledger, list) or not ledger:
+            return value
+        try:
+            total = sum(int(item["total_cycles"]) for item in ledger)
+        except (KeyError, TypeError, ValueError):
+            return value
+        original_cycles = value.get("estimated_source_execution_cycles")
+        original_us = value.get("estimated_source_execution_us")
+        expected_us = total / 48.0
+        if original_cycles != total or original_us != expected_us:
+            warnings = list(value.get("warnings") or [])
+            warnings.append(
+                "Redundant aggregate arithmetic was normalized from model "
+                f"values cycles={original_cycles!r}, us={original_us!r} to "
+                f"the instruction-ledger sum cycles={total}, us={expected_us!r}."
+            )
+            value["warnings"] = warnings
+        value["estimated_source_execution_cycles"] = total
+        value["estimated_source_execution_us"] = expected_us
+        return value
 
     @model_validator(mode="after")
     def validate_compact_estimate(self) -> "CompactPredictionResponse":
