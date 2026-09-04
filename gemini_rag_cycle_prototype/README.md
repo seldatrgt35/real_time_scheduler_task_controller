@@ -57,6 +57,35 @@ Never commit `.env`.
 python -m pip install -r gemini_rag_cycle_prototype/requirements.txt
 ```
 
+## Local Ollama backend
+
+Gemini remains available, but generation and embeddings can run fully locally:
+
+```powershell
+ollama pull qwen2.5-coder:14b
+ollama pull nomic-embed-text
+
+$env:LLM_PROVIDER = "ollama"
+$env:OLLAMA_MODEL = "qwen2.5-coder:14b"
+$env:OLLAMA_EMBEDDING_MODEL = "nomic-embed-text"
+
+# Required once before using RAG with Ollama embeddings.
+python -m gemini_rag_cycle_prototype.cli --provider ollama --rebuild-index
+
+# Source-only prediction (does not need an embedding model/index rebuild).
+python -m gemini_rag_cycle_prototype.cli --provider ollama `
+  --source "path/to/task.c" --function "TaskName" --no-rag `
+  --output "gemini_rag_cycle_prototype/results/task_ollama.json"
+```
+
+The default Ollama endpoint is `http://127.0.0.1:11434`. Configuration options
+include `OLLAMA_BASE_URL`, `OLLAMA_REQUEST_TIMEOUT_SECONDS`, `OLLAMA_NUM_CTX`,
+`OLLAMA_NUM_PREDICT`, `OLLAMA_TEMPERATURE`, and `OLLAMA_SEED`. Each prediction
+writes a `.run.json` sidecar containing provider/model provenance and duration.
+Generation is read as a stream to keep long CPU-only runs alive. Defaults use a
+16K context and a 6144-token output budget; the complete prompt and timing data
+are unchanged.
+
 ## Discover measured data
 
 ```powershell

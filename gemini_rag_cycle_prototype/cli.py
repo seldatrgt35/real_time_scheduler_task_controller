@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
+import time
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gemini_rag_cycle_prototype.gemini_client import GeminiClient
+from gemini_rag_cycle_prototype.ollama_client import OllamaClient
 from gemini_rag_cycle_prototype.predictor import Predictor
 from gemini_rag_cycle_prototype.rag.index_builder import (
     EMBEDDING_DOCUMENT_FORMAT_VERSION,
@@ -43,7 +46,16 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument("--output", type=Path)
     result.add_argument("--repository-root", type=Path, default=Path(__file__).resolve().parents[1])
+    result.add_argument(
+        "--provider", choices=("gemini", "ollama"),
+        default=os.getenv("LLM_PROVIDER", "gemini"),
+        help="generation and embedding backend (default: LLM_PROVIDER or gemini)",
+    )
     return result
+
+
+def create_client(provider: str):
+    return OllamaClient() if provider == "ollama" else GeminiClient()
 
 
 def read_required(path: Path, label: str) -> str:
@@ -87,8 +99,11 @@ def main(argv: list[str] | None = None) -> int:
         if not (args.build_index or args.rebuild_index or args.source):
             return 0
     client = None
-    if args.build_index or args.rebuild_index or not index_path.exists():
-        client = GeminiClient()
+    if (
+        args.build_index or args.rebuild_index
+        or (not args.no_rag and not index_path.exists())
+    ):
+        client = create_client(args.provider)
         build_index(
             records, client, index_path,
             client.embedding_model, client.embedding_dimensions,
@@ -104,10 +119,34 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         parser().error("--source and --function are required for prediction")
     context_parts = [read_required(path, "context file") for path in args.context_file]
-    client = client or GeminiClient()
-    prediction, raw, retrieval = Predictor(
-        root, load_current_index(index_path), client
-    ).predict(
+    client = client or create_client(args.provider)
+    started = time.monotonic()
+    index = load_current_index(index_path) if index_path.exists() else None
+    if not args.no_rag:
+        if index is None:
+            raise FileNotFoundError(
+                "RAG index does not exist; run --rebuild-index first"
+            )
+        if (
+            index.embedding_model != client.embedding_model
+            or index.embedding_dimensions != client.embedding_dimensions
+        ):
+            raise ValueError(
+                "RAG index embedding configuration mismatch: index uses "
+                f"{index.embedding_model}/{index.embedding_dimensions}, but "
+                f"{client.provider} uses {client.embedding_model}/"
+                f"{client.embedding_dimensions}. Run with --provider "
+                f"{client.provider} --rebuild-index."
+            )
+    if index is None:
+        from gemini_rag_cycle_prototype.rag.index_builder import RagIndex
+        index = RagIndex(
+            embedding_model=client.embedding_model,
+            embedding_dimensions=client.embedding_dimensions,
+            document_format_version=EMBEDDING_DOCUMENT_FORMAT_VERSION,
+            records=[],
+        )
+    prediction, raw, retrieval = Predictor(root, index, client).predict(
         source_code,
         args.function,
         context_code="\n\n".join(context_parts),
@@ -141,6 +180,17 @@ def main(argv: list[str] | None = None) -> int:
             ],
             "excluded": retrieval.excluded,
             "warnings": retrieval.warnings,
+        }, indent=2),
+        encoding="utf-8",
+    )
+    output.with_suffix(".run.json").write_text(
+        json.dumps({
+            "provider": client.provider,
+            "model": client.model,
+            "embedding_model": client.embedding_model,
+            "embedding_dimensions": client.embedding_dimensions,
+            "rag_enabled": not args.no_rag,
+            "elapsed_seconds": round(time.monotonic() - started, 3),
         }, indent=2),
         encoding="utf-8",
     )

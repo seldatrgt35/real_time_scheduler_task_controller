@@ -14,6 +14,7 @@ class MissingApiKeyError(RuntimeError):
 
 
 class GeminiClient:
+    provider = "gemini"
     def __init__(
         self, *, api_key: str | None = None, model: str | None = None,
         embedding_model: str | None = None,

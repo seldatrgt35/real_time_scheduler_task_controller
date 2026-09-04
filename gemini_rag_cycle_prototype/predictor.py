@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import re
 
-from gemini_rag_cycle_prototype.gemini_client import GeminiClient
+from gemini_rag_cycle_prototype.llm_client import LlmClient
 from gemini_rag_cycle_prototype.gcc_evidence import retrieve_gcc_evidence
 from gemini_rag_cycle_prototype.rag.index_builder import RagIndex
 from gemini_rag_cycle_prototype.rag.measurement_loader import HARDWARE_PROFILE_ID
@@ -99,7 +99,7 @@ def canonicalize_reference_ids(
 
 class Predictor:
     def __init__(
-        self, repository_root: Path, index: RagIndex, client: GeminiClient
+        self, repository_root: Path, index: RagIndex, client: LlmClient
     ):
         self.root = repository_root.resolve()
         self.index = index
