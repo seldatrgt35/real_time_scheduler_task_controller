@@ -23,17 +23,17 @@ TIMING_PROFILE_CYCLES = {
 
 
 class PlannedFunction(BaseModel):
-    function_name: str
+    function_name: str = Field(max_length=128)
     dynamic_calls: int = Field(ge=1)
-    call_count_evidence: str
+    call_count_evidence: str = Field(max_length=500)
 
 
 class StructurePlan(BaseModel):
     target_function: str
-    selected_path: list[str] = Field(default_factory=list)
-    functions: list[PlannedFunction]
-    loop_bounds: list[str] = Field(default_factory=list)
-    unresolved: list[str] = Field(default_factory=list)
+    selected_path: list[str] = Field(default_factory=list, max_length=64)
+    functions: list[PlannedFunction] = Field(max_length=64)
+    loop_bounds: list[str] = Field(default_factory=list, max_length=64)
+    unresolved: list[str] = Field(default_factory=list, max_length=32)
 
     @model_validator(mode="after")
     def unique_functions(self) -> "StructurePlan":
@@ -44,9 +44,9 @@ class StructurePlan(BaseModel):
 
 
 class CalleeCount(BaseModel):
-    function_name: str
+    function_name: str = Field(max_length=128)
     calls_per_invocation: int = Field(ge=1)
-    evidence: str
+    evidence: str = Field(max_length=500)
 
 
 class PerCallInstructionCount(BaseModel):
@@ -66,16 +66,18 @@ class PerCallInstructionCount(BaseModel):
         "unconditional_branch_with_refill",
     ]
     dynamic_count_per_invocation: int = Field(ge=0)
-    evidence: str
+    evidence: str = Field(max_length=500)
 
 
 class FunctionLedger(BaseModel):
-    function_name: str
-    selected_path: list[str] = Field(default_factory=list)
-    callees: list[CalleeCount] = Field(default_factory=list)
+    function_name: str = Field(max_length=128)
+    selected_path: list[str] = Field(default_factory=list, max_length=64)
+    callees: list[CalleeCount] = Field(default_factory=list, max_length=32)
     conditional_branch_evaluations_per_invocation: int = Field(ge=0)
-    instruction_counts: list[PerCallInstructionCount]
-    unresolved: list[str] = Field(default_factory=list)
+    instruction_counts: list[PerCallInstructionCount] = Field(
+        min_length=1, max_length=len(TIMING_PROFILE_CYCLES)
+    )
+    unresolved: list[str] = Field(default_factory=list, max_length=32)
 
     @model_validator(mode="after")
     def validate_internal_consistency(self) -> "FunctionLedger":

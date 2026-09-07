@@ -102,6 +102,37 @@ class StagedPredictorTest(unittest.TestCase):
             2,
         )
 
+    def test_lexical_loop_scope_distinguishes_inside_and_after_nested_loop(self):
+        body = """
+        void Task(void) {
+          for (int cylinder = 0; cylinder < CYLINDERS; ++cylinder) {
+            for (int sample = 0; sample < SAMPLES; ++sample) { Read(); }
+            Clamp();
+          }
+        }
+        """
+        facts = "#define CYLINDERS (4U)\n#define SAMPLES (6U)"
+        self.assertEqual(
+            StagedPredictor._proven_direct_callee_calls(body, "Read", facts)[0],
+            24,
+        )
+        self.assertEqual(
+            StagedPredictor._proven_direct_callee_calls(body, "Clamp", facts)[0],
+            4,
+        )
+
+    def test_multiple_call_sites_are_summed_with_their_own_scopes(self):
+        body = """
+        void Task(void) {
+          Clamp();
+          for (int i = 0; i < COUNT; ++i) { Clamp(); }
+        }
+        """
+        calls, _ = StagedPredictor._proven_direct_callee_calls(
+            body, "Clamp", "#define COUNT 3U"
+        )
+        self.assertEqual(calls, 4)
+
     def test_composes_per_function_ledgers(self):
         root = Path(__file__).resolve().parents[2]
         prediction, raw = StagedPredictor(root, FakeClient()).predict(SOURCE, "Task")
@@ -119,7 +150,7 @@ class StagedPredictorTest(unittest.TestCase):
         self.assertEqual(prediction.analysis_status, "SUPPORTED")
         helper = next(item for item in prediction.function_contributions
                       if item.function_name == "Helper")
-        self.assertEqual(helper.dynamic_calls, 2)
+        self.assertEqual(helper.dynamic_calls, 3)
 
     def test_unresolved_function_ledger_suppresses_estimate(self):
         root = Path(__file__).resolve().parents[2]
@@ -202,10 +233,12 @@ class StagedPredictorTest(unittest.TestCase):
             {"Helper": {"Task"}},
         )
         self.assertFalse(errors)
-        self.assertEqual(normalized.callees[0].calls_per_invocation, 12)
+        # The source contains one call outside any loop, so a contradictory
+        # pass-1 total may no longer inflate it to twelve.
+        self.assertEqual(normalized.callees[0].calls_per_invocation, 1)
         counts = {item.instruction_class: item.dynamic_count_per_invocation
                   for item in normalized.instruction_counts}
-        self.assertEqual(counts["function_call_bl_with_refill"], 12)
+        self.assertEqual(counts["function_call_bl_with_refill"], 1)
         self.assertEqual(normalized.conditional_branch_evaluations_per_invocation, 4)
 
 

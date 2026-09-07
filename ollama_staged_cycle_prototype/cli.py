@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 from gemini_rag_cycle_prototype.ollama_client import OllamaClient
@@ -25,6 +26,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     if not args.source.exists():
         raise FileNotFoundError(f"C source not found: {args.source}")
+    # FunctionLedger is intentionally compact; a larger budget encourages
+    # small local models to repeat per-instruction rows until truncation.
+    os.environ.setdefault("OLLAMA_NUM_PREDICT", "3072")
     client = OllamaClient()
     prediction, raw_outputs = StagedPredictor(
         args.repository_root, client

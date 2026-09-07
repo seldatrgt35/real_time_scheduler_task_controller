@@ -160,6 +160,10 @@ Direct callees found syntactically in this function:
 
 Rules:
 - Emit at most one instruction_counts row per instruction class.
+- The complete response must remain compact: never copy GCC evidence records,
+  source code, basic blocks, or individual instructions into the JSON. Use no
+  more than the 13 allowed aggregate instruction-class rows and keep each
+  evidence string to one short sentence.
 - Count GCC -O0 stack parameter homing, local loads/stores, loop control,
   comparisons, address calculations, prologue and epilogue.
 - Audit every relevant indexed-access obligation at its full dynamic
@@ -231,6 +235,111 @@ Names of other supplied functions:
         return len(re.findall(rf"\b{re.escape(callee_name)}\s*\(", body))
 
     @staticmethod
+    def _integer_macros(source_facts: str) -> dict[str, int]:
+        """Extract simple integer object macros used as source loop bounds."""
+        values: dict[str, int] = {}
+        pending = list(re.finditer(
+            r"^\s*#\s*define\s+([A-Za-z_]\w*)\s+(.+?)\s*$",
+            source_facts, re.MULTILINE,
+        ))
+        # Resolve literal macros first, then aliases/simple arithmetic.  Eval is
+        # deliberately restricted to digits and integer operators.
+        for _ in range(len(pending) + 1):
+            changed = False
+            for match in pending:
+                name, expression = match.groups()
+                expression = re.sub(r"/\*.*?\*/|//.*", "", expression).strip()
+                expression = re.sub(r"(?<=\d)[uUlL]+\b", "", expression)
+                for key, value in values.items():
+                    expression = re.sub(rf"\b{re.escape(key)}\b", str(value), expression)
+                if not re.fullmatch(r"[\d\s()+\-*/%<>&|]+", expression):
+                    continue
+                try:
+                    value = int(eval(expression, {"__builtins__": {}}, {}))
+                except (SyntaxError, TypeError, ValueError, ZeroDivisionError):
+                    continue
+                if value >= 0 and values.get(name) != value:
+                    values[name] = value
+                    changed = True
+            if not changed:
+                break
+        return values
+
+    @staticmethod
+    def _matching_brace(text: str, opening: int) -> int | None:
+        depth = 0
+        for index in range(opening, len(text)):
+            if text[index] == "{":
+                depth += 1
+            elif text[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    return index
+        return None
+
+    @staticmethod
+    def _proven_for_loops(
+        body: str, macro_values: dict[str, int]
+    ) -> list[tuple[int, int, int, str]]:
+        """Return braced, canonical for-loop body ranges and trip counts."""
+        loops: list[tuple[int, int, int, str]] = []
+        pattern = re.compile(
+            r"\bfor\s*\(\s*(?:[A-Za-z_]\w*\s+)*([A-Za-z_]\w*)\s*=\s*"
+            r"(\d+)[uUlL]*\s*;\s*\1\s*(<|<=)\s*([A-Za-z_]\w*|\d+[uUlL]*)"
+            r"\s*;\s*(?:\+\+\s*\1|\1\s*\+\+)\s*\)\s*\{"
+        )
+        for match in pattern.finditer(body):
+            variable, start_text, comparator, bound_text = match.groups()
+            start = int(start_text)
+            clean_bound = re.sub(r"[uUlL]+$", "", bound_text)
+            bound = (int(clean_bound) if clean_bound.isdigit()
+                     else macro_values.get(clean_bound))
+            if bound is None:
+                continue
+            trip_count = max(0, bound - start + (1 if comparator == "<=" else 0))
+            opening = match.end() - 1
+            closing = StagedPredictor._matching_brace(body, opening)
+            if closing is not None:
+                loops.append((opening + 1, closing, trip_count,
+                              f"{variable}: {start} {comparator} {bound_text}"))
+        return loops
+
+    @staticmethod
+    def _proven_direct_callee_calls(
+        body: str, callee_name: str, source_facts: str
+    ) -> tuple[int | None, str]:
+        """Compute call multiplicity from each call site's lexical loop scope."""
+        sites = list(re.finditer(rf"\b{re.escape(callee_name)}\s*\(", body))
+        if not sites:
+            return 0, "no syntactic call site"
+        macros = StagedPredictor._integer_macros(source_facts)
+        loops = StagedPredictor._proven_for_loops(body, macros)
+        total = 0
+        evidence: list[str] = []
+        for site in sites:
+            enclosing = [loop for loop in loops if loop[0] <= site.start() < loop[1]]
+            multiplier = 1
+            for _, _, trip_count, _ in enclosing:
+                multiplier *= trip_count
+            total += multiplier
+            evidence.append("outside loops" if not enclosing else " * ".join(
+                str(loop[2]) for loop in enclosing
+            ))
+        # If a call is lexically inside an unrecognized for/while loop, its
+        # dynamic multiplicity is not proven and must not be guessed.
+        for token in re.finditer(r"\b(?:for|while)\s*\(", body):
+            opening = body.find("{", token.end())
+            if opening < 0:
+                continue
+            closing = StagedPredictor._matching_brace(body, opening)
+            if closing is None:
+                continue
+            recognized = any(loop[0] == opening + 1 for loop in loops)
+            if not recognized and any(opening < site.start() < closing for site in sites):
+                return None, "call is inside a loop whose bound was not proven"
+        return total, "Python lexical loop-scope proof per call site: " + " + ".join(evidence)
+
+    @staticmethod
     def _compose_call_counts(
         target: str, ledgers: dict[str, FunctionLedger]
     ) -> dict[str, int]:
@@ -259,6 +368,7 @@ Names of other supplied functions:
         functions: dict[str, str],
         planned: dict[str, int],
         parent_map: dict[str, set[str]],
+        source_facts: str = "",
     ) -> tuple[FunctionLedger, list[str]]:
         """Move redundant call/branch arithmetic out of the language model."""
         errors: list[str] = []
@@ -272,6 +382,9 @@ Names of other supplied functions:
             call_sites = StagedPredictor._direct_callee_occurrences(
                 functions[name], callee_name
             )
+            proven_calls, proof = StagedPredictor._proven_direct_callee_calls(
+                functions[name], callee_name, source_facts
+            )
             if parent_map.get(callee_name) != {name}:
                 errors.append(
                     f"cannot derive per-invocation calls for {callee_name}: "
@@ -281,15 +394,22 @@ Names of other supplied functions:
             planned_ratio = 0
             if parent_calls >= 1 and child_calls % parent_calls == 0:
                 planned_ratio = child_calls // parent_calls
-            calls_per_invocation = max(call_sites, planned_ratio)
+            # Source-proven lexical scope is authoritative. Pass-1 is retained
+            # only as a fallback for source constructs this small parser cannot
+            # prove; it is never allowed to override a proven loop placement.
+            calls_per_invocation = (
+                proven_calls if proven_calls is not None
+                else max(call_sites, planned_ratio)
+            )
             if calls_per_invocation < 1:
                 errors.append(f"no call multiplicity for {name}->{callee_name}")
                 continue
             callees.append(CalleeCount(
                 function_name=callee_name,
                 calls_per_invocation=calls_per_invocation,
-                evidence="derived by Python from pass-1 dynamic calls and "
-                         f"{call_sites} syntactic direct call-site(s)",
+                evidence=(proof if proven_calls is not None else
+                          "fallback from pass-1 dynamic calls and "
+                          f"{call_sites} syntactic direct call-site(s): {proof}"),
             ))
 
         aggregated_counts: dict[str, int] = defaultdict(int)
@@ -411,7 +531,7 @@ Names of other supplied functions:
                     f"received {ledger.function_name}"
                 )
             ledger, relation_errors = self._normalize_ledger_relations(
-                name, ledger, functions, planned, parent_map
+                name, ledger, functions, planned, parent_map, source_facts
             )
             errors.extend(relation_errors)
             unknown_callees = {
