@@ -94,6 +94,14 @@ class StagedPredictorTest(unittest.TestCase):
             {"Helper"},
         )
 
+    def test_syntactic_call_sites_are_dynamic_call_lower_bound(self):
+        self.assertEqual(
+            StagedPredictor._direct_callee_occurrences(
+                "void T(void) { H(); H(); }", "H"
+            ),
+            2,
+        )
+
     def test_composes_per_function_ledgers(self):
         root = Path(__file__).resolve().parents[2]
         prediction, raw = StagedPredictor(root, FakeClient()).predict(SOURCE, "Task")
@@ -103,7 +111,7 @@ class StagedPredictorTest(unittest.TestCase):
         self.assertEqual(prediction.estimated_source_execution_cycles, 47)
         self.assertEqual(len(raw), 3)
 
-    def test_python_uses_structure_plan_as_call_count_authority(self):
+    def test_python_normalizes_structure_plan_from_composed_calls(self):
         root = Path(__file__).resolve().parents[2]
         prediction, _ = StagedPredictor(
             root, FakeClient(wrong_plan=True)
@@ -122,18 +130,50 @@ class StagedPredictorTest(unittest.TestCase):
         self.assertIsNone(prediction.estimated_source_execution_cycles)
         self.assertTrue(any("Unresolved" in item for item in prediction.warnings))
 
-    def test_rejects_double_counted_pop_pc_return(self):
-        with self.assertRaisesRegex(ValueError, "must not be counted separately"):
-            FunctionLedger.model_validate({
-                "function_name": "Helper",
-                "conditional_branch_evaluations_per_invocation": 0,
-                "instruction_counts": [
-                    {"instruction_class": "function_return_with_refill",
-                     "dynamic_count_per_invocation": 1, "evidence": "return"},
-                    {"instruction_class": "pop_pc_pipeline_refill_worst_case",
-                     "dynamic_count_per_invocation": 1, "evidence": "same return"},
-                ],
-            })
+    def test_python_aggregates_duplicate_classes_and_canonicalizes_return(self):
+        ledger = FunctionLedger.model_validate({
+            "function_name": "Helper",
+            "conditional_branch_evaluations_per_invocation": 0,
+            "instruction_counts": [
+                {"instruction_class": "push_or_pop_register_transfer",
+                 "dynamic_count_per_invocation": 2, "evidence": "push"},
+                {"instruction_class": "push_or_pop_register_transfer",
+                 "dynamic_count_per_invocation": 2, "evidence": "pop"},
+                {"instruction_class": "function_return_with_refill",
+                 "dynamic_count_per_invocation": 1, "evidence": "return"},
+                {"instruction_class": "pop_pc_pipeline_refill_worst_case",
+                 "dynamic_count_per_invocation": 1, "evidence": "same return"},
+            ],
+        })
+        normalized, errors = StagedPredictor._normalize_ledger_relations(
+            "Helper", ledger, {"Helper": "void Helper(void){}"},
+            {"Helper": 1}, {},
+        )
+        self.assertFalse(errors)
+        counts = {item.instruction_class: item.dynamic_count_per_invocation
+                  for item in normalized.instruction_counts}
+        self.assertEqual(counts["push_or_pop_register_transfer"], 4)
+        self.assertEqual(counts["function_return_with_refill"], 1)
+        self.assertNotIn("pop_pc_pipeline_refill_worst_case", counts)
+
+    def test_python_adds_single_return_when_model_only_describes_pop(self):
+        ledger = FunctionLedger.model_validate({
+            "function_name": "Helper",
+            "conditional_branch_evaluations_per_invocation": 0,
+            "instruction_counts": [
+                {"instruction_class": "push_or_pop_register_transfer",
+                 "dynamic_count_per_invocation": 2,
+                 "evidence": "pop {r7, pc}"},
+            ],
+        })
+        normalized, errors = StagedPredictor._normalize_ledger_relations(
+            "Helper", ledger, {"Helper": "void Helper(void){}"},
+            {"Helper": 1}, {},
+        )
+        self.assertFalse(errors)
+        counts = {item.instruction_class: item.dynamic_count_per_invocation
+                  for item in normalized.instruction_counts}
+        self.assertEqual(counts["function_return_with_refill"], 1)
 
     def test_python_normalizes_redundant_bl_and_branch_arithmetic(self):
         ledger = FunctionLedger.model_validate({

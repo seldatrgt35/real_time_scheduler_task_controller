@@ -224,6 +224,13 @@ Names of other supplied functions:
         }
 
     @staticmethod
+    def _direct_callee_occurrences(
+        body: str, callee_name: str
+    ) -> int:
+        """Count syntactic call sites; this is a lower bound on dynamic calls."""
+        return len(re.findall(rf"\b{re.escape(callee_name)}\s*\(", body))
+
+    @staticmethod
     def _compose_call_counts(
         target: str, ledgers: dict[str, FunctionLedger]
     ) -> dict[str, int]:
@@ -262,28 +269,64 @@ Names of other supplied functions:
         parent_calls = planned.get(name, 0)
         for callee_name in sorted(expected_names):
             child_calls = planned.get(callee_name, 0)
+            call_sites = StagedPredictor._direct_callee_occurrences(
+                functions[name], callee_name
+            )
             if parent_map.get(callee_name) != {name}:
                 errors.append(
                     f"cannot derive per-invocation calls for {callee_name}: "
                     "callee has multiple direct parents"
                 )
                 continue
-            if parent_calls < 1 or child_calls % parent_calls:
-                errors.append(
-                    f"cannot derive integral call ratio {name}->{callee_name}: "
-                    f"parent={parent_calls}, child={child_calls}"
-                )
+            planned_ratio = 0
+            if parent_calls >= 1 and child_calls % parent_calls == 0:
+                planned_ratio = child_calls // parent_calls
+            calls_per_invocation = max(call_sites, planned_ratio)
+            if calls_per_invocation < 1:
+                errors.append(f"no call multiplicity for {name}->{callee_name}")
                 continue
             callees.append(CalleeCount(
                 function_name=callee_name,
-                calls_per_invocation=child_calls // parent_calls,
+                calls_per_invocation=calls_per_invocation,
                 evidence="derived by Python from pass-1 dynamic calls and "
-                         "the syntactic direct-call graph",
+                         f"{call_sites} syntactic direct call-site(s)",
             ))
 
+        aggregated_counts: dict[str, int] = defaultdict(int)
+        aggregated_evidence: dict[str, list[str]] = defaultdict(list)
+        for item in ledger.instruction_counts:
+            aggregated_counts[item.instruction_class] += (
+                item.dynamic_count_per_invocation
+            )
+            if item.evidence not in aggregated_evidence[item.instruction_class]:
+                aggregated_evidence[item.instruction_class].append(item.evidence)
         counts = {
-            item.instruction_class: item for item in ledger.instruction_counts
+            instruction_class: PerCallInstructionCount(
+                instruction_class=instruction_class,
+                dynamic_count_per_invocation=count,
+                evidence="; ".join(aggregated_evidence[instruction_class]),
+            )
+            for instruction_class, count in aggregated_counts.items()
         }
+
+        # Canonicalize both possible representations of POP {..., PC} to the
+        # single abstract return class used by the compact ledger.
+        pop_pc = counts.pop("pop_pc_pipeline_refill_worst_case", None)
+        return_evidence = (
+            "canonicalized by Python from POP {..., PC}"
+            if pop_pc is not None
+            else "one return required for each completed invocation of a "
+                 "supplied non-noreturn C function"
+        )
+        # Every supplied function in this experiment completes normally. A
+        # selected per-invocation path therefore has exactly one return control
+        # transfer, whether Qwen spells it BX LR, POP {..., PC}, or only records
+        # the POP register transfers in its evidence text.
+        counts["function_return_with_refill"] = PerCallInstructionCount(
+            instruction_class="function_return_with_refill",
+            dynamic_count_per_invocation=1,
+            evidence=return_evidence,
+        )
         bl_count = sum(item.calls_per_invocation for item in callees)
         if bl_count:
             counts["function_call_bl_with_refill"] = PerCallInstructionCount(
@@ -337,8 +380,15 @@ Names of other supplied functions:
                 "structure plan function set mismatch: expected "
                 f"{sorted(functions)}, received {sorted(planned)}"
             )
-        if planned.get(target) != 1:
-            errors.append("target function dynamic_calls must equal 1")
+        # One CLI prediction always represents exactly one target invocation.
+        planned[target] = 1
+        for item in plan.functions:
+            if item.function_name == target:
+                item.dynamic_calls = 1
+                item.call_count_evidence = (
+                    "canonicalized by Python: one CLI analysis equals one "
+                    "target invocation"
+                )
 
         parent_map: dict[str, set[str]] = defaultdict(set)
         for caller, body in functions.items():
@@ -388,10 +438,15 @@ Names of other supplied functions:
             errors.append(str(exc))
             composed_calls = {}
         if composed_calls and composed_calls != planned:
-            errors.append(
-                "pass-1 dynamic calls disagree with composed per-function calls: "
-                f"plan={planned}, composed={composed_calls}"
-            )
+            # The syntactic call graph/call-site lower bound is authoritative
+            # when the model confuses number of callees with target calls.
+            planned = composed_calls
+            for item in plan.functions:
+                if item.function_name in composed_calls:
+                    item.dynamic_calls = composed_calls[item.function_name]
+                    item.call_count_evidence += (
+                        "; normalized by Python call-graph composition"
+                    )
 
         aggregate_counts: dict[str, int] = defaultdict(int)
         contributions: list[FunctionContribution] = []

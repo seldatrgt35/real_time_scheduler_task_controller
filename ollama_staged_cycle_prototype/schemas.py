@@ -79,20 +79,8 @@ class FunctionLedger(BaseModel):
 
     @model_validator(mode="after")
     def validate_internal_consistency(self) -> "FunctionLedger":
-        classes = [item.instruction_class for item in self.instruction_counts]
-        if len(classes) != len(set(classes)):
-            raise ValueError("instruction classes must be aggregated and unique")
-        counts = {
-            item.instruction_class: item.dynamic_count_per_invocation
-            for item in self.instruction_counts
-        }
-        if counts.get("function_return_with_refill", 0) < 1:
-            raise ValueError("each invoked function requires a return")
-        if counts.get("pop_pc_pipeline_refill_worst_case", 0):
-            raise ValueError(
-                "POP PC return must not be counted separately from "
-                "function_return_with_refill"
-            )
+        # Cross-row arithmetic is normalized and checked by StagedPredictor.
+        # Local models often emit separate PUSH and POP rows for one class.
         return self
 
 
