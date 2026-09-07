@@ -6,7 +6,9 @@ import tempfile
 import unittest
 
 from ollama_staged_cycle_prototype.predictor import StagedPredictor
-from ollama_staged_cycle_prototype.schemas import FunctionLedger, StructurePlan
+from ollama_staged_cycle_prototype.schemas import (
+    FunctionBlockPlan, FunctionLedger, StructurePlan,
+)
 
 
 SOURCE = """
@@ -41,33 +43,42 @@ class FakeClient:
                 ],
                 "loop_bounds": ["i=0..2"],
             }
-        elif "EXACTLY ONE\ninvocation of function Task" in prompt:
+        elif (response_schema is FunctionBlockPlan
+              and "invocation of function Task." in prompt):
             value = {
                 "function_name": "Task",
                 "callees": [{"function_name": "Helper",
                              "calls_per_invocation": 3, "evidence": "loop"}],
-                "conditional_branch_evaluations_per_invocation": 4,
-                "instruction_counts": [
-                    {"instruction_class": "function_call_bl_with_refill",
-                     "dynamic_count_per_invocation": 3, "evidence": "calls"},
-                    {"instruction_class": "conditional_branch_taken",
-                     "dynamic_count_per_invocation": 3, "evidence": "loop"},
-                    {"instruction_class": "conditional_branch_not_taken",
-                     "dynamic_count_per_invocation": 1, "evidence": "exit"},
-                    {"instruction_class": "function_return_with_refill",
-                     "dynamic_count_per_invocation": 1, "evidence": "return"},
-                ],
+                "blocks": [{
+                    "block_id": "entry", "source_region": "whole function",
+                    "execution_count_per_invocation": 1,
+                    "execution_count_evidence": "one invocation",
+                    "instruction_counts": [
+                        {"instruction_class": "function_call_bl_with_refill",
+                         "static_count": 3, "evidence": "calls"},
+                        {"instruction_class": "conditional_branch_taken",
+                         "static_count": 3, "evidence": "loop"},
+                        {"instruction_class": "conditional_branch_not_taken",
+                         "static_count": 1, "evidence": "exit"},
+                        {"instruction_class": "function_return_with_refill",
+                         "static_count": 1, "evidence": "return"},
+                    ],
+                }],
             }
         else:
             value = {
                 "function_name": "Helper",
-                "conditional_branch_evaluations_per_invocation": 0,
-                "instruction_counts": [
-                    {"instruction_class": "alu_move_compare_shift",
-                     "dynamic_count_per_invocation": 2, "evidence": "body"},
-                    {"instruction_class": "function_return_with_refill",
-                     "dynamic_count_per_invocation": 1, "evidence": "return"},
-                ],
+                "blocks": [{
+                    "block_id": "entry", "source_region": "whole function",
+                    "execution_count_per_invocation": 1,
+                    "execution_count_evidence": "one invocation",
+                    "instruction_counts": [
+                        {"instruction_class": "alu_move_compare_shift",
+                         "static_count": 2, "evidence": "body"},
+                        {"instruction_class": "function_return_with_refill",
+                         "static_count": 1, "evidence": "return"},
+                    ],
+                }],
                 "unresolved": (["unknown loop bound"]
                                if self.unresolved_ledger else []),
             }
@@ -132,6 +143,26 @@ class StagedPredictorTest(unittest.TestCase):
             body, "Clamp", "#define COUNT 3U"
         )
         self.assertEqual(calls, 4)
+
+    def test_static_block_counts_are_expanded_by_python(self):
+        block_plan = FunctionBlockPlan.model_validate({
+            "function_name": "Task",
+            "blocks": [{
+                "block_id": "loop_body",
+                "source_region": "loop body",
+                "execution_count_per_invocation": 12,
+                "execution_count_evidence": "source bound",
+                "instruction_counts": [{
+                    "instruction_class": "sram_or_stack_load",
+                    "static_count": 3,
+                    "evidence": "three loads per iteration",
+                }],
+            }],
+        })
+        ledger = StagedPredictor._block_plan_to_ledger(block_plan)
+        self.assertEqual(
+            ledger.instruction_counts[0].dynamic_count_per_invocation, 36
+        )
 
     def test_composes_per_function_ledgers(self):
         root = Path(__file__).resolve().parents[2]

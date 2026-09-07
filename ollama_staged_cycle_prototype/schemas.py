@@ -69,6 +69,50 @@ class PerCallInstructionCount(BaseModel):
     evidence: str = Field(max_length=500)
 
 
+class StaticBlockInstructionCount(BaseModel):
+    instruction_class: Literal[
+        "alu_move_compare_shift", "multiply", "integer_divide_worst_case",
+        "sram_or_stack_load", "sram_or_stack_store",
+        "push_or_pop_register_transfer", "multi_register_instruction_overhead",
+        "pop_pc_pipeline_refill_worst_case", "function_call_bl_with_refill",
+        "function_return_with_refill", "conditional_branch_taken",
+        "conditional_branch_not_taken", "unconditional_branch_with_refill",
+    ]
+    static_count: int = Field(ge=0)
+    evidence: str = Field(max_length=500)
+
+
+class PredictedBasicBlock(BaseModel):
+    block_id: str = Field(max_length=128)
+    source_region: str = Field(max_length=500)
+    execution_count_per_invocation: int = Field(ge=0)
+    execution_count_evidence: str = Field(max_length=500)
+    successors: list[str] = Field(default_factory=list, max_length=4)
+    instruction_counts: list[StaticBlockInstructionCount] = Field(
+        min_length=1, max_length=len(TIMING_PROFILE_CYCLES)
+    )
+
+
+class FunctionBlockPlan(BaseModel):
+    function_name: str = Field(max_length=128)
+    selected_path: list[str] = Field(default_factory=list, max_length=64)
+    callees: list[CalleeCount] = Field(default_factory=list, max_length=32)
+    blocks: list[PredictedBasicBlock] = Field(min_length=1, max_length=64)
+    unresolved: list[str] = Field(default_factory=list, max_length=32)
+
+    @model_validator(mode="after")
+    def unique_blocks_and_valid_successors(self) -> "FunctionBlockPlan":
+        ids = [block.block_id for block in self.blocks]
+        if len(ids) != len(set(ids)):
+            raise ValueError("basic block IDs must be unique")
+        unknown = {
+            successor for block in self.blocks for successor in block.successors
+        } - set(ids)
+        if unknown:
+            raise ValueError(f"basic-block successors are undefined: {sorted(unknown)}")
+        return self
+
+
 class FunctionLedger(BaseModel):
     function_name: str = Field(max_length=128)
     selected_path: list[str] = Field(default_factory=list, max_length=64)

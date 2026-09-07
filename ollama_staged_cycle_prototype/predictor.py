@@ -20,6 +20,7 @@ from ollama_staged_cycle_prototype.schemas import (
     AggregateInstructionCycles,
     CalleeCount,
     FunctionContribution,
+    FunctionBlockPlan,
     FunctionLedger,
     PerCallInstructionCount,
     StagedPrediction,
@@ -123,10 +124,10 @@ Additional source/initialization context (outside the timed interval):
             if candidate != name
             and re.search(rf"\b{re.escape(candidate)}\s*\(", body)
         )
-        return f"""You are pass 2 of a staged GCC 11.4 -O0 timing analysis.
-Predict the aggregate Thumb-2 instruction-class counts for EXACTLY ONE
-invocation of function {name} along its most expensive feasible source path.
-Do not multiply this ledger by the function's global dynamic call count.
+        return f"""You are pass 2 of a staged GCC 11.4 -O0 assembly-shape analysis.
+Predict static Thumb-2 instruction-class counts separately for every basic
+block of EXACTLY ONE invocation of function {name}. Do not emit a whole-function
+aggregate and do not calculate cycles.
 
 Hardware profile:
 {json.dumps(self.hardware, indent=2)}
@@ -159,7 +160,12 @@ Direct callees found syntactically in this function:
 {json.dumps(direct_callees)}
 
 Rules:
-- Emit at most one instruction_counts row per instruction class.
+- Split entry/prologue, loop body, loop condition, branch arms, joins and
+  epilogue into distinct basic blocks. Give every block a stable unique ID.
+- Each block has its dynamic execution_count_per_invocation on the selected
+  path. instruction_counts inside a block are STATIC counts for one execution
+  of that block; never pre-multiply them by the block execution count.
+- Emit at most one instruction_counts row per instruction class per block.
 - The complete response must remain compact: never copy GCC evidence records,
   source code, basic blocks, or individual instructions into the JSON. Use no
   more than the 13 allowed aggregate instruction-class rows and keep each
@@ -184,8 +190,8 @@ Rules:
 - For PUSH/POP, push_or_pop_register_transfer is the number of transferred
   registers and multi_register_instruction_overhead is the number of executed
   PUSH/POP instructions. Do not treat a whole register list as one transfer.
-- Taken plus not-taken conditional counts must equal the declared conditional
-  branch evaluations for this invocation.
+- A conditional branch row represents the selected outcome for that block.
+  Its static count is normally one; Python multiplies by block executions.
 - Do not calculate final cycles and do not apply a margin.
 
 Function under analysis:
@@ -196,6 +202,39 @@ Function under analysis:
 Names of other supplied functions:
 {json.dumps([item for item in all_functions if item != name])}
 """
+
+    @staticmethod
+    def _block_plan_to_ledger(plan: FunctionBlockPlan) -> FunctionLedger:
+        """Deterministically expand static block rows into a per-call ledger."""
+        counts: dict[str, int] = defaultdict(int)
+        evidence: dict[str, list[str]] = defaultdict(list)
+        for block in plan.blocks:
+            for item in block.instruction_counts:
+                counts[item.instruction_class] += (
+                    item.static_count * block.execution_count_per_invocation
+                )
+                evidence[item.instruction_class].append(
+                    f"{block.block_id} x{block.execution_count_per_invocation}: "
+                    f"{item.static_count} ({item.evidence})"
+                )
+        conditional = counts.get("conditional_branch_taken", 0) + counts.get(
+            "conditional_branch_not_taken", 0
+        )
+        return FunctionLedger(
+            function_name=plan.function_name,
+            selected_path=plan.selected_path,
+            callees=plan.callees,
+            conditional_branch_evaluations_per_invocation=conditional,
+            instruction_counts=[
+                PerCallInstructionCount(
+                    instruction_class=name,
+                    dynamic_count_per_invocation=count,
+                    evidence="; ".join(evidence[name])[:500],
+                )
+                for name, count in counts.items()
+            ],
+            unresolved=plan.unresolved,
+        )
 
     @staticmethod
     def _source_facts(source: str) -> str:
@@ -517,14 +556,20 @@ Names of other supplied functions:
 
         ledgers: dict[str, FunctionLedger] = {}
         for name, body in functions.items():
-            ledger, raw = self.client.predict(
+            # Retrieve transformation examples for the function currently
+            # being synthesized, rather than reusing only the target's tags.
+            function_evidence = retrieve_gcc_evidence(
+                source, self.gcc_pattern_path, function_name=name
+            )
+            block_plan, raw = self.client.predict(
                 self._ledger_prompt(
                     name, body, functions, plan, source_facts,
-                    analysis_context, gcc_evidence, access_obligations,
+                    analysis_context, function_evidence, access_obligations,
                 ),
-                response_schema=FunctionLedger,
+                response_schema=FunctionBlockPlan,
             )
             raw_outputs.append(raw)
+            ledger = self._block_plan_to_ledger(block_plan)
             if ledger.function_name != name:
                 errors.append(
                     f"ledger function mismatch: expected {name}, "
