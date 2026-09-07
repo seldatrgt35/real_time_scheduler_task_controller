@@ -10,8 +10,11 @@ The experiment uses:
 3. deterministic Python call-graph composition and cycle arithmetic;
 4. cross-pass validation before a result can be marked `SUPPORTED`.
 
-It does not use RAG, compiled ELF/disassembly, measured board time, or an
-arbitrary correction multiplier.
+It does not use board RAG, compiled ELF/disassembly, measured board time, or an
+arbitrary correction multiplier. Like the Gemini `--no-rag` path, it does use
+the checked-in GCC 11.4 `-O0` transformation evidence, hardware profile,
+instruction timing profile, complete source preamble/defines, initialization
+context and source-derived indexed-access obligations.
 
 ```bash
 python -m ollama_staged_cycle_prototype.cli \

@@ -14,13 +14,19 @@ static int Helper(int x) { return x + 1; }
 void Task(void) { for (int i = 0; i < 3; ++i) { Helper(i); } }
 """
 
+MACRO_SOURCE = """
+#define LOOP_COUNT (3)
+void Task(void) { for (int i = 0; i < LOOP_COUNT; ++i) {} }
+"""
+
 
 class FakeClient:
     provider = "ollama"
     model = "test-model"
 
-    def __init__(self, wrong_plan: bool = False):
+    def __init__(self, wrong_plan: bool = False, unresolved_ledger: bool = False):
         self.wrong_plan = wrong_plan
+        self.unresolved_ledger = unresolved_ledger
 
     def predict(self, prompt, response_schema):
         if response_schema is StructurePlan:
@@ -62,12 +68,32 @@ class FakeClient:
                     {"instruction_class": "function_return_with_refill",
                      "dynamic_count_per_invocation": 1, "evidence": "return"},
                 ],
+                "unresolved": (["unknown loop bound"]
+                               if self.unresolved_ledger else []),
             }
         raw = json.dumps(value)
         return response_schema.model_validate(value), raw
 
 
 class StagedPredictorTest(unittest.TestCase):
+    def test_source_facts_preserve_macros_removed_by_function_extraction(self):
+        self.assertEqual(
+            StagedPredictor._source_facts(MACRO_SOURCE),
+            "#define LOOP_COUNT (3)",
+        )
+
+    def test_direct_callee_detection_excludes_transitive_calls(self):
+        functions = {
+            "Task": "void Task(void) { Helper(1); }",
+            "Helper": "int Helper(int x) { return x + 1; }",
+        }
+        self.assertEqual(
+            StagedPredictor._direct_callee_names(
+                "Task", functions["Task"], functions
+            ),
+            {"Helper"},
+        )
+
     def test_composes_per_function_ledgers(self):
         root = Path(__file__).resolve().parents[2]
         prediction, raw = StagedPredictor(root, FakeClient()).predict(SOURCE, "Task")
@@ -77,14 +103,70 @@ class StagedPredictorTest(unittest.TestCase):
         self.assertEqual(prediction.estimated_source_execution_cycles, 47)
         self.assertEqual(len(raw), 3)
 
-    def test_disagreement_is_validation_required_without_estimate(self):
+    def test_python_uses_structure_plan_as_call_count_authority(self):
         root = Path(__file__).resolve().parents[2]
         prediction, _ = StagedPredictor(
             root, FakeClient(wrong_plan=True)
         ).predict(SOURCE, "Task")
+        self.assertEqual(prediction.analysis_status, "SUPPORTED")
+        helper = next(item for item in prediction.function_contributions
+                      if item.function_name == "Helper")
+        self.assertEqual(helper.dynamic_calls, 2)
+
+    def test_unresolved_function_ledger_suppresses_estimate(self):
+        root = Path(__file__).resolve().parents[2]
+        prediction, _ = StagedPredictor(
+            root, FakeClient(unresolved_ledger=True)
+        ).predict(SOURCE, "Task")
         self.assertEqual(prediction.analysis_status, "VALIDATION_REQUIRED")
         self.assertIsNone(prediction.estimated_source_execution_cycles)
-        self.assertTrue(prediction.validation_errors)
+        self.assertTrue(any("Unresolved" in item for item in prediction.warnings))
+
+    def test_rejects_double_counted_pop_pc_return(self):
+        with self.assertRaisesRegex(ValueError, "must not be counted separately"):
+            FunctionLedger.model_validate({
+                "function_name": "Helper",
+                "conditional_branch_evaluations_per_invocation": 0,
+                "instruction_counts": [
+                    {"instruction_class": "function_return_with_refill",
+                     "dynamic_count_per_invocation": 1, "evidence": "return"},
+                    {"instruction_class": "pop_pc_pipeline_refill_worst_case",
+                     "dynamic_count_per_invocation": 1, "evidence": "same return"},
+                ],
+            })
+
+    def test_python_normalizes_redundant_bl_and_branch_arithmetic(self):
+        ledger = FunctionLedger.model_validate({
+            "function_name": "Task",
+            "callees": [{"function_name": "Helper",
+                         "calls_per_invocation": 99, "evidence": "model"}],
+            "conditional_branch_evaluations_per_invocation": 99,
+            "instruction_counts": [
+                {"instruction_class": "function_call_bl_with_refill",
+                 "dynamic_count_per_invocation": 1, "evidence": "model"},
+                {"instruction_class": "conditional_branch_taken",
+                 "dynamic_count_per_invocation": 3, "evidence": "loop"},
+                {"instruction_class": "conditional_branch_not_taken",
+                 "dynamic_count_per_invocation": 1, "evidence": "exit"},
+                {"instruction_class": "function_return_with_refill",
+                 "dynamic_count_per_invocation": 1, "evidence": "return"},
+            ],
+        })
+        functions = {
+            "Task": "void Task(void) { Helper(); }",
+            "Helper": "void Helper(void) { return; }",
+        }
+        normalized, errors = StagedPredictor._normalize_ledger_relations(
+            "Task", ledger, functions,
+            {"Task": 1, "Helper": 12},
+            {"Helper": {"Task"}},
+        )
+        self.assertFalse(errors)
+        self.assertEqual(normalized.callees[0].calls_per_invocation, 12)
+        counts = {item.instruction_class: item.dynamic_count_per_invocation
+                  for item in normalized.instruction_counts}
+        self.assertEqual(counts["function_call_bl_with_refill"], 12)
+        self.assertEqual(normalized.conditional_branch_evaluations_per_invocation, 4)
 
 
 if __name__ == "__main__":

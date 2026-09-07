@@ -86,21 +86,13 @@ class FunctionLedger(BaseModel):
             item.instruction_class: item.dynamic_count_per_invocation
             for item in self.instruction_counts
         }
-        expected_bl = sum(item.calls_per_invocation for item in self.callees)
-        if counts.get("function_call_bl_with_refill", 0) != expected_bl:
-            raise ValueError(
-                "per-call BL count must equal declared callee-call count"
-            )
-        conditional = (
-            counts.get("conditional_branch_taken", 0)
-            + counts.get("conditional_branch_not_taken", 0)
-        )
-        if conditional != self.conditional_branch_evaluations_per_invocation:
-            raise ValueError(
-                "conditional branch ledger count must equal declared evaluations"
-            )
         if counts.get("function_return_with_refill", 0) < 1:
             raise ValueError("each invoked function requires a return")
+        if counts.get("pop_pc_pipeline_refill_worst_case", 0):
+            raise ValueError(
+                "POP PC return must not be counted separately from "
+                "function_return_with_refill"
+            )
         return self
 
 
