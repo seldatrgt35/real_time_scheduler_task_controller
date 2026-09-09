@@ -75,8 +75,7 @@ class StaticBlockInstructionCount(BaseModel):
         "sram_or_stack_load", "sram_or_stack_store",
         "push_or_pop_register_transfer", "multi_register_instruction_overhead",
         "pop_pc_pipeline_refill_worst_case", "function_call_bl_with_refill",
-        "function_return_with_refill", "conditional_branch_taken",
-        "conditional_branch_not_taken", "unconditional_branch_with_refill",
+        "function_return_with_refill",
     ]
     static_count: int = Field(ge=0)
     evidence: str = Field(max_length=500)
@@ -91,23 +90,6 @@ class PredictedBasicBlock(BaseModel):
     instruction_counts: list[StaticBlockInstructionCount] = Field(
         min_length=1, max_length=len(TIMING_PROFILE_CYCLES)
     )
-
-    @model_validator(mode="after")
-    def branch_rows_belong_to_edges(self) -> "PredictedBasicBlock":
-        classes = [item.instruction_class for item in self.instruction_counts]
-        branch_classes = {
-            "conditional_branch_taken",
-            "conditional_branch_not_taken",
-            "unconditional_branch_with_refill",
-        }
-        present = branch_classes & set(classes)
-        if present:
-            raise ValueError(
-                "branch control transfers belong in edges, not block "
-                f"instruction counts: {sorted(present)}"
-            )
-        return self
-
 
 class ControlFlowEdge(BaseModel):
     source_block: str = Field(max_length=128)
