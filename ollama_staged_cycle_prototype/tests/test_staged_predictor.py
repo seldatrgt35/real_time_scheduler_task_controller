@@ -44,7 +44,8 @@ class FakeClient:
                 "loop_bounds": ["i=0..2"],
             }
         elif (response_schema is FunctionBlockPlan
-              and "invocation of function Task." in prompt):
+              and ("invocation of function Task." in prompt
+                   or "invocation of function\nTask." in prompt)):
             value = {
                 "function_name": "Task",
                 "callees": [{"function_name": "Helper",
@@ -171,7 +172,8 @@ class StagedPredictorTest(unittest.TestCase):
         # Task: 3 BL*4 + 3 taken*4 + 1 not-taken + return*4 = 29
         # Helper: (2 ALU + return*4) * 3 calls = 18
         self.assertEqual(prediction.estimated_source_execution_cycles, 47)
-        self.assertEqual(len(raw), 3)
+        # One structure call plus draft+review calls for two functions.
+        self.assertEqual(len(raw), 5)
 
     def test_python_normalizes_structure_plan_from_composed_calls(self):
         root = Path(__file__).resolve().parents[2]

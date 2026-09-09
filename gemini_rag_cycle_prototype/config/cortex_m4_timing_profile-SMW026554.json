@@ -1,0 +1,336 @@
+{
+  "schema_version": "3.0.0",
+  "profile_id": "cortex_m4_r0p1_thumb2_trm_detailed_v3",
+  "purpose": "Opcode-level Cortex-M4 source-to-predicted-assembly timing evidence. This is a zero-wait-state core model, not a complete S32K148 execution-time guarantee.",
+  "architecture": "Armv7E-M Thumb-2",
+  "processor": "Arm Cortex-M4 r0p1",
+  "timing_basis": {
+    "core_cycles": true,
+    "zero_wait_state_instruction_memory": true,
+    "zero_wait_state_data_memory": true,
+    "no_bus_contention": true,
+    "aligned_accesses": true,
+    "no_interrupts_or_exceptions_during_interval": true,
+    "notes": [
+      "TRM Table 3-1 cycle counts assume a zero-wait-state system.",
+      "Exact S32K148 PFlash, cache, prefetch, speculation, crossbar and peripheral wait states are not included.",
+      "Instruction overlap and load/store pipelining mean that summing isolated instruction latency is an engineering approximation, not a cycle-accurate pipeline simulation."
+    ]
+  },
+  "formula_symbols": {
+    "P": {
+      "meaning": "pipeline refill cycles",
+      "minimum": 1,
+      "maximum": 3,
+      "worst_case_used_by_legacy_classes": 3,
+      "depends_on": ["target alignment", "target instruction width", "early target-address speculation"]
+    },
+    "N": {
+      "meaning": "number of registers transferred, including PC or LR when present",
+      "minimum": 1
+    },
+    "B": {
+      "meaning": "barrier completion cycles",
+      "minimum_for_dmb_dsb": 0,
+      "minimum_for_isb": "P",
+      "maximum": null,
+      "policy": "Unresolved unless the memory-system state is supplied."
+    },
+    "W": {
+      "meaning": "cycles waiting for an event or interrupt",
+      "minimum": 0,
+      "maximum": null,
+      "policy": "Unresolved for WFE and WFI."
+    }
+  },
+  "document_cycle_value_inventory": [
+    {
+      "document_value": "0",
+      "applies_to": ["IT when folded onto a preceding 16-bit Thumb instruction"],
+      "conditions": ["folding is achieved"]
+    },
+    {
+      "document_value": "1",
+      "applies_to": [
+        "ordinary move/address-generation", "integer add/subtract",
+        "compare/logical", "shift/rotate", "extend/bitfield/reverse/count",
+        "MUL and listed long multiplies", "SSAT/USAT",
+        "CLREX", "not-taken B<cc>/CBZ/CBNZ", "IT when not folded",
+        "NOP", "SEV", "all Table 3-2 DSP instructions"
+      ]
+    },
+    {
+      "document_value": "1 or 2",
+      "applies_to": ["CPSID", "CPSIE", "MRS", "MSR"]
+    },
+    {
+      "document_value": "2",
+      "applies_to": [
+        "MLA", "MLS", "single LDR/LDRH/LDRB/LDRSH/LDRSB and user variants",
+        "PC-relative LDR", "single STR/STRH/STRB and user variants",
+        "LDREX/LDREXH/LDREXB", "STREX/STREXH/STREXB"
+      ],
+      "footnote": "Neighboring single load/store address and data phases can pipeline; Section 3.3.2 contains sequence-level exceptions."
+    },
+    {
+      "document_value": "2 to 12",
+      "applies_to": ["SDIV", "UDIV"],
+      "operand_dependent": true
+    },
+    {
+      "document_value": "1 + P",
+      "applies_to": [
+        "MOV to PC", "ADD to PC", "taken B<cc>", "B", "BL", "BX", "BLX",
+        "taken CBZ", "taken CBNZ"
+      ]
+    },
+    {
+      "document_value": "2 + P",
+      "applies_to": ["LDR to PC", "TBB", "TBH"],
+      "note": "Table 3-1 notation is preserved; Section 3.3.2 also gives blocking-operation guidance for these forms."
+    },
+    {
+      "document_value": "1 + N",
+      "applies_to": ["LDRD", "STRD", "LDM without PC", "STM", "PUSH", "POP without PC"]
+    },
+    {
+      "document_value": "1 + N + P",
+      "applies_to": ["LDM including PC", "POP including PC"]
+    },
+    {
+      "document_value": "1 + B",
+      "applies_to": ["ISB", "DMB", "DSB"]
+    },
+    {
+      "document_value": "1 + W",
+      "applies_to": ["WFE", "WFI"]
+    },
+    {
+      "document_value": "-",
+      "applies_to": ["SVC", "BKPT"],
+      "meaning": "The table does not state an ordinary fixed execution-cycle value."
+    }
+  ],
+  "instruction_classes": [
+    {"name": "alu_move_compare_shift", "cycles_each": 1, "compatibility_role": "legacy aggregate class"},
+    {"name": "multiply", "cycles_each": 1, "compatibility_role": "MUL and one-cycle multiply/DSP aggregate only; MLA and MLS are two cycles"},
+    {"name": "integer_divide_worst_case", "cycles_each": 12, "compatibility_role": "worst case of SDIV/UDIV 2..12"},
+    {"name": "sram_or_stack_load", "cycles_each": 2, "compatibility_role": "isolated single-transfer TRM table cost before sequence-level pipelining"},
+    {"name": "sram_or_stack_store", "cycles_each": 2, "compatibility_role": "isolated single-transfer TRM table cost; immediate-offset STR can be effectively one cycle under the TRM pipeline rule"},
+    {"name": "push_or_pop_register_transfer", "cycles_each": 1, "compatibility_role": "N term"},
+    {"name": "multi_register_instruction_overhead", "cycles_each": 1, "compatibility_role": "constant one-cycle term in 1+N"},
+    {"name": "pop_pc_pipeline_refill_worst_case", "cycles_each": 3, "compatibility_role": "P term with P=3"},
+    {"name": "function_call_bl_with_refill", "cycles_each": 4, "compatibility_role": "1+P with P=3"},
+    {"name": "function_return_with_refill", "cycles_each": 4, "compatibility_role": "BX LR modeled as 1+P with P=3"},
+    {"name": "conditional_branch_taken", "cycles_each": 4, "compatibility_role": "1+P with P=3"},
+    {"name": "conditional_branch_not_taken", "cycles_each": 1},
+    {"name": "unconditional_branch_with_refill", "cycles_each": 4, "compatibility_role": "1+P with P=3"}
+  ],
+  "opcode_timing_groups": [
+    {
+      "group": "move_and_address",
+      "opcodes": ["MOV", "MOVS", "MOVW", "MOVT", "ADR"],
+      "cycles": 1,
+      "exceptions": [{"form": "MOV PC, Rm", "formula": "1 + P"}]
+    },
+    {
+      "group": "add_subtract",
+      "opcodes": ["ADD", "ADDS", "ADC", "ADCS", "SUB", "SUBS", "SBC", "SBCS", "RSB", "RSBS"],
+      "cycles": 1,
+      "exceptions": [{"form": "ADD PC, PC, Rm", "formula": "1 + P"}]
+    },
+    {
+      "group": "compare_and_logical",
+      "opcodes": ["CMP", "CMN", "AND", "ANDS", "EOR", "EORS", "ORR", "ORRS", "ORN", "ORNS", "BIC", "BICS", "MVN", "MVNS", "TST", "TEQ"],
+      "cycles": 1
+    },
+    {
+      "group": "shift_rotate",
+      "opcodes": ["LSL", "LSLS", "LSR", "LSRS", "ASR", "ASRS", "ROR", "RORS", "RRX"],
+      "cycles": 1,
+      "forms": ["immediate shift", "register-controlled shift"]
+    },
+    {
+      "group": "extend_bitfield_reverse_count",
+      "opcodes": ["SXTH", "SXTB", "UXTH", "UXTB", "UBFX", "SBFX", "BFC", "BFI", "CLZ", "REV", "REV16", "REVSH", "RBIT"],
+      "cycles": 1
+    },
+    {
+      "group": "saturate",
+      "opcodes": ["SSAT", "USAT", "SSAT16", "USAT16"],
+      "cycles": 1
+    },
+    {
+      "group": "basic_multiply",
+      "records": [
+        {"opcodes": ["MUL", "MULS", "SMULL", "UMULL", "SMLAL", "UMLAL"], "cycles": 1},
+        {"opcodes": ["MLA", "MLS"], "cycles": 2}
+      ]
+    },
+    {
+      "group": "integer_divide",
+      "opcodes": ["SDIV", "UDIV"],
+      "minimum_cycles": 2,
+      "maximum_cycles": 12,
+      "worst_case_cycles": 12,
+      "operand_dependent": true,
+      "notes": ["Early termination depends on leading ones and zeroes in the operands."]
+    },
+    {
+      "group": "single_load",
+      "opcodes": ["LDR", "LDRH", "LDRB", "LDRSH", "LDRSB", "LDRT", "LDRHT", "LDRBT", "LDRSHT", "LDRSBT"],
+      "cycles": 2,
+      "conditions": ["destination is not PC", "zero-wait-state aligned memory"],
+      "sequence_effect": "Neighboring single loads/stores can pipeline address and data phases and may complete at one instruction per execution cycle."
+    },
+    {
+      "group": "literal_load",
+      "forms": ["LDR Rd, [PC, #imm]"],
+      "cycles": 2,
+      "conditions": ["destination is not PC", "zero-wait-state code-region access"]
+    },
+    {
+      "group": "load_to_pc",
+      "forms": ["LDR PC, [Rn, op2]"],
+      "table_3_1_formula": "2 + P",
+      "minimum_cycles": 3,
+      "maximum_cycles": 5,
+      "blocking": true,
+      "load_store_section_guidance": "Section 3.3.2 describes LDR PC as at least five cycles with a three-cycle refill, or more when load/fetch stalls. Preserve both the table formula and this sequence-level guidance rather than silently choosing the optimistic minimum."
+    },
+    {
+      "group": "single_store",
+      "opcodes": ["STR", "STRH", "STRB", "STRT", "STRHT", "STRBT"],
+      "cycles": 2,
+      "conditions": ["zero-wait-state aligned memory"],
+      "sequence_effect": "Neighboring single loads/stores can pipeline address and data phases.",
+      "special_case": {"form": "STR Rt, [Rn, #imm]", "effective_cycles": 1, "condition": "address generation and buffered data store overlap the following instruction; stalls can still occur when the store buffer or target bus cannot accept the transfer"}
+    },
+    {
+      "group": "doubleword_transfer",
+      "opcodes": ["LDRD", "STRD"],
+      "formula": "1 + N",
+      "register_transfers_N": 2,
+      "nominal_cycles": 3
+    },
+    {
+      "group": "multiple_load_store",
+      "records": [
+        {"opcodes": ["LDM", "LDMIA", "LDMDB", "STM", "STMIA", "STMDB"], "formula": "1 + N"},
+        {"forms": ["LDM reglist including PC"], "formula": "1 + N + P"}
+      ]
+    },
+    {
+      "group": "stack_transfer",
+      "records": [
+        {"opcodes": ["PUSH"], "forms": ["PUSH {reglist}", "PUSH {reglist, LR}"], "formula": "1 + N"},
+        {"opcodes": ["POP"], "forms": ["POP {reglist}"], "formula": "1 + N"},
+        {"opcodes": ["POP"], "forms": ["POP {reglist, PC}"], "formula": "1 + N + P", "minimum_extra_refill": 1, "maximum_extra_refill": 3}
+      ]
+    },
+    {
+      "group": "exclusive_access",
+      "records": [
+        {"opcodes": ["LDREX", "LDREXH", "LDREXB", "STREX", "STREXH", "STREXB"], "cycles": 2},
+        {"opcodes": ["CLREX"], "cycles": 1}
+      ]
+    },
+    {
+      "group": "branch",
+      "records": [
+        {"forms": ["B<cc> label", "CBZ Rn, label", "CBNZ Rn, label"], "not_taken_cycles": 1, "taken_formula": "1 + P", "taken_minimum_cycles": 2, "taken_maximum_cycles": 4},
+        {"opcodes": ["B", "BL", "BX", "BLX"], "formula": "1 + P", "minimum_cycles": 2, "maximum_cycles": 4},
+        {"opcodes": ["TBB", "TBH"], "table_3_1_formula": "2 + P", "minimum_cycles": 3, "maximum_cycles": 5, "load_store_section_guidance": "Section 3.3.2 decomposes the operation into load, add and three-cycle refill and describes at least six cycles, or more if load/fetch stalls."}
+      ]
+    },
+    {
+      "group": "if_then",
+      "opcodes": ["IT", "ITT", "ITE", "ITTT", "ITTE", "ITET", "ITEE", "ITTTT", "ITTTE", "ITTET", "ITTEE", "ITETT", "ITETE", "ITEET", "ITEEE"],
+      "cycles": 1,
+      "folded_cycles": 0,
+      "fold_condition": "May fold onto a preceding 16-bit Thumb instruction."
+    },
+    {
+      "group": "system_register_and_interrupt_mask",
+      "records": [
+        {"opcodes": ["CPSID", "CPSIE", "MRS", "MSR"], "minimum_cycles": 1, "maximum_cycles": 2},
+        {"opcodes": ["SVC", "BKPT"], "cycles": null, "policy": "Exception/debug behavior must be modeled separately; do not invent a normal instruction cost."}
+      ]
+    },
+    {
+      "group": "hint_wait_barrier",
+      "records": [
+        {"opcodes": ["NOP", "SEV"], "cycles": 1},
+        {"opcodes": ["WFE", "WFI"], "formula": "1 + W", "maximum_cycles": null},
+        {"opcodes": ["ISB", "DMB", "DSB"], "formula": "1 + B", "maximum_cycles": null}
+      ]
+    },
+    {
+      "group": "dsp_single_cycle",
+      "cycles": 1,
+      "opcodes": [
+        "SMMLA", "SMMLS", "SMMUL", "SMMLAR", "SMMLSR", "SMMULR",
+        "SMLABB", "SMLABT", "SMLATB", "SMLATT", "SMLALBB", "SMLALBT", "SMLALTB", "SMLALTT",
+        "SMLAD", "SMLADX", "SMLALD", "SMLALDX", "SMLAWB", "SMLAWT", "SMLSD", "SMLSDX", "SMLSLD", "SMLSLDX",
+        "SMUAD", "SMUADX", "SMULBB", "SMULBT", "SMULTB", "SMULTT", "SMULWB", "SMULWT", "SMUSD", "SMUSDX",
+        "UMAAL", "USAD8", "USADA8", "PKHBT", "PKHTB", "SEL",
+        "SXTAB", "SXTAB16", "SXTAH", "SXTB16", "UXTAB", "UXTAB16", "UXTAH", "UXTB16",
+        "QADD", "QADD16", "QADD8", "QASX", "QDADD", "QDSUB", "QSAX", "QSUB", "QSUB16", "QSUB8",
+        "SADD16", "SADD8", "SASX", "SSAX", "SSUB16", "SSUB8", "SHADD16", "SHADD8", "SHASX", "SHSAX", "SHSUB16", "SHSUB8",
+        "UADD16", "UADD8", "UASX", "USAX", "USUB16", "USUB8", "UHADD16", "UHADD8", "UHASX", "UHSAX", "UHSUB16", "UHSUB8",
+        "UQADD16", "UQADD8", "UQASX", "UQSAX", "UQSUB16", "UQSUB8"
+      ],
+      "notes": ["Cortex-M4 TRM Table 3-2 lists the implemented DSP instruction set at one cycle."]
+    }
+  ],
+  "floating_point_policy": {
+    "implemented_on": "Cortex-M4F configurations only",
+    "opcode_families": ["VADD", "VSUB", "VMUL", "VDIV", "VSQRT", "VMLA", "VMLS", "VNMLA", "VNMLS", "VNMUL", "VCMP", "VCMPE", "VCVT", "VMOV", "VLDR", "VSTR", "VPUSH", "VPOP", "VABS", "VNEG"],
+    "timing_status": "not_priced",
+    "reason": "The cited Cortex-M4 core Table 3-1 and DSP Table 3-2 do not provide a complete context-independent FPU cycle table. Do not map FPU operations to the integer one-cycle class or invent costs.",
+    "required_action": "Return unresolved unless an authoritative Cortex-M4F FPU timing profile and the S32K148 FPU configuration are supplied."
+  },
+  "load_store_pipeline_rules": [
+    "Neighboring single load/store instructions can pipeline address and data phases, allowing one instruction per execution cycle in qualifying sequences.",
+    "STR Rt,[Rn,#imm] is described as one cycle because address generation and the data store overlap the following instruction.",
+    "A full or disabled store buffer, a non-bufferable target, bus stalls, unaligned accesses, bit-band accesses and memory-region boundaries can add delay.",
+    "LDR to PC is blocking and additionally incurs pipeline refill P.",
+    "Sequence-level effects must be modeled from instruction order; they cannot be recovered from an unordered aggregate ledger."
+  ],
+  "multi_register_rule": "For PUSH, POP, LDM, STM, LDRD, or STRD use the exact TRM formula and count N from the actual register list. POP/LDM including PC additionally incurs P.",
+  "pipeline_refill_rule": "P ranges from 1 to 3. Legacy aggregate classes use conservative P=3; opcode-level estimates should retain the range unless target alignment, instruction width and speculation prove a specific value.",
+  "unaligned_access_policy": "Not included in the zero-wait-state aligned base cost. Treat any unaligned or cross-region access as unresolved unless its exact transfer behavior is supplied.",
+  "pflash_policy": "S32K148 PFlash/cache/prefetch/speculation costs are outside the Cortex-M4 core table. Do not invent a fixed wait-state count or correction multiplier. Use a separate, configuration-specific NXP memory-system profile.",
+  "unknown_opcode_policy": "An opcode or form absent from this profile is unresolved. Never silently map it to alu_move_compare_shift.",
+  "coverage": {
+    "arm_ddi_0439b_table_3_1": "covered at opcode-family and exceptional-form level",
+    "arm_ddi_0439b_table_3_2": "covered; all listed DSP operations are one-cycle records",
+    "section_3_3_2_sequence_effects": "represented as conditional sequence rules, not collapsed into fixed per-opcode costs",
+    "cortex_m4f_fpu": "explicitly unresolved because the cited core/DSP timing tables do not provide a complete context-independent FPU timing table",
+    "s32k148_memory_system": "explicitly external to this core profile and requires a board-configuration-specific profile"
+  },
+  "sources": [
+    {
+      "id": "ARM_DDI_0439B",
+      "title": "Cortex-M4 Technical Reference Manual, Revision r0p1",
+      "sections": ["3.3.1 Cortex-M4 instructions", "Table 3-1", "Table 3-2", "3.3.2 Load/store timings"],
+      "url": "https://developer.arm.com/documentation/100166/0001/Programmers-Model/Instruction-set-summary",
+      "authority": "Arm"
+    },
+    {
+      "id": "ARM_DUI_0553",
+      "title": "Cortex-M4 Devices Generic User Guide",
+      "sections": ["Chapter 3 Cortex-M4 Instruction Set"],
+      "url": "https://documentation-service.arm.com/static/5f2ac76d60a93e65927bbdc5",
+      "authority": "Arm"
+    },
+    {
+      "id": "S32K1XXRM",
+      "title": "S32K1xx Series Reference Manual",
+      "sections": ["Flash Memory Controller", "System Integration and memory map"],
+      "url": "https://www.nxp.com/products/S32K1",
+      "authority": "NXP",
+      "use": "Device-specific memory effects only; no fixed cost is inferred without the actual board configuration."
+    }
+  ]
+}

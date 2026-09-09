@@ -203,6 +203,65 @@ Names of other supplied functions:
 {json.dumps([item for item in all_functions if item != name])}
 """
 
+    def _review_prompt(
+        self, name: str, body: str, initial: FunctionBlockPlan,
+        source_facts: str, analysis_context: str, gcc_evidence: list[dict],
+        access_obligations: list[str],
+    ) -> str:
+        return f"""You are pass 3, an independent critical reviewer of a predicted
+GCC 11.4 -O0 Thumb-2 assembly shape for exactly one invocation of function
+{name}. Return a COMPLETE corrected FunctionBlockPlan, not comments or a patch.
+
+The first prediction is only a draft. Reconstruct and correct it by comparing
+every C statement and control-flow region against the GCC micro-patterns.
+
+Mandatory review:
+- selected_path must list the executed block IDs in order and may not be empty.
+- Cover prologue, parameter homing, local initialization, loop initialization,
+  loop body, increment, all N successful conditions, the final failed loop
+  condition, post-loop branches/output construction, epilogue and return.
+- A loop condition executed N+1 times has N taken and one not-taken outcome;
+  represent those outcomes without calling all N+1 evaluations taken.
+- instruction_counts are STATIC per one block execution. Block execution count
+  performs the only dynamic multiplication.
+- Evidence for a class may mention only operations belonging to that class:
+  LDR/LDRB/LDRH/LDRSH are loads; STR/STRB/STRH are stores; MOV/UXT/SXT,
+  ADD/SUB/CMP/shifts/logical operations are ALU; B is unconditional; B<cond>
+  is conditional; BL is a call. Never place STR or B under ALU, MOV/UXT under
+  load, or B under store.
+- Audit GCC -O0 stack parameter homing, repeated local reload/store, indexed
+  address formation, extensions, PUSH/POP register transfers and multi-register
+  instruction overhead. Do not optimize them away.
+- Include all post-loop if/else and final sink/output expressions. A valid JSON
+  shape is not evidence that the draft assembly is complete.
+- Do not use board measurements, correction factors, margins or desired cycles.
+
+Hardware profile:
+{json.dumps(self.hardware, indent=2)}
+
+GCC 11.4 -O0 transformation evidence:
+{json.dumps(gcc_evidence, indent=2)}
+
+Indexed-access obligations:
+{json.dumps(access_obligations, indent=2)}
+
+Source constants/macros:
+```c
+{source_facts}
+```
+
+Initialization/path context (outside timed interval):
+{analysis_context or "No additional context supplied."}
+
+Function source:
+```c
+{body}
+```
+
+Draft block plan to audit and replace:
+{initial.model_dump_json(indent=2)}
+"""
+
     @staticmethod
     def _block_plan_to_ledger(plan: FunctionBlockPlan) -> FunctionLedger:
         """Deterministically expand static block rows into a per-call ledger."""
@@ -569,6 +628,15 @@ Names of other supplied functions:
                 response_schema=FunctionBlockPlan,
             )
             raw_outputs.append(raw)
+            reviewed_plan, raw = self.client.predict(
+                self._review_prompt(
+                    name, body, block_plan, source_facts, analysis_context,
+                    function_evidence, access_obligations,
+                ),
+                response_schema=FunctionBlockPlan,
+            )
+            raw_outputs.append(raw)
+            block_plan = reviewed_plan
             ledger = self._block_plan_to_ledger(block_plan)
             if ledger.function_name != name:
                 errors.append(
