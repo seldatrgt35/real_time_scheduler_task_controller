@@ -43,6 +43,15 @@ class StagedPredictor:
         self.timing = json.loads(
             (config / "cortex_m4_timing_profile.json").read_text(encoding="utf-8")
         )
+        self.timing_cycles = {
+            item["name"]: item["cycles_each"]
+            for item in self.timing["instruction_classes"]
+        }
+        if set(self.timing_cycles) != set(TIMING_PROFILE_CYCLES):
+            raise ValueError(
+                "timing profile instruction classes disagree with the "
+                "structured-output schema"
+            )
         self.gcc_pattern_path = (
             self.root / "gemini_rag_cycle_prototype" / "knowledge"
             / "gcc_o0_patterns.json"
@@ -147,7 +156,7 @@ Source-derived control-flow regions that must all be represented:
 {json.dumps(control_obligations, indent=2)}
 
 Allowed instruction classes and cycles:
-{json.dumps(TIMING_PROFILE_CYCLES, indent=2)}
+{json.dumps(self.timing_cycles, indent=2)}
 
 Pass-1 structure plan:
 {plan.model_dump_json(indent=2)}
@@ -169,16 +178,20 @@ Rules:
 - Each block has its dynamic execution_count_per_invocation on the selected
   path. instruction_counts inside a block are STATIC counts for one execution
   of that block; never pre-multiply them by the block execution count.
-- Emit at most one instruction_counts row per instruction class per block.
+- Do not put conditional or unconditional branch classes in a block's
+  instruction_counts. Represent every executed control-flow transfer in edges.
+- For a conditional block, emit exactly one conditional_taken edge and one
+  conditional_not_taken edge. Their execution counts must sum exactly to the
+  source block execution count. This permits mixed loop outcomes such as two
+  taken and two not-taken evaluations.
+- Use a fallthrough edge for sequential flow (zero branch-refill charge) and an
+  unconditional edge only where GCC emits an actual B instruction.
+- Prefer one instruction_counts row per instruction class per block. If separate
+  rows are needed, keep every row static; Python safely aggregates duplicates.
 - The complete response must remain compact: never copy GCC evidence records,
   source code, basic blocks, or individual instructions into the JSON. Use no
   more than the 13 allowed aggregate instruction-class rows and keep each
-  evidence string to one short mnemonic histogram.
-- The response schema deliberately uses compact JSON keys. Use those exact
-  schema keys. Keep src and why under 12 words. In each op field list mnemonic
-  histogram entries only, separated by semicolons (for example "CMP x1; BLS.N
-  x1" or "LDR x3; LDRH x2"). Their multiplicities must sum to n. Never emit
-  operands, addresses, source text or explanatory prose in op.
+  evidence string to one short sentence.
 - Count GCC -O0 stack parameter homing, local loads/stores, loop control,
   comparisons, address calculations, prologue and epilogue.
 - Audit every relevant indexed-access obligation at its full dynamic
@@ -199,15 +212,6 @@ Rules:
 - For PUSH/POP, push_or_pop_register_transfer is the number of transferred
   registers and multi_register_instruction_overhead is the number of executed
   PUSH/POP instructions. Do not treat a whole register list as one transfer.
-- A conditional branch row represents the selected outcome for that block.
-  Its static count is normally one; Python multiplies by block executions.
-- Every emitted B<cond> mnemonic must be counted in either
-  conditional_branch_taken or conditional_branch_not_taken, never in the ALU
-  class. Every emitted B mnemonic must use unconditional_branch_with_refill.
-- The evidence text for each row must name only mnemonics belonging to that
-  row's instruction class. The response validator rejects mixed classes.
-- Account for every source-derived control-flow region listed above. Do not
-  stop the CFG at the loop exit when executable post-loop statements remain.
 - Do not calculate final cycles and do not apply a margin.
 
 Function under analysis:
@@ -241,21 +245,17 @@ Mandatory review:
   represent those outcomes without calling all N+1 evaluations taken.
 - instruction_counts are STATIC per one block execution. Block execution count
   performs the only dynamic multiplication.
+- Conditional outcomes belong exclusively in edges. For every conditional
+  source block, taken-edge executions plus not-taken-edge executions must equal
+  that block's execution count. Never place a pre-multiplied branch count in a
+  block instruction row.
+- A fallthrough edge has no refill cost. Use unconditional only for an actual
+  emitted B instruction.
 - Evidence for a class may mention only operations belonging to that class:
   LDR/LDRB/LDRH/LDRSH are loads; STR/STRB/STRH are stores; MOV/UXT/SXT,
   ADD/SUB/CMP/shifts/logical operations are ALU; B is unconditional; B<cond>
   is conditional; BL is a call. Never place STR or B under ALU, MOV/UXT under
   load, or B under store.
-- Keep the corrected response compact. Use the short keys from the response
-  schema, keep src/why under 12 words, and put mnemonic histograms only in op
-  fields (for example "LDR x3; LDRH x2"), without operands, addresses or prose.
-- Count every B<cond> visible in the corrected assembly shape as exactly one
-  conditional branch outcome for each execution of its block. A function
-  containing executed C conditions cannot have zero conditional branches.
-- Do not combine mutually exclusive outcomes into one fictitious invocation.
-  execution_count_per_invocation must describe the selected feasible path;
-  put genuinely input-dependent path mixtures in unresolved rather than
-  silently executing every arm.
 - Audit GCC -O0 stack parameter homing, repeated local reload/store, indexed
   address formation, extensions, PUSH/POP register transfers and multi-register
   instruction overhead. Do not optimize them away.
@@ -272,8 +272,8 @@ GCC 11.4 -O0 transformation evidence:
 Indexed-access obligations:
 {json.dumps(access_obligations, indent=2)}
 
-Source-derived control-flow regions that must all be represented by block
-source_region entries and executed-path counts:
+Source-derived control-flow regions that must all be represented by blocks and
+executed edge counts:
 {json.dumps(control_obligations, indent=2)}
 
 Source constants/macros:
@@ -295,13 +295,16 @@ Draft block plan to audit and replace:
 
     @staticmethod
     def _control_flow_obligations(body: str) -> list[str]:
-        """Expose source control regions to the LLM without synthesizing CFG."""
+        """Expose source control regions without synthesizing their CFG."""
         obligations: list[str] = []
         for line_number, raw_line in enumerate(body.splitlines(), start=1):
             line = re.sub(r"/\*.*?\*/", "", raw_line).strip()
             if not line:
                 continue
-            if re.search(r"\b(?:for|while|if|else\s+if|else|switch|case|return)\b", line):
+            if re.search(
+                r"\b(?:for|while|if|else\s+if|else|switch|case|return)\b",
+                line,
+            ):
                 obligations.append(f"line {line_number}: {line[:240]}")
         return obligations
 
@@ -319,6 +322,20 @@ Draft block plan to audit and replace:
                     f"{block.block_id} x{block.execution_count_per_invocation}: "
                     f"{item.static_count} ({item.evidence})"
                 )
+        edge_class = {
+            "conditional_taken": "conditional_branch_taken",
+            "conditional_not_taken": "conditional_branch_not_taken",
+            "unconditional": "unconditional_branch_with_refill",
+        }
+        for edge in plan.edges:
+            instruction_class = edge_class.get(edge.kind)
+            if instruction_class is None:
+                continue
+            counts[instruction_class] += edge.execution_count_per_invocation
+            evidence[instruction_class].append(
+                f"{edge.source_block}->{edge.target_block}: "
+                f"{edge.execution_count_per_invocation} ({edge.evidence})"
+            )
         conditional = counts.get("conditional_branch_taken", 0) + counts.get(
             "conditional_branch_not_taken", 0
         )
@@ -663,10 +680,14 @@ Draft block plan to audit and replace:
             function_evidence = retrieve_gcc_evidence(
                 source, self.gcc_pattern_path, function_name=name
             )
+            function_access_obligations = indexed_access_obligations(
+                source, name
+            )
             block_plan, raw = self.client.predict(
                 self._ledger_prompt(
                     name, body, functions, plan, source_facts,
-                    analysis_context, function_evidence, access_obligations,
+                    analysis_context, function_evidence,
+                    function_access_obligations,
                 ),
                 response_schema=FunctionBlockPlan,
             )
@@ -674,12 +695,21 @@ Draft block plan to audit and replace:
             reviewed_plan, raw = self.client.predict(
                 self._review_prompt(
                     name, body, block_plan, source_facts, analysis_context,
-                    function_evidence, access_obligations,
+                    function_evidence, function_access_obligations,
                 ),
                 response_schema=FunctionBlockPlan,
             )
             raw_outputs.append(raw)
             block_plan = reviewed_plan
+            has_source_condition = bool(re.search(r"\b(?:if|for|while)\s*\(", body))
+            has_conditional_edges = any(
+                edge.kind.startswith("conditional_") for edge in block_plan.edges
+            )
+            if has_source_condition and not has_conditional_edges:
+                errors.append(
+                    f"{name} contains source conditions but its CFG has no "
+                    "conditional edges"
+                )
             ledger = self._block_plan_to_ledger(block_plan)
             if ledger.function_name != name:
                 errors.append(
@@ -730,7 +760,7 @@ Draft block plan to audit and replace:
             calls = composed_calls.get(name, planned.get(name, 0))
             per_call_cycles = sum(
                 item.dynamic_count_per_invocation
-                * TIMING_PROFILE_CYCLES[item.instruction_class]
+                * self.timing_cycles[item.instruction_class]
                 for item in ledger.instruction_counts
             )
             contributions.append(FunctionContribution(
@@ -748,8 +778,8 @@ Draft block plan to audit and replace:
             AggregateInstructionCycles(
                 instruction_class=name,
                 dynamic_count=count,
-                cycles_each=TIMING_PROFILE_CYCLES[name],
-                total_cycles=count * TIMING_PROFILE_CYCLES[name],
+                cycles_each=self.timing_cycles[name],
+                total_cycles=count * self.timing_cycles[name],
             )
             for name, count in sorted(aggregate_counts.items())
         ]

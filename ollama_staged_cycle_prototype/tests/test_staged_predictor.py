@@ -48,27 +48,53 @@ class FakeClient:
                    or "invocation of function\nTask." in prompt)):
             value = {
                 "function_name": "Task",
+                "selected_path": [
+                    "entry", "loop_condition", "loop_body", "exit"
+                ],
                 "callees": [{"function_name": "Helper",
                              "calls_per_invocation": 3, "evidence": "loop"}],
-                "blocks": [{
-                    "block_id": "entry", "source_region": "whole function",
-                    "execution_count_per_invocation": 1,
-                    "execution_count_evidence": "one invocation",
-                    "instruction_counts": [
-                        {"instruction_class": "function_call_bl_with_refill",
-                         "static_count": 3, "evidence": "calls"},
-                        {"instruction_class": "conditional_branch_taken",
-                         "static_count": 3, "evidence": "loop"},
-                        {"instruction_class": "conditional_branch_not_taken",
-                         "static_count": 1, "evidence": "exit"},
-                        {"instruction_class": "function_return_with_refill",
-                         "static_count": 1, "evidence": "return"},
-                    ],
-                }],
+                "blocks": [
+                    {"block_id": "entry", "source_region": "entry",
+                     "execution_count_per_invocation": 1,
+                     "execution_count_evidence": "one invocation",
+                     "instruction_counts": [{"instruction_class":
+                         "alu_move_compare_shift", "static_count": 0,
+                         "evidence": "none"}]},
+                    {"block_id": "loop_condition", "source_region": "loop test",
+                     "execution_count_per_invocation": 4,
+                     "execution_count_evidence": "N plus one",
+                     "successors": ["loop_body", "exit"],
+                     "instruction_counts": [{"instruction_class":
+                         "alu_move_compare_shift", "static_count": 0,
+                         "evidence": "omitted in fixture"}]},
+                    {"block_id": "loop_body", "source_region": "loop body",
+                     "execution_count_per_invocation": 3,
+                     "execution_count_evidence": "three iterations",
+                     "instruction_counts": [{"instruction_class":
+                         "function_call_bl_with_refill", "static_count": 1,
+                         "evidence": "one call"}]},
+                    {"block_id": "exit", "source_region": "return",
+                     "execution_count_per_invocation": 1,
+                     "execution_count_evidence": "one invocation",
+                     "instruction_counts": [{"instruction_class":
+                         "function_return_with_refill", "static_count": 1,
+                         "evidence": "return"}]},
+                ],
+                "edges": [
+                    {"source_block": "loop_condition",
+                     "target_block": "loop_body", "kind": "conditional_taken",
+                     "execution_count_per_invocation": 3,
+                     "evidence": "three successful tests"},
+                    {"source_block": "loop_condition",
+                     "target_block": "exit", "kind": "conditional_not_taken",
+                     "execution_count_per_invocation": 1,
+                     "evidence": "final failed test"},
+                ],
             }
         else:
             value = {
                 "function_name": "Helper",
+                "selected_path": ["entry"],
                 "blocks": [{
                     "block_id": "entry", "source_region": "whole function",
                     "execution_count_per_invocation": 1,
@@ -148,6 +174,7 @@ class StagedPredictorTest(unittest.TestCase):
     def test_static_block_counts_are_expanded_by_python(self):
         block_plan = FunctionBlockPlan.model_validate({
             "function_name": "Task",
+            "selected_path": ["loop_body"],
             "blocks": [{
                 "block_id": "loop_body",
                 "source_region": "loop body",
