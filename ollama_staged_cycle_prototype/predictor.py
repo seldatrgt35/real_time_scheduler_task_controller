@@ -124,6 +124,7 @@ Additional source/initialization context (outside the timed interval):
             if candidate != name
             and re.search(rf"\b{re.escape(candidate)}\s*\(", body)
         )
+        control_obligations = self._control_flow_obligations(body)
         return f"""You are pass 2 of a staged GCC 11.4 -O0 assembly-shape analysis.
 Predict static Thumb-2 instruction-class counts separately for every basic
 block of EXACTLY ONE invocation of function {name}. Do not emit a whole-function
@@ -141,6 +142,9 @@ Gemini no-RAG path; these are compiler examples, not board measurements):
 
 Source-derived indexed-access obligations:
 {json.dumps(access_obligations, indent=2)}
+
+Source-derived control-flow regions that must all be represented:
+{json.dumps(control_obligations, indent=2)}
 
 Allowed instruction classes and cycles:
 {json.dumps(TIMING_PROFILE_CYCLES, indent=2)}
@@ -169,7 +173,12 @@ Rules:
 - The complete response must remain compact: never copy GCC evidence records,
   source code, basic blocks, or individual instructions into the JSON. Use no
   more than the 13 allowed aggregate instruction-class rows and keep each
-  evidence string to one short sentence.
+  evidence string to one short mnemonic histogram.
+- The response schema deliberately uses compact JSON keys. Use those exact
+  schema keys. Keep src and why under 12 words. In each op field list mnemonic
+  histogram entries only, separated by semicolons (for example "CMP x1; BLS.N
+  x1" or "LDR x3; LDRH x2"). Their multiplicities must sum to n. Never emit
+  operands, addresses, source text or explanatory prose in op.
 - Count GCC -O0 stack parameter homing, local loads/stores, loop control,
   comparisons, address calculations, prologue and epilogue.
 - Audit every relevant indexed-access obligation at its full dynamic
@@ -192,6 +201,13 @@ Rules:
   PUSH/POP instructions. Do not treat a whole register list as one transfer.
 - A conditional branch row represents the selected outcome for that block.
   Its static count is normally one; Python multiplies by block executions.
+- Every emitted B<cond> mnemonic must be counted in either
+  conditional_branch_taken or conditional_branch_not_taken, never in the ALU
+  class. Every emitted B mnemonic must use unconditional_branch_with_refill.
+- The evidence text for each row must name only mnemonics belonging to that
+  row's instruction class. The response validator rejects mixed classes.
+- Account for every source-derived control-flow region listed above. Do not
+  stop the CFG at the loop exit when executable post-loop statements remain.
 - Do not calculate final cycles and do not apply a margin.
 
 Function under analysis:
@@ -208,6 +224,7 @@ Names of other supplied functions:
         source_facts: str, analysis_context: str, gcc_evidence: list[dict],
         access_obligations: list[str],
     ) -> str:
+        control_obligations = self._control_flow_obligations(body)
         return f"""You are pass 3, an independent critical reviewer of a predicted
 GCC 11.4 -O0 Thumb-2 assembly shape for exactly one invocation of function
 {name}. Return a COMPLETE corrected FunctionBlockPlan, not comments or a patch.
@@ -229,6 +246,16 @@ Mandatory review:
   ADD/SUB/CMP/shifts/logical operations are ALU; B is unconditional; B<cond>
   is conditional; BL is a call. Never place STR or B under ALU, MOV/UXT under
   load, or B under store.
+- Keep the corrected response compact. Use the short keys from the response
+  schema, keep src/why under 12 words, and put mnemonic histograms only in op
+  fields (for example "LDR x3; LDRH x2"), without operands, addresses or prose.
+- Count every B<cond> visible in the corrected assembly shape as exactly one
+  conditional branch outcome for each execution of its block. A function
+  containing executed C conditions cannot have zero conditional branches.
+- Do not combine mutually exclusive outcomes into one fictitious invocation.
+  execution_count_per_invocation must describe the selected feasible path;
+  put genuinely input-dependent path mixtures in unresolved rather than
+  silently executing every arm.
 - Audit GCC -O0 stack parameter homing, repeated local reload/store, indexed
   address formation, extensions, PUSH/POP register transfers and multi-register
   instruction overhead. Do not optimize them away.
@@ -244,6 +271,10 @@ GCC 11.4 -O0 transformation evidence:
 
 Indexed-access obligations:
 {json.dumps(access_obligations, indent=2)}
+
+Source-derived control-flow regions that must all be represented by block
+source_region entries and executed-path counts:
+{json.dumps(control_obligations, indent=2)}
 
 Source constants/macros:
 ```c
@@ -261,6 +292,18 @@ Function source:
 Draft block plan to audit and replace:
 {initial.model_dump_json(indent=2)}
 """
+
+    @staticmethod
+    def _control_flow_obligations(body: str) -> list[str]:
+        """Expose source control regions to the LLM without synthesizing CFG."""
+        obligations: list[str] = []
+        for line_number, raw_line in enumerate(body.splitlines(), start=1):
+            line = re.sub(r"/\*.*?\*/", "", raw_line).strip()
+            if not line:
+                continue
+            if re.search(r"\b(?:for|while|if|else\s+if|else|switch|case|return)\b", line):
+                obligations.append(f"line {line_number}: {line[:240]}")
+        return obligations
 
     @staticmethod
     def _block_plan_to_ledger(plan: FunctionBlockPlan) -> FunctionLedger:
