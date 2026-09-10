@@ -26,9 +26,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     if not args.source.exists():
         raise FileNotFoundError(f"C source not found: {args.source}")
-    # FunctionLedger is intentionally compact; a larger budget encourages
-    # small local models to repeat per-instruction rows until truncation.
-    os.environ.setdefault("OLLAMA_NUM_PREDICT", "3072")
+    # Allow sufficient token budget for basic blocks, edges, and instruction counts
+    # while respecting external environment overrides if already provided.
+    os.environ.setdefault("OLLAMA_NUM_PREDICT", "6144")
     client = OllamaClient()
     prediction, raw_outputs = StagedPredictor(
         args.repository_root, client

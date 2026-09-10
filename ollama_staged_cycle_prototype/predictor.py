@@ -181,10 +181,13 @@ Rules:
   unconditional edge only where GCC emits an actual B instruction.
 - Prefer one instruction_counts row per instruction class per block. If separate
   rows are needed, keep every row static; Python safely aggregates duplicates.
-- The complete response must remain compact: never copy GCC evidence records,
-  source code, basic blocks, or individual instructions into the JSON. Use no
-  more than the 13 allowed aggregate instruction-class rows and keep each
-  evidence string to one short sentence.
+- Consolidate straight-line statements between branches and loops into coherent
+  blocks (strictly at most 15 to 20 blocks per function). Do not over-segment into micro-blocks.
+- Consistency requirement: Every block referenced in selected_path, edges, or
+  successors MUST be explicitly defined in blocks. Never leave blocks undefined.
+- Omit instruction classes with static_count 0: only emit classes with static_count >= 1.
+- The complete response must remain compact: keep each evidence and source_region string
+  to a short phrase (under 10 words). Never copy source code or C statements into evidence.
 - Count GCC -O0 stack parameter homing, local loads/stores, loop control,
   comparisons, address calculations, prologue and epilogue.
 - Audit every relevant indexed-access obligation at its full dynamic

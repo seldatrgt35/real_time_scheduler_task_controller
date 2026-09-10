@@ -176,28 +176,44 @@ class OllamaClient:
                 )
                 self._save_invalid_response(raw, attempt + 1, exc)
                 if attempt + 1 < attempts:
-                    current_prompt = self._repair_prompt(prompt, exc)
+                    current_prompt = self._repair_prompt(prompt, exc, response_schema)
                     continue
                 raise
         assert last_error is not None
         raise last_error
 
     @staticmethod
-    def _repair_prompt(original_prompt: str, error: Exception) -> str:
+    def _repair_prompt(
+        original_prompt: str,
+        error: Exception,
+        response_schema: Type[BaseModel] | None = None,
+    ) -> str:
+        schema_fields = getattr(response_schema, "model_fields", {}) if response_schema else {}
+        if "estimated_source_execution_cycles" in schema_fields:
+            specific_guidance = (
+                "For every instruction ledger entry, total_cycles must equal dynamic_count * cycles_each. "
+                "Use only instruction classes and exact cycles_each values present in the supplied timing profile. "
+                "estimated_source_execution_cycles must equal the sum of all ledger total_cycles values, and "
+                "estimated_source_execution_us must equal that sum divided by 48.0 exactly. "
+                "PARTIAL requires a non-empty ledger and both estimates. confidence_percent must not exceed 50.\n"
+            )
+        elif "selected_path" in schema_fields and "blocks" in schema_fields:
+            specific_guidance = (
+                "Ensure every block referenced in selected_path, edge source_block/target_block, and successors "
+                "is explicitly and fully defined in the 'blocks' list. Keep the basic blocks consolidated and "
+                "do not emit unlisted or incomplete blocks.\n"
+            )
+        else:
+            specific_guidance = ""
+
         return (
             original_prompt
             + "\n\nVALIDATION REPAIR REQUIRED\n"
             + "Regenerate the complete JSON response from scratch. Return JSON "
-              "only and satisfy the supplied response schema. Do not return a "
-              "patch or explanation. For every instruction ledger entry, "
-              "total_cycles must equal dynamic_count * cycles_each. Use only "
-              "instruction classes and exact cycles_each values present in the "
-              "supplied timing profile. estimated_source_execution_cycles must "
-              "equal the sum of all ledger total_cycles values, and "
-              "estimated_source_execution_us must equal that sum divided by "
-              "48.0 exactly. PARTIAL requires a non-empty ledger and both "
-              "estimates. confidence_percent must not exceed 50.\n"
-              "Validator diagnostics:\n"
+              "only and strictly satisfy the supplied response schema. Do not return a "
+              "patch, commentary, or markdown markers.\n"
+            + specific_guidance
+            + "Validator diagnostics:\n"
             + str(error)
         )
 
