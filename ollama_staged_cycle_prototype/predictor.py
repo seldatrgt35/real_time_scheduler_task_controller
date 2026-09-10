@@ -211,17 +211,23 @@ Rules:
   unconditional edge only where GCC emits an actual B instruction.
 - Prefer one instruction_counts row per instruction class per block. If separate
   rows are needed, keep every row static; Python safely aggregates duplicates.
-- Basic block definition and cohesion:
-  * A basic block is a maximal sequence of straight-line instructions executed together
-    without internal branches or joins. Delimit basic blocks ONLY by branch instructions
-    and branch targets/labels.
-  * Prologue, parameter homing, and initial loop index initialization form ONE contiguous
+- Basic block definition and Control Flow Graph (CFG) rules:
+  * A basic block CANNOT contain control flow. Every loop (`for`, `while`) and conditional
+    (`if`, `else if`, `switch`) inherently introduces control-flow boundaries and CANNOT be
+    merged into a flat straight-line block.
+  * Every loop (outer OR nested) MUST have:
+    (a) A loop condition / test block evaluated N+1 times, with its conditional branch edges.
+    (b) The loop body.
+    (c) A loop latch / counter increment block executed N times (updating the loop variable
+        in GCC -O0 via load, add, store).
+  * Every if statement has a condition test block with taken and not-taken branch edges.
+  * Prologue, parameter homing, and initial outer loop index initialization form ONE contiguous
     entry basic block; do NOT separate them into artificial micro-blocks.
-  * A structured loop body with straight-line code is ONE basic block leading to the loop latch/test.
-  * Static instruction density: Ground static instruction counts strictly in the C statements.
-    In Thumb-2 GCC -O0, a typical scalar C assignment or arithmetic update takes only 2 to 4
-    static instructions (load operand, ALU op, store result). Never hallucinate duplicate
-    loads or stores for the same variable within a single basic block.
+  * Straight-line statements between branch boundaries form ONE maximal basic block.
+  * Static instruction density: Ground static instruction counts strictly in the C statements
+    contained in that block. In Thumb-2 GCC -O0, a typical scalar C assignment or arithmetic
+    update takes 2 to 4 static instructions (load operand, ALU op, store result). Never hallucinate
+    duplicate loads or stores for the same variable within a single basic block.
 - Consistency requirement: Every block referenced in selected_path, edges, or
   successors MUST be explicitly defined in blocks. Never leave blocks undefined.
 - Omit instruction classes with static_count 0: only emit classes with static_count >= 1.
@@ -279,12 +285,14 @@ every C statement and control-flow region against the GCC micro-patterns.
 
 Mandatory review:
 - selected_path must list the executed block IDs in order and may not be empty.
-- Audit basic block cohesion: Ensure straight-line code is consolidated into maximal basic blocks
-  delimited only by branch points. Do not keep over-segmented micro-blocks where an entry block
-  or loop body was artificially split into sub-blocks.
+- Audit basic block cohesion and CFG completeness:
+  * Ensure that every loop (`for`, `while`) and conditional (`if`) from 'Source-derived control-flow regions'
+    has its distinct condition test block, executed branch edges, and (for loops) latch/increment block.
+  * An inner loop or if statement must NEVER be absorbed into an unbranched flat block.
+  * Straight-line statements between branch boundaries must be consolidated into maximal basic blocks.
 - Audit loop and branch dynamic execution counts:
   * Cross-check execution counts against 'Source-derived proven loop execution obligations'.
-  * For nested loops, ensure the loop body reflects the compound product of enclosing trip counts.
+  * For nested loops, ensure the loop condition, body, and latch all reflect the compound product of enclosing trip counts.
   * Enforce mutual exclusion on if-else branches: alternative branch arm execution counts must
     sum to the condition's evaluation count (taken + not_taken == K). Never execute both alternative
     arms for the same iteration.
