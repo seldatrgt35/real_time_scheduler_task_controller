@@ -208,8 +208,20 @@ Rules:
   unconditional edge only where GCC emits an actual B instruction.
 - Prefer one instruction_counts row per instruction class per block. If separate
   rows are needed, keep every row static; Python safely aggregates duplicates.
-- Consolidate straight-line statements between branches and loops into coherent
-  blocks (strictly at most 15 to 20 blocks per function). Do not over-segment into micro-blocks.
+- Basic block definition and cohesion:
+  * A basic block is a maximal sequence of straight-line instructions executed together
+    without internal branches or joins. Consolidate straight-line statements between branches
+    and loops into coherent blocks (strictly at most 12 to 16 blocks per function).
+    Never split straight-line code between two branch points into artificial micro-blocks
+    (e.g., keep variable load, ALU expression, and store together in one block as emitted by GCC).
+  * A structured loop consists of: loop test/condition, loop body (with any inner branch arms),
+    and a loop latch/increment. Do not invent redundant transition blocks around loops.
+  * Static instruction density: Ground static instruction counts strictly in the C statements.
+    In Thumb-2 GCC -O0, a typical scalar C assignment or arithmetic update takes only 2 to 4
+    static instructions (load operand, ALU op, store result). Never hallucinate duplicate
+    loads or stores for the same variable within a single basic block.
+  * For an if/else branch on the selected path, taken and not-taken edge executions must partition
+    the source block count, and each branch arm must only contain operations belonging to that arm.
 - Consistency requirement: Every block referenced in selected_path, edges, or
   successors MUST be explicitly defined in blocks. Never leave blocks undefined.
 - Omit instruction classes with static_count 0: only emit classes with static_count >= 1.
@@ -276,6 +288,12 @@ Mandatory review:
   product of all enclosing loop iterations (e.g., outer 8 * inner 4 = 32; outer 12 * inner 8 = 96).
   If the draft plan set an inner loop block to only the inner trip count instead of the compound product,
   you MUST correct it to the compound product. Never leave an inner loop under-counted!
+- Audit basic block cohesion and static instruction density:
+  Verify that straight-line statements are consolidated into genuine basic blocks (at most 12-16 blocks).
+  Do NOT accept over-segmented micro-blocks.
+  Check that static instruction counts match the real C statements in each block (typically
+  2-4 instructions per simple C assignment/update). If the draft plan inflated static counts or created
+  redundant phantom blocks within loops or branches, consolidate them into real compiler basic blocks.
 - A loop condition executed N+1 times has N taken and one not-taken outcome;
   represent those outcomes without calling all N+1 evaluations taken.
 - instruction_counts are STATIC per one block execution. Block execution count
