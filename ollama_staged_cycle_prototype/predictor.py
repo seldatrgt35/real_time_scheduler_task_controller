@@ -33,6 +33,27 @@ class StagedPredictor:
     C_CONTROL_KEYWORDS = {
         "if", "else", "for", "while", "switch", "do", "return", "sizeof",
     }
+
+    @staticmethod
+    def _function_indexed_access_obligations(
+        source: str, function_name: str
+    ) -> list[str]:
+        """Return indexed accesses from this function, excluding callees."""
+        body = extract_function(source, function_name) or ""
+        pattern = re.compile(
+            r"\b[A-Za-z_]\w*(?:\s*\[[^\]]+\])+"
+            r"(?:\s*(?:\.|->)\s*[A-Za-z_]\w*)?"
+        )
+        obligations: list[str] = []
+        for match in pattern.finditer(body):
+            expression = re.sub(r"\s+", "", match.group(0))
+            indexes = re.findall(r"\[([^\]]+)\]", expression)
+            if (
+                any(re.search(r"[A-Za-z_]", index) for index in indexes)
+                and expression not in obligations
+            ):
+                obligations.append(expression)
+        return obligations
     def __init__(self, repository_root: Path, client):
         self.root = repository_root.resolve()
         self.client = client
@@ -125,7 +146,8 @@ Additional source/initialization context (outside the timed interval):
         self, name: str, body: str, all_functions: dict[str, str],
         plan: StructurePlan, source_facts: str,
         analysis_context: str, gcc_evidence: list[dict],
-        access_obligations: list[str],
+        access_obligations: list[str], caller_context: str,
+        dynamic_invocations: int,
     ) -> str:
         direct_callees = sorted(
             candidate
@@ -172,6 +194,12 @@ Additional source/initialization context (outside the timed interval):
 Direct callees found syntactically in this function:
 {json.dumps(direct_callees)}
 
+This function executes {dynamic_invocations} time(s) during one target
+invocation. Direct caller source, when available:
+```c
+{caller_context or "/* target function: no caller */"}
+```
+
 Rules:
 - Split entry/prologue, loop body, loop condition, branch arms, joins and
   epilogue into distinct basic blocks. Give every block a stable unique ID.
@@ -196,6 +224,16 @@ Rules:
   comparisons, address calculations, prologue and epilogue.
 - Audit every relevant indexed-access obligation at its full dynamic
   multiplicity. Do not merge memory operations into the ALU class.
+- An indexed-access obligation is an item to count, not an unresolved item.
+  Do not copy an obligation expression into unresolved after its address
+  arithmetic and load/store instructions have been counted.
+- If caller context shows that repeated calls receive different values and
+  therefore take different paths, use the most expensive path that actually
+  occurs in that supplied context. Do not invent a branch outcome that cannot
+  occur merely because it would be more expensive.
+- Represent every source for/while/if/else-if condition that is evaluated on
+  the selected path, including conditions inside loop bodies. Do not count
+  only the loop-back condition while omitting body conditions.
 - Apply the supplied GCC transformation examples structurally. In particular,
   retain -O0 parameter homing, repeated stack reloads/stores, array address
   formation and balanced prologue/epilogue register transfers.
@@ -226,7 +264,8 @@ Names of other supplied functions:
     def _review_prompt(
         self, name: str, body: str, initial: FunctionBlockPlan,
         source_facts: str, analysis_context: str, gcc_evidence: list[dict],
-        access_obligations: list[str],
+        access_obligations: list[str], caller_context: str,
+        dynamic_invocations: int,
     ) -> str:
         control_obligations = self._control_flow_obligations(body)
         return f"""You are pass 3, an independent critical reviewer of a predicted
@@ -261,6 +300,14 @@ Mandatory review:
   instruction overhead. Do not optimize them away.
 - Include all post-loop if/else and final sink/output expressions. A valid JSON
   shape is not evidence that the draft assembly is complete.
+- Check every source condition listed below, including if statements inside a
+  loop. A loop condition does not account for its body conditions.
+- Indexed-access obligations are requirements to count. If their address and
+  memory instructions are present, do not repeat their expressions in
+  unresolved.
+- This function runs {dynamic_invocations} time(s) per target invocation. Use
+  caller context to select the most expensive path that actually occurs across
+  those calls; do not combine mutually exclusive arms into an impossible path.
 - Do not use board measurements, correction factors, margins or desired cycles.
 
 Hardware profile:
@@ -287,6 +334,11 @@ Initialization/path context (outside timed interval):
 Function source:
 ```c
 {body}
+```
+
+Direct caller source, when available:
+```c
+{caller_context or "/* target function: no caller */"}
 ```
 
 Draft block plan to audit and replace:
@@ -632,6 +684,33 @@ Draft block plan to audit and replace:
         })
         return normalized, errors
 
+    @staticmethod
+    def _remove_covered_access_unresolved(
+        ledger: FunctionLedger, access_obligations: list[str]
+    ) -> FunctionLedger:
+        """Do not let a counted memory access masquerade as unresolved."""
+        memory_evidence = " ".join(
+            item.evidence
+            for item in ledger.instruction_counts
+            if item.instruction_class in {
+                "sram_or_stack_load", "sram_or_stack_store"
+            }
+        )
+        compact_evidence = re.sub(r"\s+", "", memory_evidence)
+        obligations = {re.sub(r"\s+", "", item) for item in access_obligations}
+        unresolved = []
+        for item in ledger.unresolved:
+            compact = re.sub(r"\s+", "", item)
+            base = re.match(r"[A-Za-z_]\w*", compact)
+            covered = (
+                compact in obligations
+                and base is not None
+                and base.group(0) in compact_evidence
+            )
+            if not covered:
+                unresolved.append(item)
+        return ledger.model_copy(update={"unresolved": unresolved})
+
     def predict(self, source: str, target: str) -> tuple[StagedPrediction, list[str]]:
         functions = self._relevant_functions(source, target)
         source_facts = self._source_facts(source)
@@ -680,14 +759,21 @@ Draft block plan to audit and replace:
             function_evidence = retrieve_gcc_evidence(
                 source, self.gcc_pattern_path, function_name=name
             )
-            function_access_obligations = indexed_access_obligations(
-                source, name
+            function_access_obligations = (
+                self._function_indexed_access_obligations(source, name)
             )
+            callers = sorted(parent_map.get(name, set()))
+            caller_context = "\n\n".join(
+                f"/* caller: {caller} */\n{functions[caller]}"
+                for caller in callers
+            )
+            dynamic_invocations = planned.get(name, 1)
             block_plan, raw = self.client.predict(
                 self._ledger_prompt(
                     name, body, functions, plan, source_facts,
                     analysis_context, function_evidence,
-                    function_access_obligations,
+                    function_access_obligations, caller_context,
+                    dynamic_invocations,
                 ),
                 response_schema=FunctionBlockPlan,
             )
@@ -696,6 +782,7 @@ Draft block plan to audit and replace:
                 self._review_prompt(
                     name, body, block_plan, source_facts, analysis_context,
                     function_evidence, function_access_obligations,
+                    caller_context, dynamic_invocations,
                 ),
                 response_schema=FunctionBlockPlan,
             )
@@ -718,6 +805,9 @@ Draft block plan to audit and replace:
                 )
             ledger, relation_errors = self._normalize_ledger_relations(
                 name, ledger, functions, planned, parent_map, source_facts
+            )
+            ledger = self._remove_covered_access_unresolved(
+                ledger, function_access_obligations
             )
             errors.extend(relation_errors)
             unknown_callees = {

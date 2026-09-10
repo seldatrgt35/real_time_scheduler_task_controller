@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 from ollama_staged_cycle_prototype.predictor import StagedPredictor
+from ollama_staged_cycle_prototype.ollama_client import StagedOllamaClient
 from ollama_staged_cycle_prototype.schemas import (
     FunctionBlockPlan, FunctionLedger, StructurePlan,
 )
@@ -114,6 +115,74 @@ class FakeClient:
 
 
 class StagedPredictorTest(unittest.TestCase):
+    def test_single_missing_edge_is_canonicalized_as_fallthrough(self):
+        plan = FunctionBlockPlan.model_validate({
+            "function_name": "Task",
+            "selected_path": ["entry", "exit"],
+            "blocks": [
+                {
+                    "block_id": "entry",
+                    "source_region": "entry",
+                    "execution_count_per_invocation": 1,
+                    "execution_count_evidence": "one call",
+                    "successors": ["exit"],
+                    "instruction_counts": [{
+                        "instruction_class": "alu_move_compare_shift",
+                        "static_count": 1,
+                        "evidence": "move",
+                    }],
+                },
+                {
+                    "block_id": "exit",
+                    "source_region": "return",
+                    "execution_count_per_invocation": 1,
+                    "execution_count_evidence": "one call",
+                    "instruction_counts": [{
+                        "instruction_class": "function_return_with_refill",
+                        "static_count": 1,
+                        "evidence": "return",
+                    }],
+                },
+            ],
+        })
+        self.assertEqual(len(plan.edges), 1)
+        self.assertEqual(plan.edges[0].kind, "fallthrough")
+
+    def test_staged_repair_accepts_shared_client_schema_argument(self):
+        client = object.__new__(StagedOllamaClient)
+        client._response_schema_name = "FunctionBlockPlan"
+        prompt = client._repair_prompt(
+            "base", ValueError("bad CFG"), "FunctionBlockPlan"
+        )
+        self.assertIn("Branch control transfers belong only in edges", prompt)
+
+    def test_per_function_access_obligations_exclude_reachable_helpers(self):
+        source = """
+        static int values[4];
+        static int Helper(int i) { return values[i]; }
+        void Task(void) { Helper(0); }
+        """
+        self.assertEqual(
+            StagedPredictor._function_indexed_access_obligations(source, "Task"),
+            [],
+        )
+
+    def test_counted_access_is_not_left_unresolved(self):
+        ledger = FunctionLedger.model_validate({
+            "function_name": "Task",
+            "conditional_branch_evaluations_per_invocation": 0,
+            "instruction_counts": [{
+                "instruction_class": "sram_or_stack_load",
+                "dynamic_count_per_invocation": 4,
+                "evidence": "loads values[index] once per iteration",
+            }],
+            "unresolved": ["values[index]", "unknown loop bound"],
+        })
+        normalized = StagedPredictor._remove_covered_access_unresolved(
+            ledger, ["values[index]"]
+        )
+        self.assertEqual(normalized.unresolved, ["unknown loop bound"])
+
     def test_source_facts_preserve_macros_removed_by_function_extraction(self):
         self.assertEqual(
             StagedPredictor._source_facts(MACRO_SOURCE),

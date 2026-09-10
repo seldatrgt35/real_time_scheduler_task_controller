@@ -155,11 +155,30 @@ class FunctionBlockPlan(BaseModel):
             represented = {
                 edge.target_block for edge in outgoing.get(block.block_id, [])
             }
-            if declared != represented:
+            if represented:
+                # Edges carry execution counts and branch kinds, so they are
+                # authoritative; successors is only a redundant summary.
+                block.successors = sorted(represented)
+            elif len(declared) == 1:
+                # Models commonly omit an explicit edge for straight-line
+                # fallthrough. It has no refill cost, so completing it is
+                # deterministic and does not invent cycle-bearing behavior.
+                target = next(iter(declared))
+                edge = ControlFlowEdge(
+                    source_block=block.block_id,
+                    target_block=target,
+                    kind="fallthrough",
+                    execution_count_per_invocation=(
+                        block.execution_count_per_invocation
+                    ),
+                    evidence="canonicalized implicit single-successor fallthrough",
+                )
+                self.edges.append(edge)
+                outgoing[block.block_id] = [edge]
+            elif declared:
                 raise ValueError(
-                    f"successors and executed edges disagree for "
-                    f"{block.block_id}: successors={sorted(declared)}, "
-                    f"edges={sorted(represented)}"
+                    f"multiple successors for {block.block_id} require "
+                    "explicit control-flow edges"
                 )
         for source, source_edges in outgoing.items():
             conditional = [edge for edge in source_edges if edge.kind.startswith(
