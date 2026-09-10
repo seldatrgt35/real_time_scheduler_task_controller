@@ -10,7 +10,9 @@ from gemini_rag_cycle_prototype.rag.measurement_loader import (
     extract_reachable_helpers,
     function_names,
 )
-from gemini_rag_cycle_prototype.gcc_evidence import retrieve_gcc_evidence
+from ollama_staged_cycle_prototype.assembly_evidence import (
+    retrieve_assembly_evidence,
+)
 from gemini_rag_cycle_prototype.predictor import (
     indexed_access_obligations,
     source_analysis_bundle,
@@ -53,8 +55,8 @@ class StagedPredictor:
                 "structured-output schema"
             )
         self.gcc_pattern_path = (
-            self.root / "gemini_rag_cycle_prototype" / "knowledge"
-            / "gcc_o0_patterns.json"
+            self.root / "ollama_staged_cycle_prototype" / "knowledge"
+            / "gcc_o0_assembly_patterns.json"
         )
 
     @staticmethod
@@ -75,7 +77,7 @@ class StagedPredictor:
     def _structure_prompt(
         self, target: str, functions: dict[str, str], source_facts: str,
         analysis_source: str, analysis_context: str,
-        gcc_evidence: list[dict], access_obligations: list[str],
+        access_obligations: list[str],
     ) -> str:
         return f"""You are pass 1 of a staged GCC -O0 source timing analysis.
 Analyze only control flow and dynamic function-call multiplicities on the most
@@ -83,15 +85,6 @@ expensive feasible source path. Do not calculate cycles or write assembly.
 
 Target: {target}
 Compiler: ARM GCC 11.4 -O0, Cortex-M4 Thumb-2
-
-Hardware and build profile (same source-only evidence as the Gemini path):
-{json.dumps(self.hardware, indent=2)}
-
-Instruction timing profile (do not calculate cycles in this pass):
-{json.dumps(self.timing, indent=2)}
-
-GCC 11.4 -O0 transformation evidence:
-{json.dumps(gcc_evidence, indent=2)}
 
 Source-derived indexed-access obligations:
 {json.dumps(access_obligations, indent=2)}
@@ -636,15 +629,12 @@ Draft block plan to audit and replace:
         functions = self._relevant_functions(source, target)
         source_facts = self._source_facts(source)
         analysis_source, analysis_context = source_analysis_bundle(source, target)
-        gcc_evidence = retrieve_gcc_evidence(
-            source, self.gcc_pattern_path, function_name=target
-        )
         access_obligations = indexed_access_obligations(source, target)
         raw_outputs: list[str] = []
         plan, raw = self.client.predict(
             self._structure_prompt(
                 target, functions, source_facts, analysis_source,
-                analysis_context, gcc_evidence, access_obligations,
+                analysis_context, access_obligations,
             ),
             response_schema=StructurePlan,
         )
@@ -677,8 +667,8 @@ Draft block plan to audit and replace:
         for name, body in functions.items():
             # Retrieve transformation examples for the function currently
             # being synthesized, rather than reusing only the target's tags.
-            function_evidence = retrieve_gcc_evidence(
-                source, self.gcc_pattern_path, function_name=name
+            function_evidence = retrieve_assembly_evidence(
+                source, self.gcc_pattern_path, function_name=name, limit=8
             )
             function_access_obligations = indexed_access_obligations(
                 source, name
