@@ -79,6 +79,11 @@ class StagedPredictor:
         analysis_source: str, analysis_context: str,
         access_obligations: list[str],
     ) -> str:
+        all_loop_obligations = []
+        for f_name, f_body in functions.items():
+            for o in self._loop_execution_obligations(f_name, f_body, functions, source_facts):
+                all_loop_obligations.append(f"[{f_name}] {o}")
+
         return f"""You are pass 1 of a staged GCC -O0 source timing analysis.
 Analyze only control flow and dynamic function-call multiplicities on the most
 expensive feasible source path. Do not calculate cycles or write assembly.
@@ -89,11 +94,16 @@ Compiler: ARM GCC 11.4 -O0, Cortex-M4 Thumb-2
 Source-derived indexed-access obligations:
 {json.dumps(access_obligations, indent=2)}
 
+Source-derived proven loop execution obligations:
+{json.dumps(all_loop_obligations, indent=2)}
+
 Required rules:
 - The target function has dynamic_calls=1.
 - Include every supplied reachable function exactly once.
 - A helper's dynamic_calls is its total invocation count during one target call.
 - Expand loop call sites using their proven source bounds.
+- For nested loops (a loop inside another loop), explicitly state both the individual
+  bounds and compound body iterations (e.g. outer 8 * inner 4 = 32 iterations) in loop_bounds.
 - Never invent a helper or omit a supplied reachable helper.
 - Put genuinely unprovable source bounds in unresolved.
 
@@ -126,7 +136,12 @@ Additional source/initialization context (outside the timed interval):
             if candidate != name
             and re.search(rf"\b{re.escape(candidate)}\s*\(", body)
         )
-        control_obligations = self._control_flow_obligations(body)
+        loop_obligations = self._loop_execution_obligations(
+            name, body, all_functions, source_facts
+        )
+        control_obligations = self._control_flow_obligations(
+            body, name=name, all_functions=all_functions, source_facts=source_facts
+        )
         return f"""You are pass 2 of a staged GCC 11.4 -O0 assembly-shape analysis.
 Predict static Thumb-2 instruction-class counts separately for every basic
 block of EXACTLY ONE invocation of function {name}. Do not emit a whole-function
@@ -144,6 +159,9 @@ Gemini no-RAG path; these are compiler examples, not board measurements):
 
 Source-derived indexed-access obligations:
 {json.dumps(access_obligations, indent=2)}
+
+Source-derived proven loop execution obligations:
+{json.dumps(loop_obligations, indent=2)}
 
 Source-derived control-flow regions that must all be represented:
 {json.dumps(control_obligations, indent=2)}
@@ -171,6 +189,15 @@ Rules:
 - Each block has its dynamic execution_count_per_invocation on the selected
   path. instruction_counts inside a block are STATIC counts for one execution
   of that block; never pre-multiply them by the block execution count.
+- CRITICAL FOR LOOPS AND NESTED LOOPS:
+  * Audit execution counts against 'Source-derived proven loop execution obligations'.
+  * For a single loop with N iterations: loop body blocks execute N times.
+  * For NESTED LOOPS: Basic blocks inside an inner loop MUST have execution_count_per_invocation
+    equal to the COMPOUND product of all enclosing loops (outer_iters * inner_iters)!
+    Example: outer loop runs 8 times (sensor < 8), inner loop runs 4 times (sample < 4)
+    -> The basic blocks inside the inner loop MUST have execution_count_per_invocation = 8 * 4 = 32!
+    NEVER set execution_count_per_invocation of an inner loop block to just 4 or 8.
+    Similarly, for outer 12 and inner 8 -> inner body blocks MUST execute 12 * 8 = 96 times!
 - Do not put conditional or unconditional branch classes in a block's
   instruction_counts. Represent every executed control-flow transfer in edges.
 - For a conditional block, emit exactly one conditional_taken edge and one
@@ -223,8 +250,14 @@ Names of other supplied functions:
         self, name: str, body: str, initial: FunctionBlockPlan,
         source_facts: str, analysis_context: str, gcc_evidence: list[dict],
         access_obligations: list[str],
+        all_functions: dict[str, str] | None = None,
     ) -> str:
-        control_obligations = self._control_flow_obligations(body)
+        loop_obligations = self._loop_execution_obligations(
+            name, body, all_functions or {}, source_facts
+        )
+        control_obligations = self._control_flow_obligations(
+            body, name=name, all_functions=all_functions or {}, source_facts=source_facts
+        )
         return f"""You are pass 3, an independent critical reviewer of a predicted
 GCC 11.4 -O0 Thumb-2 assembly shape for exactly one invocation of function
 {name}. Return a COMPLETE corrected FunctionBlockPlan, not comments or a patch.
@@ -237,6 +270,12 @@ Mandatory review:
 - Cover prologue, parameter homing, local initialization, loop initialization,
   loop body, increment, all N successful conditions, the final failed loop
   condition, post-loop branches/output construction, epilogue and return.
+- Audit loop and nested-loop dynamic execution counts:
+  Cross-check every block against 'Source-derived proven loop execution obligations'.
+  Verify that blocks inside nested loops have execution_count_per_invocation equal to the
+  product of all enclosing loop iterations (e.g., outer 8 * inner 4 = 32; outer 12 * inner 8 = 96).
+  If the draft plan set an inner loop block to only the inner trip count instead of the compound product,
+  you MUST correct it to the compound product. Never leave an inner loop under-counted!
 - A loop condition executed N+1 times has N taken and one not-taken outcome;
   represent those outcomes without calling all N+1 evaluations taken.
 - instruction_counts are STATIC per one block execution. Block execution count
@@ -268,6 +307,9 @@ GCC 11.4 -O0 transformation evidence:
 Indexed-access obligations:
 {json.dumps(access_obligations, indent=2)}
 
+Source-derived proven loop execution obligations:
+{json.dumps(loop_obligations, indent=2)}
+
 Source-derived control-flow regions that must all be represented by blocks and
 executed edge counts:
 {json.dumps(control_obligations, indent=2)}
@@ -290,9 +332,82 @@ Draft block plan to audit and replace:
 """
 
     @staticmethod
-    def _control_flow_obligations(body: str) -> list[str]:
+    def _infer_helper_parameter_values(
+        all_functions: dict[str, str], macro_values: dict[str, int]
+    ) -> dict[str, dict[str, int]]:
+        param_values: dict[str, dict[str, int]] = {}
+        for name, body in all_functions.items():
+            m = re.search(rf"\b{re.escape(name)}\s*\(([^)]*)\)", body)
+            if not m:
+                continue
+            param_list = [p.strip() for p in m.group(1).split(",") if p.strip()]
+            param_names = []
+            for p in param_list:
+                parts = re.findall(r"[A-Za-z_]\w*", p)
+                if parts:
+                    param_names.append(parts[-1])
+            if not param_names:
+                continue
+            for caller_name, caller_body in all_functions.items():
+                if caller_name == name:
+                    continue
+                for call in re.finditer(rf"\b{re.escape(name)}\s*\(([^)]*)\)", caller_body):
+                    args = [a.strip() for a in call.group(1).split(",")]
+                    for i, arg in enumerate(args):
+                        if i < len(param_names):
+                            clean_arg = re.sub(r"[uUlL]+$", "", arg)
+                            val = int(clean_arg) if clean_arg.isdigit() else macro_values.get(clean_arg)
+                            if val is not None:
+                                if name not in param_values:
+                                    param_values[name] = {}
+                                param_values[name][param_names[i]] = val
+        return param_values
+
+    @staticmethod
+    def _loop_execution_obligations(
+        name: str, body: str, all_functions: dict[str, str], source_facts: str
+    ) -> list[str]:
+        macros = StagedPredictor._integer_macros(source_facts) if source_facts else {}
+        if all_functions:
+            inferred = StagedPredictor._infer_helper_parameter_values(all_functions, macros)
+            macros.update(inferred.get(name, {}))
+        loops = StagedPredictor._proven_for_loops(body, macros) if macros else []
+        obligations: list[str] = []
+        for start, end, trip, desc in loops:
+            enclosing = [p for p in loops if p[0] < start and p[1] > end]
+            mult = 1
+            enclosing_descs = []
+            for p in enclosing:
+                mult *= p[2]
+                enclosing_descs.append(f"{p[3]} ({p[2]}x)")
+            total = mult * trip
+            if enclosing:
+                parents_str = ", ".join(enclosing_descs)
+                obligations.append(
+                    f"NESTED LOOP: {desc} (trip={trip}) inside [{parents_str}] "
+                    f"-> COMPOUND INNER BODY EXECUTION COUNT = {total} times"
+                )
+            else:
+                obligations.append(
+                    f"LOOP: {desc} -> BODY EXECUTION COUNT = {trip} times"
+                )
+        return obligations
+
+    @staticmethod
+    def _control_flow_obligations(
+        body: str,
+        name: str = "",
+        all_functions: dict[str, str] | None = None,
+        source_facts: str = "",
+    ) -> list[str]:
         """Expose source control regions without synthesizing their CFG."""
         obligations: list[str] = []
+        macros = StagedPredictor._integer_macros(source_facts) if source_facts else {}
+        if all_functions and name:
+            inferred = StagedPredictor._infer_helper_parameter_values(all_functions, macros)
+            macros.update(inferred.get(name, {}))
+        loops = StagedPredictor._proven_for_loops(body, macros) if macros else []
+
         for line_number, raw_line in enumerate(body.splitlines(), start=1):
             line = re.sub(r"/\*.*?\*/", "", raw_line).strip()
             if not line:
@@ -301,7 +416,21 @@ Draft block plan to audit and replace:
                 r"\b(?:for|while|if|else\s+if|else|switch|case|return)\b",
                 line,
             ):
-                obligations.append(f"line {line_number}: {line[:240]}")
+                matched_tag = ""
+                for start, end, trip, desc in loops:
+                    var = desc.split(":")[0].strip()
+                    if re.search(rf"\bfor\s*\([^;]*\b{re.escape(var)}\b", line):
+                        parents = [p for p in loops if p[0] < start and p[1] > end]
+                        mult = 1
+                        for p in parents:
+                            mult *= p[2]
+                        total = mult * trip
+                        if parents:
+                            matched_tag = f" -> [NESTED LOOP BODY EXECUTIONS = {total} ({mult} * {trip})]"
+                        else:
+                            matched_tag = f" -> [LOOP BODY EXECUTIONS = {total}]"
+                        break
+                obligations.append(f"line {line_number}: {line[:240]}{matched_tag}")
         return obligations
 
     @staticmethod
@@ -689,6 +818,7 @@ Draft block plan to audit and replace:
                 self._review_prompt(
                     name, body, block_plan, source_facts, analysis_context,
                     function_evidence, function_access_obligations,
+                    all_functions=functions,
                 ),
                 response_schema=FunctionBlockPlan,
             )

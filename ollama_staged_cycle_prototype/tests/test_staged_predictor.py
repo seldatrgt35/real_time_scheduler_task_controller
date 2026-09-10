@@ -301,6 +301,25 @@ class StagedPredictorTest(unittest.TestCase):
         self.assertEqual(counts["function_call_bl_with_refill"], 1)
         self.assertEqual(normalized.conditional_branch_evaluations_per_invocation, 4)
 
+    def test_loop_execution_obligations_nested_loop(self):
+        source = """
+        #define ROWS (8U)
+        #define COLS (4U)
+        void Matrix(void) {
+            for (int r = 0; r < ROWS; ++r) {
+                for (int c = 0; c < COLS; ++c) {
+                    sink += 1;
+                }
+            }
+        }
+        """
+        facts = StagedPredictor._source_facts(source)
+        functions = {"Matrix": source}
+        obs = StagedPredictor._loop_execution_obligations("Matrix", source, functions, facts)
+        self.assertEqual(len(obs), 2)
+        self.assertIn("BODY EXECUTION COUNT = 8", obs[0])
+        self.assertIn("COMPOUND INNER BODY EXECUTION COUNT = 32", obs[1])
+
 
 if __name__ == "__main__":
     unittest.main()
