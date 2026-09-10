@@ -4,7 +4,7 @@ import argparse
 import os
 from pathlib import Path
 
-from ollama_staged_cycle_prototype.ollama_client import StagedOllamaClient
+from gemini_rag_cycle_prototype.ollama_client import OllamaClient
 from ollama_staged_cycle_prototype.predictor import StagedPredictor
 
 
@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     # FunctionLedger is intentionally compact; a larger budget encourages
     # small local models to repeat per-instruction rows until truncation.
     os.environ.setdefault("OLLAMA_NUM_PREDICT", "3072")
-    client = StagedOllamaClient()
+    client = OllamaClient()
     prediction, raw_outputs = StagedPredictor(
         args.repository_root, client
     ).predict(args.source.read_text(encoding="utf-8"), args.function)
