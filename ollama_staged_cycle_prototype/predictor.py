@@ -192,12 +192,15 @@ Rules:
 - CRITICAL FOR LOOPS AND NESTED LOOPS:
   * Audit execution counts against 'Source-derived proven loop execution obligations'.
   * For a single loop with N iterations: loop body blocks execute N times.
-  * For NESTED LOOPS: Basic blocks inside an inner loop MUST have execution_count_per_invocation
-    equal to the COMPOUND product of all enclosing loops (outer_iters * inner_iters)!
-    Example: outer loop runs 8 times (sensor < 8), inner loop runs 4 times (sample < 4)
-    -> The basic blocks inside the inner loop MUST have execution_count_per_invocation = 8 * 4 = 32!
-    NEVER set execution_count_per_invocation of an inner loop block to just 4 or 8.
-    Similarly, for outer 12 and inner 8 -> inner body blocks MUST execute 12 * 8 = 96 times!
+  * For nested loops: The dynamic execution count of the inner loop's sequential body
+    is the compound product of enclosing loop iterations (prod(trip_counts)).
+- MUTUAL EXCLUSION OF CONDITIONAL BRANCHES (if-else):
+  * Alternative branch arms of an if-else statement are mutually exclusive.
+  * For any conditional construct evaluated K times, the execution counts of its alternative
+    branches must partition K: execution_count(taken_arm) + execution_count(not_taken_arm) == K.
+  * NEVER assign K executions to BOTH the taken arm and the not-taken arm.
+  * On a worst-case path, the path selects the more expensive feasible arm (e.g. taken_arm = K,
+    not_taken_arm = 0), never both arms simultaneously.
 - Do not put conditional or unconditional branch classes in a block's
   instruction_counts. Represent every executed control-flow transfer in edges.
 - For a conditional block, emit exactly one conditional_taken edge and one
@@ -210,18 +213,15 @@ Rules:
   rows are needed, keep every row static; Python safely aggregates duplicates.
 - Basic block definition and cohesion:
   * A basic block is a maximal sequence of straight-line instructions executed together
-    without internal branches or joins. Consolidate straight-line statements between branches
-    and loops into coherent blocks (strictly at most 12 to 16 blocks per function).
-    Never split straight-line code between two branch points into artificial micro-blocks
-    (e.g., keep variable load, ALU expression, and store together in one block as emitted by GCC).
-  * A structured loop consists of: loop test/condition, loop body (with any inner branch arms),
-    and a loop latch/increment. Do not invent redundant transition blocks around loops.
+    without internal branches or joins. Delimit basic blocks ONLY by branch instructions
+    and branch targets/labels.
+  * Prologue, parameter homing, and initial loop index initialization form ONE contiguous
+    entry basic block; do NOT separate them into artificial micro-blocks.
+  * A structured loop body with straight-line code is ONE basic block leading to the loop latch/test.
   * Static instruction density: Ground static instruction counts strictly in the C statements.
     In Thumb-2 GCC -O0, a typical scalar C assignment or arithmetic update takes only 2 to 4
     static instructions (load operand, ALU op, store result). Never hallucinate duplicate
     loads or stores for the same variable within a single basic block.
-  * For an if/else branch on the selected path, taken and not-taken edge executions must partition
-    the source block count, and each branch arm must only contain operations belonging to that arm.
 - Consistency requirement: Every block referenced in selected_path, edges, or
   successors MUST be explicitly defined in blocks. Never leave blocks undefined.
 - Omit instruction classes with static_count 0: only emit classes with static_count >= 1.
@@ -279,21 +279,19 @@ every C statement and control-flow region against the GCC micro-patterns.
 
 Mandatory review:
 - selected_path must list the executed block IDs in order and may not be empty.
-- Cover prologue, parameter homing, local initialization, loop initialization,
-  loop body, increment, all N successful conditions, the final failed loop
-  condition, post-loop branches/output construction, epilogue and return.
-- Audit loop and nested-loop dynamic execution counts:
-  Cross-check every block against 'Source-derived proven loop execution obligations'.
-  Verify that blocks inside nested loops have execution_count_per_invocation equal to the
-  product of all enclosing loop iterations (e.g., outer 8 * inner 4 = 32; outer 12 * inner 8 = 96).
-  If the draft plan set an inner loop block to only the inner trip count instead of the compound product,
-  you MUST correct it to the compound product. Never leave an inner loop under-counted!
-- Audit basic block cohesion and static instruction density:
-  Verify that straight-line statements are consolidated into genuine basic blocks (at most 12-16 blocks).
-  Do NOT accept over-segmented micro-blocks.
-  Check that static instruction counts match the real C statements in each block (typically
-  2-4 instructions per simple C assignment/update). If the draft plan inflated static counts or created
-  redundant phantom blocks within loops or branches, consolidate them into real compiler basic blocks.
+- Audit basic block cohesion: Ensure straight-line code is consolidated into maximal basic blocks
+  delimited only by branch points. Do not keep over-segmented micro-blocks where an entry block
+  or loop body was artificially split into sub-blocks.
+- Audit loop and branch dynamic execution counts:
+  * Cross-check execution counts against 'Source-derived proven loop execution obligations'.
+  * For nested loops, ensure the loop body reflects the compound product of enclosing trip counts.
+  * Enforce mutual exclusion on if-else branches: alternative branch arm execution counts must
+    sum to the condition's evaluation count (taken + not_taken == K). Never execute both alternative
+    arms for the same iteration.
+- Audit static instruction density:
+  Ensure static instruction counts reflect real GCC -O0 instructions for the C statements
+  in that block (typically 2-4 instructions per simple scalar C assignment or update).
+  Consolidate any redundant or duplicated instructions.
 - A loop condition executed N+1 times has N taken and one not-taken outcome;
   represent those outcomes without calling all N+1 evaluations taken.
 - instruction_counts are STATIC per one block execution. Block execution count

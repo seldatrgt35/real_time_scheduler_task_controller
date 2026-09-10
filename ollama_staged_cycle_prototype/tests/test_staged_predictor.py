@@ -320,6 +320,32 @@ class StagedPredictorTest(unittest.TestCase):
         self.assertIn("BODY EXECUTION COUNT = 8", obs[0])
         self.assertIn("COMPOUND INNER BODY EXECUTION COUNT = 32", obs[1])
 
+    def test_dead_branch_block_zeroed_by_cfg_reachability(self):
+        plan = FunctionBlockPlan.model_validate({
+            "function_name": "TestFunc",
+            "selected_path": ["entry", "branch_taken"],
+            "blocks": [
+                {"block_id": "entry", "source_region": "entry",
+                 "execution_count_per_invocation": 10,
+                 "instruction_counts": [{"instruction_class": "alu_move_compare_shift", "static_count": 1, "evidence": "cmp"}]},
+                {"block_id": "branch_taken", "source_region": "if arm",
+                 "execution_count_per_invocation": 10,
+                 "instruction_counts": [{"instruction_class": "alu_move_compare_shift", "static_count": 1, "evidence": "add"}]},
+                {"block_id": "branch_not_taken", "source_region": "else arm",
+                 "execution_count_per_invocation": 10,
+                 "instruction_counts": [{"instruction_class": "alu_move_compare_shift", "static_count": 1, "evidence": "sub"}]},
+            ],
+            "edges": [
+                {"source_block": "entry", "target_block": "branch_taken",
+                 "kind": "conditional_taken", "execution_count_per_invocation": 10, "evidence": "all taken"},
+                {"source_block": "entry", "target_block": "branch_not_taken",
+                 "kind": "conditional_not_taken", "execution_count_per_invocation": 0, "evidence": "never not taken"},
+            ],
+        })
+        # The not_taken block had incoming edge = 0, so its execution count should be zeroed
+        not_taken_block = next(b for b in plan.blocks if b.block_id == "branch_not_taken")
+        self.assertEqual(not_taken_block.execution_count_per_invocation, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

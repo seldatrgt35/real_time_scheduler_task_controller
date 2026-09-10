@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -184,6 +185,20 @@ class FunctionBlockPlan(BaseModel):
                 source_block_obj = next((b for b in self.blocks if b.block_id == source), None)
                 if source_block_obj and source_block_obj.execution_count_per_invocation != evaluations:
                     source_block_obj.execution_count_per_invocation = evaluations
+
+        # Zero out blocks whose explicit incoming edges are all zero (CFG reachability):
+        incoming_edges: dict[str, list[ControlFlowEdge]] = defaultdict(list)
+        for edge in self.edges:
+            incoming_edges[edge.target_block].append(edge)
+
+        entry_block_id = self.selected_path[0] if self.selected_path else (self.blocks[0].block_id if self.blocks else None)
+        for block in self.blocks:
+            if block.block_id == entry_block_id:
+                continue
+            if block.block_id in incoming_edges:
+                total_in = sum(e.execution_count_per_invocation for e in incoming_edges[block.block_id])
+                if total_in == 0 and block.execution_count_per_invocation > 0:
+                    block.execution_count_per_invocation = 0
         return self
 
 
