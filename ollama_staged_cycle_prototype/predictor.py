@@ -936,11 +936,16 @@ Draft block plan to audit and replace:
                 "function contributions disagree with aggregate ledger: "
                 f"contributions={contribution_total}, aggregate={total}"
             )
-        unresolved = list(plan.unresolved)
+        known_functions = set(functions)
+        unresolved = [
+            item for item in plan.unresolved
+            if item.strip() not in known_functions
+        ]
         unresolved.extend(
             f"{name}: {item}"
             for name, ledger in ledgers.items()
             for item in ledger.unresolved
+            if item.strip() not in known_functions
         )
         status = "VALIDATION_REQUIRED" if errors or unresolved else "SUPPORTED"
         prediction = StagedPrediction(
