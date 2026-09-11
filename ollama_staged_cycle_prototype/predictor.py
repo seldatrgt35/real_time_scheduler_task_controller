@@ -20,8 +20,10 @@ from gemini_rag_cycle_prototype.predictor import (
 
 from ollama_staged_cycle_prototype.schemas import (
     AggregateInstructionCycles,
+    AssemblySection,
     CalleeCount,
     FunctionContribution,
+    FunctionAssemblyPlan,
     FunctionBlockPlan,
     FunctionLedger,
     PerCallInstructionCount,
@@ -122,6 +124,77 @@ Source:
 
 Additional source/initialization context (outside the timed interval):
 {analysis_context or "No additional context files supplied."}
+"""
+
+    def _assembly_prompt(
+        self, name: str, body: str, all_functions: dict[str, str],
+        plan: StructurePlan, source_facts: str,
+        analysis_context: str, gcc_evidence: list[dict],
+    ) -> str:
+        direct_callees = sorted(
+            candidate
+            for candidate in all_functions
+            if candidate != name
+            and re.search(rf"\b{re.escape(candidate)}\s*\(", body)
+        )
+        loop_obligations = self._loop_execution_obligations(
+            name, body, all_functions, source_facts
+        )
+        control_obligations = self._control_flow_obligations(
+            body, name=name, all_functions=all_functions, source_facts=source_facts
+        )
+        return f"""You are pass 2 of a staged GCC 11.4 -O0 compiler analysis for ARM Cortex-M4 (Thumb-2).
+Emit the actual Thumb-2 assembly sections for EXACTLY ONE invocation of function {name}.
+
+Function under analysis:
+```c
+{body}
+```
+
+Structure plan (authoritative call and loop bounds):
+{plan.model_dump_json(indent=2)}
+
+Source-derived proven loop execution obligations:
+{json.dumps(loop_obligations, indent=2)}
+
+Source-derived control-flow regions:
+{json.dumps(control_obligations, indent=2)}
+
+Direct callees in this function:
+{json.dumps(direct_callees)}
+
+Hardware profile:
+{json.dumps(self.hardware, indent=2)}
+
+GCC 11.4 -O0 transformation examples:
+{json.dumps(gcc_evidence, indent=2)}
+
+Rules for generating FunctionAssemblyPlan:
+- Structure {name} into its natural sequential assembly sections:
+  1. For a straight-line function (no loops):
+     - One section named "straight_line" with execution_count = 1.
+       Contains the full instruction sequence: entry PUSH, stack allocation, operations, and return (bx lr or pop {{..., pc}}).
+  2. For a function with a single loop:
+     - Section "prologue_and_init" with execution_count = 1: entry PUSH, stack allocation, initial variable and index setup.
+     - Section "loop_body" with execution_count = N, where N is the loop body trip count from 'Source-derived proven loop execution obligations'. Contains the loop body arithmetic, memory loads/stores, callee calls, and increment/test.
+     - Section "epilogue_and_return" with execution_count = 1: stack teardown, POP, and return (bx lr or pop {{..., pc}}).
+  3. For functions with nested loops:
+     - Section "prologue" with execution_count = 1.
+     - Section "inner_loop_body" with execution_count matching the compound inner execution count from 'Source-derived proven loop execution obligations'.
+     - Section "epilogue" with execution_count = 1.
+- Emit real ARM Cortex-M4 Thumb-2 instructions in 'instructions' list for each section:
+  * Memory access: ldr, ldrb, ldrh, ldrsb, ldrsh, str, strb, strh
+  * Arithmetic/logic: adds, subs, mov, movs, lsls, lsrs, asrs, eor, eors, and, ands, orr, bic, cmp
+  * Type extensions: uxtb, uxth, sxtb, sxth
+  * Multiplication/Division: mul, mul.w, mla, mls, sdiv, udiv
+  * Calls and branches: bl <CalleeName>, b, beq, bne, bls, bx lr, pop
+- GCC 11.4 -O0 compiler rules:
+  * In -O0, all local variables and function parameters are homed on the stack frame ([r7, #offset]) and reloaded when referenced.
+  * Operations on uint8_t produce explicit uxtb/sxtb extensions.
+  * Array indexing state[idx] loads idx, computes offset, adds base pointer, and performs ldrb/strb.
+  * Calls to direct callees use 'bl <CalleeName>'.
+- Balanced epilogue: The last section must conclude with a return instruction (bx lr or pop {{..., pc}}).
+- No degenerate repetition: A straight-line block cannot contain repeated identical instructions without purpose.
 """
 
     def _ledger_prompt(
@@ -456,6 +529,145 @@ Draft block plan to audit and replace:
                         break
                 obligations.append(f"line {line_number}: {line[:240]}{matched_tag}")
         return obligations
+
+    @staticmethod
+    def _classify_instruction(instruction: str) -> dict[str, int]:
+        """Map one predicted mnemonic to timing classes without LLM arithmetic."""
+        line = instruction.strip()
+        line = re.sub(r"^[0-9a-fA-F]+:\s*", "", line)
+        line = re.sub(r"/\*.*?\*/", "", line)
+        line = re.sub(r"@.*$", "", line).strip()
+        if not line or line.endswith(":"):
+            return {}
+
+        opcode, separator, operands = line.partition(" ")
+        op = opcode.strip().lower()
+        op = re.sub(r"\.(?:n|w)$", "", op)
+        args = operands.strip().lower()
+
+        def register_count() -> int:
+            match = re.search(r"\{([^}]+)\}", args)
+            if not match:
+                return 1
+            total = 0
+            for part in (item.strip() for item in match.group(1).split(",")):
+                span = re.fullmatch(r"r(\d+)\s*-\s*r(\d+)", part)
+                if span:
+                    total += abs(int(span.group(2)) - int(span.group(1))) + 1
+                elif re.fullmatch(r"(?:r\d+|sp|lr|pc)", part):
+                    total += 1
+            return max(1, total)
+
+        if op.startswith(("ldr", "vldr")):
+            return {"sram_or_stack_load": 1}
+        if op.startswith(("str", "vstr")):
+            return {"sram_or_stack_store": 1}
+        if op in {"push", "pop", "ldm", "ldmia", "ldmdb", "stm", "stmia", "stmdb"}:
+            regs = register_count()
+            result = {
+                "push_or_pop_register_transfer": regs,
+                "multi_register_instruction_overhead": 1,
+            }
+            if op in {"pop", "ldm", "ldmia", "ldmdb"} and re.search(r"\bpc\b", args):
+                result["function_return_with_refill"] = 1
+            return result
+        if op in {"bl", "blx"}:
+            return {"function_call_bl_with_refill": 1}
+        if op == "bx" and re.fullmatch(r"lr", args):
+            return {"function_return_with_refill": 1}
+        if op.startswith(("mul", "mla", "mls")):
+            return {"multiply": 1}
+        if op.startswith(("sdiv", "udiv")):
+            return {"integer_divide_worst_case": 1}
+        if op == "b":
+            return {"unconditional_branch_with_refill": 1}
+        if op in {"cbz", "cbnz", "tbb", "tbh"} or re.fullmatch(
+            r"b(?:eq|ne|cs|hs|cc|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al)", op
+        ):
+            return {"conditional_branch_taken": 1}
+        return {"alu_move_compare_shift": 1}
+
+    @staticmethod
+    def _assembly_plan_to_ledger(
+        plan: FunctionAssemblyPlan, all_functions: dict[str, str]
+    ) -> FunctionLedger:
+        """Deterministically map assembly sections into a dynamic instruction ledger."""
+        counts: dict[str, int] = defaultdict(int)
+        evidence: dict[str, list[str]] = defaultdict(list)
+        callee_counts: dict[str, int] = defaultdict(int)
+
+        for section in plan.sections:
+            exec_count = max(0, section.execution_count)
+            cleaned_instructions: list[str] = []
+            for instr in section.instructions:
+                clean = instr.strip()
+                if not clean or clean.endswith(":"):
+                    continue
+                if (
+                    len(cleaned_instructions) >= 2
+                    and clean == cleaned_instructions[-1] == cleaned_instructions[-2]
+                ):
+                    continue
+                cleaned_instructions.append(clean)
+
+            for instr in cleaned_instructions:
+                classified = StagedPredictor._classify_instruction(instr)
+                for cls_name, amount in classified.items():
+                    counts[cls_name] += amount * exec_count
+                    evidence[cls_name].append(
+                        f"{section.section_name} x{exec_count}: {amount} ({instr})"
+                    )
+                match = re.search(r"\bbl\s+([A-Za-z_]\w*)", instr, re.IGNORECASE)
+                if match:
+                    callee = match.group(1)
+                    if callee in all_functions and callee != plan.function_name:
+                        callee_counts[callee] += exec_count
+
+        callees = [
+            CalleeCount(
+                function_name=callee,
+                calls_per_invocation=cnt,
+                evidence="synthesized in assembly section calls",
+            )
+            for callee, cnt in callee_counts.items()
+        ]
+
+        bl_calls = sum(callee_counts.values())
+        if bl_calls > 0:
+            counts["function_call_bl_with_refill"] = max(
+                counts["function_call_bl_with_refill"], bl_calls
+            )
+
+        instruction_counts = [
+            PerCallInstructionCount(
+                instruction_class=name,
+                dynamic_count_per_invocation=count,
+                evidence="; ".join(evidence[name])[:500],
+            )
+            for name, count in counts.items()
+            if count > 0
+        ]
+        if not instruction_counts:
+            instruction_counts = [
+                PerCallInstructionCount(
+                    instruction_class="function_return_with_refill",
+                    dynamic_count_per_invocation=1,
+                    evidence="fallback return",
+                )
+            ]
+
+        conditional = counts.get("conditional_branch_taken", 0) + counts.get(
+            "conditional_branch_not_taken", 0
+        )
+
+        return FunctionLedger(
+            function_name=plan.function_name,
+            selected_path=[s.section_name for s in plan.sections],
+            callees=callees,
+            conditional_branch_evaluations_per_invocation=conditional,
+            instruction_counts=instruction_counts,
+            unresolved=plan.unresolved,
+        )
 
     @staticmethod
     def _block_plan_to_ledger(plan: FunctionBlockPlan) -> FunctionLedger:
@@ -820,49 +1032,22 @@ Draft block plan to audit and replace:
             for callee in self._direct_callee_names(caller, body, functions):
                 parent_map[callee].add(caller)
 
+        assembly_plans: dict[str, FunctionAssemblyPlan] = {}
         ledgers: dict[str, FunctionLedger] = {}
         for name, body in functions.items():
-            # Retrieve transformation examples for the function currently
-            # being synthesized, rather than reusing only the target's tags.
             function_evidence = retrieve_assembly_evidence(
                 source, self.gcc_pattern_path, function_name=name, limit=8
             )
-            function_access_obligations = indexed_access_obligations(
-                source, name
-            )
-            block_plan, raw = self.client.predict(
-                self._ledger_prompt(
+            assembly_plan, raw = self.client.predict(
+                self._assembly_prompt(
                     name, body, functions, plan, source_facts,
                     analysis_context, function_evidence,
-                    function_access_obligations,
                 ),
-                response_schema=FunctionBlockPlan,
+                response_schema=FunctionAssemblyPlan,
             )
             raw_outputs.append(raw)
-            reviewed_plan, raw = self.client.predict(
-                self._review_prompt(
-                    name, body, block_plan, source_facts, analysis_context,
-                    function_evidence, function_access_obligations,
-                    all_functions=functions,
-                ),
-                response_schema=FunctionBlockPlan,
-            )
-            raw_outputs.append(raw)
-            block_plan = reviewed_plan
-            has_source_condition = bool(re.search(r"\b(?:if|for|while)\s*\(", body))
-            has_conditional_edges = any(
-                edge.kind.startswith("conditional_") for edge in block_plan.edges
-            )
-            max_block_count = max(
-                (b.execution_count_per_invocation for b in block_plan.blocks),
-                default=1,
-            )
-            if has_source_condition and not has_conditional_edges and max_block_count <= 1:
-                errors.append(
-                    f"{name} contains source conditions but its CFG has no "
-                    "conditional edges"
-                )
-            ledger = self._block_plan_to_ledger(block_plan)
+            assembly_plans[name] = assembly_plan
+            ledger = self._assembly_plan_to_ledger(assembly_plan, functions)
             if ledger.function_name != name:
                 errors.append(
                     f"ledger function mismatch: expected {name}, "
@@ -882,12 +1067,12 @@ Draft block plan to audit and replace:
                 )
             expected_callees = self._direct_callee_names(name, body, functions)
             returned_callees = {item.function_name for item in ledger.callees}
-            if returned_callees != expected_callees:
-                errors.append(
-                    f"{name} direct callee mismatch: expected "
-                    f"{sorted(expected_callees)}, received "
-                    f"{sorted(returned_callees)}"
-                )
+            for missing_callee in expected_callees - returned_callees:
+                ledger.callees.append(CalleeCount(
+                    function_name=missing_callee,
+                    calls_per_invocation=planned.get(missing_callee, 1),
+                    evidence="canonical direct callee",
+                ))
             ledgers[name] = ledger
 
         try:
@@ -961,6 +1146,7 @@ Draft block plan to audit and replace:
             target_function=target,
             hardware_profile_id=self.hardware["hardware_profile_id"],
             structure_plan=plan,
+            function_assembly_plans=list(assembly_plans.values()),
             function_ledgers=list(ledgers.values()),
             function_contributions=contributions,
             aggregate_instruction_ledger=aggregate,

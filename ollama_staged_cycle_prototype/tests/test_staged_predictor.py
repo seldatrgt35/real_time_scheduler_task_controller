@@ -7,7 +7,7 @@ import unittest
 
 from ollama_staged_cycle_prototype.predictor import StagedPredictor
 from ollama_staged_cycle_prototype.schemas import (
-    FunctionBlockPlan, FunctionLedger, StructurePlan,
+    AssemblySection, FunctionAssemblyPlan, FunctionBlockPlan, FunctionLedger, StructurePlan,
 )
 
 
@@ -43,6 +43,51 @@ class FakeClient:
                 ],
                 "loop_bounds": ["i=0..2"],
             }
+        elif response_schema is FunctionAssemblyPlan:
+            if "function Task." in prompt or "function\nTask." in prompt:
+                value = {
+                    "function_name": "Task",
+                    "sections": [
+                        {
+                            "section_name": "prologue_and_init",
+                            "execution_count": 1,
+                            "instructions": [
+                                "push {r7, lr}", "sub sp, #8", "add r7, sp, #0",
+                                "movs r3, #0", "str r3, [r7, #4]",
+                            ],
+                        },
+                        {
+                            "section_name": "loop_body",
+                            "execution_count": 3,
+                            "instructions": [
+                                "ldr r0, [r7, #4]", "bl Helper",
+                                "ldr r3, [r7, #4]", "adds r3, #1", "str r3, [r7, #4]",
+                            ],
+                        },
+                        {
+                            "section_name": "epilogue_and_return",
+                            "execution_count": 1,
+                            "instructions": ["adds r7, #8", "mov sp, r7", "pop {r7, pc}"],
+                        },
+                    ],
+                }
+            else:
+                value = {
+                    "function_name": "Helper",
+                    "sections": [
+                        {
+                            "section_name": "straight_line",
+                            "execution_count": 1,
+                            "instructions": [
+                                "push {r7}", "sub sp, #12", "add r7, sp, #0",
+                                "str r0, [r7, #4]", "ldr r3, [r7, #4]", "adds r3, #1",
+                                "mov r0, r3", "adds r7, #12", "mov sp, r7", "pop {r7}", "bx lr",
+                            ],
+                        }
+                    ],
+                    "unresolved": (["unknown loop bound"]
+                                   if self.unresolved_ledger else []),
+                }
         elif (response_schema is FunctionBlockPlan
               and ("invocation of function Task." in prompt
                    or "invocation of function\nTask." in prompt)):
@@ -196,11 +241,9 @@ class StagedPredictorTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         prediction, raw = StagedPredictor(root, FakeClient()).predict(SOURCE, "Task")
         self.assertEqual(prediction.analysis_status, "SUPPORTED")
-        # Task: 3 BL*4 + 3 taken*4 + 1 not-taken + return*4 = 29
-        # Helper: (2 ALU + return*4) * 3 calls = 18
-        self.assertEqual(prediction.estimated_source_execution_cycles, 47)
-        # One structure call plus draft+review calls for two functions.
-        self.assertEqual(len(raw), 5)
+        self.assertEqual(prediction.estimated_source_execution_cycles, 104)
+        # One structure call plus assembly section calls for two functions.
+        self.assertEqual(len(raw), 3)
 
     def test_python_normalizes_structure_plan_from_composed_calls(self):
         root = Path(__file__).resolve().parents[2]

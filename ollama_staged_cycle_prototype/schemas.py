@@ -105,6 +105,18 @@ class ControlFlowEdge(BaseModel):
     evidence: str = Field(default="", max_length=200)
 
 
+class AssemblySection(BaseModel):
+    section_name: str = Field(max_length=64)
+    execution_count: int = Field(ge=0)
+    instructions: list[str] = Field(min_length=1, max_length=256)
+
+
+class FunctionAssemblyPlan(BaseModel):
+    function_name: str = Field(max_length=128)
+    sections: list[AssemblySection] = Field(min_length=1, max_length=16)
+    unresolved: list[str] = Field(default_factory=list, max_length=16)
+
+
 class FunctionBlockPlan(BaseModel):
     function_name: str = Field(max_length=128)
     selected_path: list[str] = Field(min_length=1, max_length=32)
@@ -240,6 +252,7 @@ class StagedPrediction(BaseModel):
     target_function: str
     hardware_profile_id: str
     structure_plan: StructurePlan
+    function_assembly_plans: list[FunctionAssemblyPlan] = Field(default_factory=list)
     function_ledgers: list[FunctionLedger]
     function_contributions: list[FunctionContribution]
     aggregate_instruction_ledger: list[AggregateInstructionCycles]
