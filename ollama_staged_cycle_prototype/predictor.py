@@ -106,6 +106,10 @@ Required rules:
 - Expand loop call sites using their proven source bounds.
 - For nested loops (a loop inside another loop), explicitly state both the individual
   bounds and compound body iterations (e.g. outer 8 * inner 4 = 32 iterations) in loop_bounds.
+- For loops with non-unit strides (e.g. `for (i = 0; i < N; i += step)`):
+  * The number of loop iterations is `ceil((bound - start) / step)`, NOT `N`.
+  * Never assume the loop increments by 1 when the loop update uses `+= step`.
+  * If `step` or inner bounds change across outer loop iterations, compute the true sum of inner iterations across all outer iterations.
 - Never invent a helper or omit a supplied reachable helper.
 - Put genuinely unprovable source bounds in unresolved.
 
@@ -180,7 +184,7 @@ Rules for generating FunctionAssemblyPlan:
      - Section "epilogue_and_return" with execution_count = 1: stack teardown, POP, and return (bx lr or pop {{..., pc}}).
   3. For functions with nested loops:
      - Section "prologue" with execution_count = 1.
-     - Section "inner_loop_body" with execution_count matching the compound inner execution count from 'Source-derived proven loop execution obligations'.
+     - Section "inner_loop_body" with execution_count matching the total executions of the innermost body across the entire function call (the sum of inner iterations across all outer iterations).
      - Section "epilogue" with execution_count = 1.
 - Emit real ARM Cortex-M4 Thumb-2 instructions in 'instructions' list for each section:
   * Memory access: ldr, ldrb, ldrh, ldrsb, ldrsh, str, strb, strh
