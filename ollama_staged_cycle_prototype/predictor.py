@@ -853,7 +853,11 @@ Draft block plan to audit and replace:
             has_conditional_edges = any(
                 edge.kind.startswith("conditional_") for edge in block_plan.edges
             )
-            if has_source_condition and not has_conditional_edges:
+            max_block_count = max(
+                (b.execution_count_per_invocation for b in block_plan.blocks),
+                default=1,
+            )
+            if has_source_condition and not has_conditional_edges and max_block_count <= 1:
                 errors.append(
                     f"{name} contains source conditions but its CFG has no "
                     "conditional edges"
