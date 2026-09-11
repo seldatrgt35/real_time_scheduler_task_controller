@@ -395,7 +395,7 @@ Draft block plan to audit and replace:
         if all_functions:
             inferred = StagedPredictor._infer_helper_parameter_values(all_functions, macros)
             macros.update(inferred.get(name, {}))
-        loops = StagedPredictor._proven_for_loops(body, macros) if macros else []
+        loops = StagedPredictor._proven_for_loops(body, macros)
         obligations: list[str] = []
         for start, end, trip, desc in loops:
             enclosing = [p for p in loops if p[0] < start and p[1] > end]
@@ -430,7 +430,7 @@ Draft block plan to audit and replace:
         if all_functions and name:
             inferred = StagedPredictor._infer_helper_parameter_values(all_functions, macros)
             macros.update(inferred.get(name, {}))
-        loops = StagedPredictor._proven_for_loops(body, macros) if macros else []
+        loops = StagedPredictor._proven_for_loops(body, macros)
 
         for line_number, raw_line in enumerate(body.splitlines(), start=1):
             line = re.sub(r"/\*.*?\*/", "", raw_line).strip()
@@ -798,11 +798,13 @@ Draft block plan to audit and replace:
         if plan.target_function != target:
             errors.append("structure plan target does not match requested target")
         planned = {item.function_name: item.dynamic_calls for item in plan.functions}
-        if set(planned) != set(functions):
+        unknown_planned = set(planned) - set(functions)
+        if unknown_planned:
             errors.append(
-                "structure plan function set mismatch: expected "
-                f"{sorted(functions)}, received {sorted(planned)}"
+                f"structure plan contains unknown functions: {sorted(unknown_planned)}"
             )
+        for missing_fn in set(functions) - set(planned):
+            planned[missing_fn] = 0
         # One CLI prediction always represents exactly one target invocation.
         planned[target] = 1
         for item in plan.functions:
