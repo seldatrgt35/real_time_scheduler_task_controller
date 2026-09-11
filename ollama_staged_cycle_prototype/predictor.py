@@ -692,31 +692,30 @@ Draft block plan to audit and replace:
             proven_calls, proof = StagedPredictor._proven_direct_callee_calls(
                 functions[name], callee_name, source_facts
             )
-            if parent_map.get(callee_name) != {name}:
-                errors.append(
-                    f"cannot derive per-invocation calls for {callee_name}: "
-                    "callee has multiple direct parents"
+            if proven_calls is not None:
+                calls_per_invocation = proven_calls
+                evidence = proof
+            elif parent_map.get(callee_name) == {name}:
+                planned_ratio = 0
+                if parent_calls >= 1 and child_calls % parent_calls == 0:
+                    planned_ratio = child_calls // parent_calls
+                calls_per_invocation = max(call_sites, planned_ratio)
+                evidence = (
+                    "fallback from pass-1 dynamic calls and "
+                    f"{call_sites} syntactic direct call-site(s): {proof}"
                 )
-                continue
-            planned_ratio = 0
-            if parent_calls >= 1 and child_calls % parent_calls == 0:
-                planned_ratio = child_calls // parent_calls
-            # Source-proven lexical scope is authoritative. Pass-1 is retained
-            # only as a fallback for source constructs this small parser cannot
-            # prove; it is never allowed to override a proven loop placement.
-            calls_per_invocation = (
-                proven_calls if proven_calls is not None
-                else max(call_sites, planned_ratio)
-            )
+            else:
+                calls_per_invocation = max(1, call_sites)
+                evidence = (
+                    f"syntactic direct call-site(s) for shared callee: {call_sites} ({proof})"
+                )
             if calls_per_invocation < 1:
                 errors.append(f"no call multiplicity for {name}->{callee_name}")
                 continue
             callees.append(CalleeCount(
                 function_name=callee_name,
                 calls_per_invocation=calls_per_invocation,
-                evidence=(proof if proven_calls is not None else
-                          "fallback from pass-1 dynamic calls and "
-                          f"{call_sites} syntactic direct call-site(s): {proof}"),
+                evidence=evidence,
             ))
 
         aggregated_counts: dict[str, int] = defaultdict(int)
