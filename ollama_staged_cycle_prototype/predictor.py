@@ -102,7 +102,8 @@ Source-derived proven loop execution obligations:
 Required rules:
 - The target function has dynamic_calls=1.
 - Include every supplied reachable function exactly once.
-- A helper's dynamic_calls is its total invocation count during one target call.
+- A helper's dynamic_calls is its total invocation count during one target call on the selected worst-case path.
+- In conditional branching (if/else if/else, switch-case), alternative branches are mutually exclusive! If a helper is called in branch A and also in branch B, its dynamic_calls on any single path is at most 1, NEVER the sum of mutually exclusive branches.
 - Expand loop call sites using their proven source bounds.
 - For nested loops (a loop inside another loop), explicitly state both the individual
   bounds and compound body iterations (e.g. outer 8 * inner 4 = 32 iterations) in loop_bounds.
@@ -175,9 +176,12 @@ GCC 11.4 -O0 transformation examples:
 
 Rules for generating FunctionAssemblyPlan:
 - Structure {name} into its natural sequential assembly sections:
-  1. For a straight-line function (no loops):
+  1. For a function without loops (straight-line or branching with if/else or switch-case):
      - One section named "straight_line" with execution_count = 1.
-       Contains the full instruction sequence: entry PUSH, stack allocation, operations, and return (bx lr or pop {{..., pc}}).
+     - CRITICAL FOR BRANCHING (if/else, switch-case):
+       A single invocation executes exactly ONE path. Synthesize ONLY the single selected feasible path (worst-case path): entry PUSH, stack allocation, condition tests, and ONLY the single chosen branch arm (e.g., only one case of a switch, or only the chosen arm of an if-else).
+       NEVER concatenate mutually exclusive alternative branch arms into the same section!
+       NEVER emit multiple returns (bx lr / pop {{..., pc}}) in the same section! The section must conclude with exactly ONE return.
   2. For a function with a single loop:
      - Section "prologue_and_init" with execution_count = 1: entry PUSH, stack allocation, initial variable and index setup.
      - Section "loop_body" with execution_count = N, where N is the loop body trip count from 'Source-derived proven loop execution obligations'. Contains the loop body arithmetic, memory loads/stores, callee calls, and increment/test.
@@ -535,7 +539,7 @@ Draft block plan to audit and replace:
         return obligations
 
     @staticmethod
-    def _classify_instruction(instruction: str) -> dict[str, int]:
+    def _classify_instruction(instruction: str, is_loop: bool = False) -> dict[str, int]:
         """Map one predicted mnemonic to timing classes without LLM arithmetic."""
         line = instruction.strip()
         line = re.sub(r"^[0-9a-fA-F]+:\s*", "", line)
@@ -588,7 +592,11 @@ Draft block plan to audit and replace:
         if op in {"cbz", "cbnz", "tbb", "tbh"} or re.fullmatch(
             r"b(?:eq|ne|cs|hs|cc|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al)", op
         ):
-            return {"conditional_branch_taken": 1}
+            return (
+                {"conditional_branch_taken": 1}
+                if is_loop
+                else {"conditional_branch_not_taken": 1}
+            )
         return {"alu_move_compare_shift": 1}
 
     @staticmethod
@@ -602,6 +610,10 @@ Draft block plan to audit and replace:
 
         for section in plan.sections:
             exec_count = max(0, section.execution_count)
+            is_loop = (
+                "loop" in section.section_name.lower()
+                or "kernel" in section.section_name.lower()
+            )
             cleaned_instructions: list[str] = []
             for instr in section.instructions:
                 clean = instr.strip()
@@ -615,7 +627,7 @@ Draft block plan to audit and replace:
                 cleaned_instructions.append(clean)
 
             for instr in cleaned_instructions:
-                classified = StagedPredictor._classify_instruction(instr)
+                classified = StagedPredictor._classify_instruction(instr, is_loop=is_loop)
                 for cls_name, amount in classified.items():
                     counts[cls_name] += amount * exec_count
                     evidence[cls_name].append(
@@ -626,6 +638,9 @@ Draft block plan to audit and replace:
                     callee = match.group(1)
                     if callee in all_functions and callee != plan.function_name:
                         callee_counts[callee] += exec_count
+                if "function_return_with_refill" in classified and not is_loop:
+                    # In straight-line execution, return concludes the function; instructions after are dead code.
+                    break
 
         callees = [
             CalleeCount(
@@ -860,6 +875,22 @@ Draft block plan to audit and replace:
             recognized = any(loop[0] == opening + 1 for loop in loops)
             if not recognized and any(opening < site.start() < closing for site in sites):
                 return None, "call is inside a loop whose bound was not proven"
+
+        # If any call site is inside a conditional branch (if, else, switch, case),
+        # its execution is dynamic and path-dependent, NOT statically guaranteed for all paths.
+        for token in re.finditer(r"\b(?:if\s*\(|else\b|switch\s*\(|case\b)", body):
+            opening = body.find("{", token.end())
+            if opening < 0:
+                semicolon = body.find(";", token.end())
+                if semicolon > 0 and any(token.end() <= site.start() <= semicolon for site in sites):
+                    return None, "call is inside a conditional branch"
+                continue
+            closing = StagedPredictor._matching_brace(body, opening)
+            if closing is None:
+                continue
+            if any(opening < site.start() < closing for site in sites):
+                return None, "call is inside a conditional branch"
+
         return total, "Python lexical loop-scope proof per call site: " + " + ".join(evidence)
 
     @staticmethod
@@ -898,6 +929,10 @@ Draft block plan to audit and replace:
         expected_names = StagedPredictor._direct_callee_names(
             name, functions[name], functions
         )
+        synthesized_calls = {
+            item.function_name: item.calls_per_invocation
+            for item in ledger.callees
+        }
         callees: list[CalleeCount] = []
         parent_calls = planned.get(name, 0)
         for callee_name in sorted(expected_names):
@@ -911,19 +946,25 @@ Draft block plan to audit and replace:
             if proven_calls is not None:
                 calls_per_invocation = proven_calls
                 evidence = proof
+            elif callee_name in synthesized_calls and synthesized_calls[callee_name] > 0:
+                calls_per_invocation = synthesized_calls[callee_name]
+                evidence = (
+                    f"synthesized BL calls on selected path: {calls_per_invocation} "
+                    f"({call_sites} syntactic sites: {proof})"
+                )
             elif parent_map.get(callee_name) == {name}:
                 planned_ratio = 0
                 if parent_calls >= 1 and child_calls % parent_calls == 0:
                     planned_ratio = child_calls // parent_calls
-                calls_per_invocation = max(call_sites, planned_ratio)
+                calls_per_invocation = planned_ratio if planned_ratio > 0 else 1
                 evidence = (
-                    "fallback from pass-1 dynamic calls and "
-                    f"{call_sites} syntactic direct call-site(s): {proof}"
+                    "fallback from pass-1 dynamic calls: "
+                    f"{calls_per_invocation} ({call_sites} syntactic sites: {proof})"
                 )
             else:
-                calls_per_invocation = max(1, call_sites)
+                calls_per_invocation = 1
                 evidence = (
-                    f"syntactic direct call-site(s) for shared callee: {call_sites} ({proof})"
+                    f"single-path fallback for shared callee ({call_sites} syntactic sites: {proof})"
                 )
             if calls_per_invocation < 1:
                 errors.append(f"no call multiplicity for {name}->{callee_name}")

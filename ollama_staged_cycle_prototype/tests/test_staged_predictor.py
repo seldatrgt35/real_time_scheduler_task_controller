@@ -389,6 +389,21 @@ class StagedPredictorTest(unittest.TestCase):
         not_taken_block = next(b for b in plan.blocks if b.block_id == "branch_not_taken")
         self.assertEqual(not_taken_block.execution_count_per_invocation, 0)
 
+    def test_conditional_call_sites_not_summed_by_lexical_proof(self):
+        source = """
+        void Caller(int state) {
+            if (state == 1) {
+                Helper();
+            } else if (state == 2) {
+                Helper();
+            }
+        }
+        """
+        calls, proof = StagedPredictor._proven_direct_callee_calls(source, "Helper", "")
+        self.assertIsNone(calls)
+        self.assertIn("conditional branch", proof)
+
 
 if __name__ == "__main__":
     unittest.main()
+
