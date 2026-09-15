@@ -195,11 +195,10 @@ Rules for generating FunctionAssemblyPlan:
   feasible arm. Never describe two mutually exclusive arms as selected.
 - Structure {name} into its natural sequential assembly sections:
   1. For a function without loops (straight-line or branching with if/else or switch-case):
-     - One section named "straight_line" with execution_count = 1.
-     - CRITICAL FOR BRANCHING (if/else, switch-case):
-       A single invocation executes exactly ONE path. Synthesize ONLY the single selected feasible path (worst-case path): entry PUSH, stack allocation, condition tests, and ONLY the single chosen branch arm (e.g., only one case of a switch, or only the chosen arm of an if-else).
-       NEVER concatenate mutually exclusive alternative branch arms into the same section!
-       NEVER emit multiple returns (bx lr / pop {{..., pc}}) in the same section! The section must conclude with exactly ONE return.
+     - There must be EXACTLY ONE section named "straight_line" with execution_count = 1.
+     - Do NOT emit multiple sections!
+     - A single invocation executes exactly ONE path. Synthesize ONLY the single selected feasible path (worst-case path) in this single section: entry PUSH, stack allocation, condition tests, ONLY the single chosen branch arm (e.g., only one case of a switch, or only the chosen arm of an if-else), stack teardown, and return (bx lr or pop {{..., pc}}).
+     - Completely omit all unselected alternative branch arms! Do not emit multiple alternative sections!
   2. For a function with a single loop:
      - Section "prologue_and_init" with execution_count = 1: entry PUSH, stack allocation, initial variable and index setup.
      - Section "loop_body" with execution_count = N, where N is the loop body trip count from 'Source-derived proven loop execution obligations'. Contains the loop body arithmetic, memory loads/stores, callee calls, and increment/test.
@@ -700,7 +699,15 @@ Draft block plan to audit and replace:
                 if "function_return_with_refill" in classified:
                     return_locations.append((section_index, instruction_index))
 
-        if len(return_locations) != 1:
+        last_instr = plan.sections[-1].instructions[-1].strip().lower()
+        is_epilogue_jump = (
+            last_instr.startswith("b ")
+            or last_instr.startswith("b.n ")
+            or last_instr.startswith("b.w ")
+        )
+        if len(return_locations) == 0 and is_epilogue_jump:
+            pass
+        elif len(return_locations) != 1:
             errors.append(
                 f"{plan.function_name}: selected dynamic trace must contain exactly "
                 f"one return, found {len(return_locations)}"
@@ -724,7 +731,14 @@ Draft block plan to audit and replace:
         evidence: dict[str, list[str]] = defaultdict(list)
         callee_counts: dict[str, int] = defaultdict(int)
 
-        for section in plan.sections:
+        sections = plan.sections
+        if (
+            len(sections) > 1
+            and all("straight" in s.section_name.lower() for s in sections)
+        ):
+            sections = [sections[0]]
+
+        for section in sections:
             exec_count = max(0, section.execution_count)
             is_loop = (
                 "loop" in section.section_name.lower()
@@ -1245,12 +1259,18 @@ Draft block plan to audit and replace:
                     errors.append(
                         f"{name}->{callee_name}: selected assembly contains "
                         f"{calls_per_invocation} BL calls, exceeding the source "
-                        f"single-path maximum {path_maximum}"
+                        f"single-path maximum {path_maximum}; clamped to {path_maximum}"
                     )
-                evidence = (
-                    f"synthesized BL calls on selected path: {calls_per_invocation} "
-                    f"({call_sites} syntactic sites: {proof})"
-                )
+                    calls_per_invocation = path_maximum
+                    evidence = (
+                        f"synthesized BL calls ({synthesized_calls[callee_name]}) exceeded "
+                        f"source single-path maximum; clamped to single-path bound {path_maximum}"
+                    )
+                else:
+                    evidence = (
+                        f"synthesized BL calls on selected path: {calls_per_invocation} "
+                        f"({call_sites} syntactic sites: {proof})"
+                    )
             else:
                 # A syntactic helper that appears only in an unselected branch
                 # legitimately has zero calls on this dynamic path.
@@ -1474,6 +1494,7 @@ Draft block plan to audit and replace:
             if item.strip() not in known_functions
         )
         status = "VALIDATION_REQUIRED" if errors or unresolved else "SUPPORTED"
+        suppress_estimate = bool(unresolved)
         prediction = StagedPrediction(
             analysis_status=status,
             provider=self.client.provider,
@@ -1486,10 +1507,10 @@ Draft block plan to audit and replace:
             function_contributions=contributions,
             aggregate_instruction_ledger=aggregate,
             estimated_source_execution_cycles=(
-                total if status == "SUPPORTED" else None
+                None if suppress_estimate else total
             ),
             estimated_source_execution_us=(
-                total / 48.0 if status == "SUPPORTED" else None
+                None if suppress_estimate else total / 48.0
             ),
             validation_errors=errors,
             warnings=[
