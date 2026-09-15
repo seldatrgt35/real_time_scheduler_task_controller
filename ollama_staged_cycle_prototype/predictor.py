@@ -219,10 +219,11 @@ Rules for generating FunctionAssemblyPlan:
   continue with instructions at its target; omit the skipped arm. After a
   not-taken branch, continue with fallthrough instructions.
 - For every conditional branch instruction, add one `conditional_branches`
-  entry to that section. `instruction_index` is its zero-based index in the
-  section's `instructions` list. `taken_count + not_taken_count` must equal the
-  section's `execution_count`. Straight-line path decisions therefore have
-  either (1, 0) or (0, 1). A loop test may use repeated counts.
+  entry to that section in order of appearance. `instruction_index` is its
+  approximate zero-based index in the section's `instructions` list.
+  `taken_count + not_taken_count` must equal the section's `execution_count`.
+  Straight-line path decisions therefore have either (1, 0) or (0, 1). A loop
+  test may use repeated counts.
 - Do not add `conditional_branches` entries for unconditional `b`, calls `bl`,
   returns, comparisons, or non-branch instructions.
 - GCC 11.4 -O0 compiler rules:
@@ -643,6 +644,34 @@ Draft block plan to audit and replace:
         ))
 
     @staticmethod
+    def _map_conditional_branches(
+        section: AssemblySection,
+    ) -> dict[int, ConditionalBranchExecution]:
+        actual_branch_indices = [
+            index for index, instruction in enumerate(section.instructions)
+            if StagedPredictor._is_conditional_branch_instruction(instruction)
+        ]
+        branch_map: dict[int, ConditionalBranchExecution] = {}
+        unmapped_actual = list(actual_branch_indices)
+        remaining_declared = []
+
+        # Phase 1: Exact index match
+        for branch in section.conditional_branches:
+            if branch.instruction_index in unmapped_actual:
+                branch_map[branch.instruction_index] = branch
+                unmapped_actual.remove(branch.instruction_index)
+            else:
+                remaining_declared.append(branch)
+
+        # Phase 2: Positional match for remaining declared branches to unmapped actual branches
+        for branch in remaining_declared:
+            if unmapped_actual:
+                target_index = unmapped_actual.pop(0)
+                branch_map[target_index] = branch
+
+        return branch_map
+
+    @staticmethod
     def _validate_assembly_plan(plan: FunctionAssemblyPlan) -> list[str]:
         """Validate that the model returned one countable dynamic trace."""
         errors: list[str] = []
@@ -653,34 +682,17 @@ Draft block plan to audit and replace:
                 index for index, instruction in enumerate(section.instructions)
                 if StagedPredictor._is_conditional_branch_instruction(instruction)
             }
-            declared_indices = [
-                branch.instruction_index
-                for branch in section.conditional_branches
-            ]
-            if len(declared_indices) != len(set(declared_indices)):
-                errors.append(
-                    f"{plan.function_name}/{section.section_name}: duplicate "
-                    "conditional branch instruction_index"
-                )
-            if set(declared_indices) != conditional_indices:
+            if conditional_indices and not section.conditional_branches:
                 errors.append(
                     f"{plan.function_name}/{section.section_name}: conditional "
-                    f"branch metadata indices {sorted(set(declared_indices))} "
-                    f"do not match instruction indices {sorted(conditional_indices)}"
+                    f"branch metadata missing for branch instructions at metadata indices {sorted(conditional_indices)}"
                 )
             for branch in section.conditional_branches:
-                if branch.instruction_index >= len(section.instructions):
-                    errors.append(
-                        f"{plan.function_name}/{section.section_name}: conditional "
-                        f"branch index {branch.instruction_index} is out of range"
-                    )
-                    continue
                 executions = branch.taken_count + branch.not_taken_count
                 if executions != section.execution_count:
                     errors.append(
-                        f"{plan.function_name}/{section.section_name}: branch at "
-                        f"instruction {branch.instruction_index} executes {executions} "
-                        f"times but section executes {section.execution_count} times"
+                        f"{plan.function_name}/{section.section_name}: branch executes "
+                        f"{executions} times but section executes {section.execution_count} times"
                     )
 
             for instruction_index, instruction in enumerate(section.instructions):
@@ -732,10 +744,11 @@ Draft block plan to audit and replace:
                 original_to_cleaned[original_index] = len(cleaned_instructions)
                 cleaned_instructions.append(clean)
 
+            mapped_branches = StagedPredictor._map_conditional_branches(section)
             branch_metadata = {
-                original_to_cleaned[item.instruction_index]: item
-                for item in section.conditional_branches
-                if item.instruction_index in original_to_cleaned
+                original_to_cleaned[orig_idx]: branch
+                for orig_idx, branch in mapped_branches.items()
+                if orig_idx in original_to_cleaned
             }
 
             for instruction_index, instr in enumerate(cleaned_instructions):

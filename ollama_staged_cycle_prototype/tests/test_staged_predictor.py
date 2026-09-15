@@ -537,6 +537,36 @@ class StagedPredictorTest(unittest.TestCase):
         self.assertFalse(errors)
         self.assertEqual(normalized.callees, [])
 
+    def test_fuzzy_branch_instruction_indices_are_positionally_mapped(self):
+        plan = FunctionAssemblyPlan.model_validate({
+            "function_name": "FuzzyBranching",
+            "selected_source_path": ["x > 0: true", "return"],
+            "sections": [{
+                "section_name": "straight_line",
+                "execution_count": 1,
+                "instructions": [
+                    "push {r7, lr}", "sub sp, #12", "cmp r0, #0", "ble.n skip",
+                    "movs r0, #1", "pop {r7, pc}",
+                ],
+                "conditional_branches": [{
+                    "instruction_index": 5,
+                    "taken_count": 0,
+                    "not_taken_count": 1,
+                    "evidence": "branch not taken, fall through",
+                }],
+            }],
+        })
+        self.assertEqual(StagedPredictor._validate_assembly_plan(plan), [])
+        ledger = StagedPredictor._assembly_plan_to_ledger(
+            plan, {"FuzzyBranching": "int FuzzyBranching(int x) { return x > 0 ? 1 : 0; }"}
+        )
+        counts = {
+            item.instruction_class: item.dynamic_count_per_invocation
+            for item in ledger.instruction_counts
+        }
+        self.assertEqual(counts.get("conditional_branch_not_taken"), 1)
+        self.assertNotIn("conditional_branch_taken", counts)
+
 
 if __name__ == "__main__":
     unittest.main()
