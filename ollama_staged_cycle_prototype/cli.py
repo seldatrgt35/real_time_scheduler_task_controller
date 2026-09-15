@@ -19,6 +19,10 @@ def parser() -> argparse.ArgumentParser:
         "--repository-root", type=Path,
         default=Path(__file__).resolve().parents[1],
     )
+    result.add_argument(
+        "--model", default=None,
+        help="Ollama model name (default: from OLLAMA_MODEL or qwen3-coder:30b)",
+    )
     return result
 
 
@@ -29,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     # Allow sufficient token budget for basic blocks, edges, and instruction counts
     # while respecting external environment overrides if already provided.
     os.environ.setdefault("OLLAMA_NUM_PREDICT", "6144")
-    client = OllamaClient()
+    client = OllamaClient(model=args.model)
     prediction, raw_outputs = StagedPredictor(
         args.repository_root, client
     ).predict(args.source.read_text(encoding="utf-8"), args.function)

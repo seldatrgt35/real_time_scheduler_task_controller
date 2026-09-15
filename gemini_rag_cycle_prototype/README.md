@@ -62,11 +62,11 @@ python -m pip install -r gemini_rag_cycle_prototype/requirements.txt
 Gemini remains available, but generation and embeddings can run fully locally:
 
 ```powershell
-ollama pull qwen2.5-coder:14b
+ollama pull qwen3-coder:30b
 ollama pull nomic-embed-text
 
 $env:LLM_PROVIDER = "ollama"
-$env:OLLAMA_MODEL = "qwen2.5-coder:14b"
+$env:OLLAMA_MODEL = "qwen3-coder:30b"
 $env:OLLAMA_EMBEDDING_MODEL = "nomic-embed-text"
 
 # Required once before using RAG with Ollama embeddings.

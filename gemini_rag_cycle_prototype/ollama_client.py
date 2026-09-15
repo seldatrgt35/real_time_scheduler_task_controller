@@ -26,7 +26,7 @@ class OllamaClient:
         self, *, model: str | None = None, embedding_model: str | None = None,
         embedding_dimensions: int | None = None, base_url: str | None = None,
     ):
-        self.model = model or os.getenv("OLLAMA_MODEL", "qwen2.5-coder:14b")
+        self.model = model or os.getenv("OLLAMA_MODEL", "qwen3-coder:30b")
         self.embedding_model = embedding_model or os.getenv(
             "OLLAMA_EMBEDDING_MODEL", "nomic-embed-text"
         )
