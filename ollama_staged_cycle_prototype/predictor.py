@@ -203,10 +203,11 @@ Rules for generating FunctionAssemblyPlan:
      - Section "prologue_and_init" with execution_count = 1: entry PUSH, stack allocation, initial variable and index setup.
      - Section "loop_body" with execution_count = N, where N is the loop body trip count from 'Source-derived proven loop execution obligations'. Contains the loop body arithmetic, memory loads/stores, callee calls, and increment/test.
      - Section "epilogue_and_return" with execution_count = 1: stack teardown, POP, and return (bx lr or pop {{..., pc}}).
-  3. For functions with nested loops:
-     - Section "prologue" with execution_count = 1.
-     - Section "inner_loop_body" with execution_count matching the total executions of the innermost body across the entire function call (the sum of inner iterations across all outer iterations).
-     - Section "epilogue" with execution_count = 1.
+   3. For functions with nested loops:
+      - Section "prologue_and_init" with execution_count = 1: entry PUSH, stack allocation, outermost loop variable and index setup.
+      - For each outer/enclosing loop level: Section "outer_loop_overhead" (or "middle_loop_overhead") with execution_count matching that loop's compound execution count (e.g. trip count from 'Source-derived proven loop execution obligations'): contains outer loop counter reload from stack, increment/addition, comparison, test branch, and inner loop counter init.
+      - For the innermost loop: Section "inner_loop_body" with execution_count matching the total compound inner body execution count from 'Source-derived proven loop execution obligations' (prod(trip_counts)). Contains the innermost body arithmetic operations, array memory loads/stores, callee calls, and inner index increment/test.
+      - Section "epilogue_and_return" with execution_count = 1: stack teardown, POP, and return (bx lr or pop {{..., pc}}).
 - Emit real ARM Cortex-M4 Thumb-2 instructions in 'instructions' list for each section:
   * Memory access: ldr, ldrb, ldrh, ldrsb, ldrsh, str, strb, strh
   * Arithmetic/logic: adds, subs, mov, movs, lsls, lsrs, asrs, eor, eors, and, ands, orr, bic, cmp

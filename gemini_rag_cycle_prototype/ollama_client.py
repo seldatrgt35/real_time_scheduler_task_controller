@@ -41,6 +41,7 @@ class OllamaClient:
         )
         self.temperature = float(os.getenv("OLLAMA_TEMPERATURE", "0"))
         self.seed = int(os.getenv("OLLAMA_SEED", "42"))
+        self.repeat_penalty = float(os.getenv("OLLAMA_REPEAT_PENALTY", "1.05"))
 
     def _post(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         request = Request(
@@ -159,6 +160,7 @@ class OllamaClient:
                     "seed": self.seed,
                     "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "16384")),
                     "num_predict": int(os.getenv("OLLAMA_NUM_PREDICT", "6144")),
+                    "repeat_penalty": self.repeat_penalty,
                 },
             })
             raw = response.get("response") or ""
