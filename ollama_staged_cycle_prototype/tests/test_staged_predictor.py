@@ -35,6 +35,7 @@ class FakeClient:
             calls = 2 if self.wrong_plan else 3
             value = {
                 "target_function": "Task",
+                "selected_path": ["loop executes three times", "return"],
                 "functions": [
                     {"function_name": "Task", "dynamic_calls": 1,
                      "call_count_evidence": "entry"},
@@ -47,6 +48,7 @@ class FakeClient:
             if "function Task." in prompt or "function\nTask." in prompt:
                 value = {
                     "function_name": "Task",
+                    "selected_source_path": ["loop executes three times", "return"],
                     "sections": [
                         {
                             "section_name": "prologue_and_init",
@@ -74,6 +76,7 @@ class FakeClient:
             else:
                 value = {
                     "function_name": "Helper",
+                    "selected_source_path": ["straight-line return"],
                     "sections": [
                         {
                             "section_name": "straight_line",
@@ -402,6 +405,137 @@ class StagedPredictorTest(unittest.TestCase):
         calls, proof = StagedPredictor._proven_direct_callee_calls(source, "Helper", "")
         self.assertIsNone(calls)
         self.assertIn("conditional branch", proof)
+
+    def test_else_if_call_sites_have_single_path_maximum_one(self):
+        body = """
+        void Caller(int state) {
+            if (state == 1) {
+                Helper();
+            } else if (state == 2) {
+                Helper();
+            } else {
+                Sink();
+            }
+        }
+        """
+        self.assertEqual(
+            StagedPredictor._max_direct_callee_calls_on_one_branch_path(
+                body, "Helper", ""
+            ),
+            1,
+        )
+
+    def test_independent_if_calls_are_not_treated_as_mutually_exclusive(self):
+        body = """
+        void Caller(int a, int b) {
+            if (a) { Helper(); }
+            if (b) { Helper(); }
+        }
+        """
+        self.assertEqual(
+            StagedPredictor._max_direct_callee_calls_on_one_branch_path(
+                body, "Helper", ""
+            ),
+            2,
+        )
+
+    def test_selected_trace_branch_metadata_drives_branch_timing(self):
+        plan = FunctionAssemblyPlan.model_validate({
+            "function_name": "Branching",
+            "selected_source_path": ["x != 0: false", "return"],
+            "sections": [{
+                "section_name": "straight_line",
+                "execution_count": 1,
+                "instructions": [
+                    "push {r7, lr}", "cmp r0, #0", "bne.n chosen",
+                    "movs r0, #0", "pop {r7, pc}",
+                ],
+                "conditional_branches": [{
+                    "instruction_index": 2,
+                    "taken_count": 0,
+                    "not_taken_count": 1,
+                    "evidence": "selected fallthrough arm",
+                }],
+            }],
+        })
+        self.assertEqual(StagedPredictor._validate_assembly_plan(plan), [])
+        ledger = StagedPredictor._assembly_plan_to_ledger(
+            plan, {"Branching": "int Branching(int x) { return x ? 1 : 0; }"}
+        )
+        counts = {
+            item.instruction_class: item.dynamic_count_per_invocation
+            for item in ledger.instruction_counts
+        }
+        self.assertEqual(counts.get("conditional_branch_not_taken"), 1)
+        self.assertNotIn("conditional_branch_taken", counts)
+
+    def test_missing_branch_metadata_rejects_selected_trace(self):
+        plan = FunctionAssemblyPlan.model_validate({
+            "function_name": "Branching",
+            "selected_source_path": ["x != 0: false", "return"],
+            "sections": [{
+                "section_name": "straight_line",
+                "execution_count": 1,
+                "instructions": [
+                    "cmp r0, #0", "bne.n chosen", "pop {r7, pc}",
+                ],
+            }],
+        })
+        errors = StagedPredictor._validate_assembly_plan(plan)
+        self.assertTrue(any("metadata indices" in error for error in errors))
+
+    def test_conditional_selected_assembly_cannot_exceed_branch_path_maximum(self):
+        functions = {
+            "Caller": """
+                void Caller(int state) {
+                    if (state == 1) { Helper(); }
+                    else if (state == 2) { Helper(); }
+                }
+            """,
+            "Helper": "void Helper(void) { return; }",
+        }
+        ledger = FunctionLedger.model_validate({
+            "function_name": "Caller",
+            "selected_path": ["both mutually exclusive arms (invalid)"],
+            "callees": [{
+                "function_name": "Helper",
+                "calls_per_invocation": 2,
+                "evidence": "two synthesized BL instructions",
+            }],
+            "conditional_branch_evaluations_per_invocation": 2,
+            "instruction_counts": [{
+                "instruction_class": "function_call_bl_with_refill",
+                "dynamic_count_per_invocation": 2,
+                "evidence": "two BL instructions",
+            }],
+        })
+        _, errors = StagedPredictor._normalize_ledger_relations(
+            "Caller", ledger, functions,
+            {"Caller": 1, "Helper": 2}, {"Helper": {"Caller"}},
+        )
+        self.assertTrue(any("single-path maximum 1" in error for error in errors))
+
+    def test_unselected_conditional_helper_remains_zero_calls(self):
+        functions = {
+            "Caller": "void Caller(int state) { if (state) { Helper(); } }",
+            "Helper": "void Helper(void) { return; }",
+        }
+        ledger = FunctionLedger.model_validate({
+            "function_name": "Caller",
+            "selected_path": ["state == 0", "return"],
+            "conditional_branch_evaluations_per_invocation": 1,
+            "instruction_counts": [{
+                "instruction_class": "conditional_branch_taken",
+                "dynamic_count_per_invocation": 1,
+                "evidence": "skip helper arm",
+            }],
+        })
+        normalized, errors = StagedPredictor._normalize_ledger_relations(
+            "Caller", ledger, functions,
+            {"Caller": 1, "Helper": 0}, {"Helper": {"Caller"}},
+        )
+        self.assertFalse(errors)
+        self.assertEqual(normalized.callees, [])
 
 
 if __name__ == "__main__":

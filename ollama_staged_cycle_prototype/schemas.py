@@ -25,13 +25,13 @@ TIMING_PROFILE_CYCLES = {
 
 class PlannedFunction(BaseModel):
     function_name: str = Field(max_length=128)
-    dynamic_calls: int = Field(ge=1)
+    dynamic_calls: int = Field(ge=0)
     call_count_evidence: str = Field(max_length=500)
 
 
 class StructurePlan(BaseModel):
     target_function: str
-    selected_path: list[str] = Field(default_factory=list, max_length=64)
+    selected_path: list[str] = Field(min_length=1, max_length=64)
     functions: list[PlannedFunction] = Field(max_length=64)
     loop_bounds: list[str] = Field(default_factory=list, max_length=64)
     unresolved: list[str] = Field(default_factory=list, max_length=32)
@@ -105,14 +105,25 @@ class ControlFlowEdge(BaseModel):
     evidence: str = Field(default="", max_length=200)
 
 
+class ConditionalBranchExecution(BaseModel):
+    instruction_index: int = Field(ge=0)
+    taken_count: int = Field(ge=0)
+    not_taken_count: int = Field(ge=0)
+    evidence: str = Field(max_length=300)
+
+
 class AssemblySection(BaseModel):
     section_name: str = Field(max_length=64)
     execution_count: int = Field(ge=0)
     instructions: list[str] = Field(min_length=1, max_length=256)
+    conditional_branches: list[ConditionalBranchExecution] = Field(
+        default_factory=list, max_length=64
+    )
 
 
 class FunctionAssemblyPlan(BaseModel):
     function_name: str = Field(max_length=128)
+    selected_source_path: list[str] = Field(min_length=1, max_length=32)
     sections: list[AssemblySection] = Field(min_length=1, max_length=16)
     unresolved: list[str] = Field(default_factory=list, max_length=16)
 

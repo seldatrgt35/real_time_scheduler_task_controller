@@ -87,8 +87,10 @@ class StagedPredictor:
                 all_loop_obligations.append(f"[{f_name}] {o}")
 
         return f"""You are pass 1 of a staged GCC -O0 source timing analysis.
-Analyze only control flow and dynamic function-call multiplicities on the most
-expensive feasible source path. Do not calculate cycles or write assembly.
+Analyze only control flow and dynamic function-call multiplicities on one
+feasible source path. Initialization/path context is authoritative when it
+determines a condition; among genuinely unknown alternatives, select the most
+expensive feasible path. Do not calculate cycles or write assembly.
 
 Target: {target}
 Compiler: ARM GCC 11.4 -O0, Cortex-M4 Thumb-2
@@ -101,8 +103,11 @@ Source-derived proven loop execution obligations:
 
 Required rules:
 - The target function has dynamic_calls=1.
+- `selected_path` is mandatory and lists the target's executed source decisions
+  in order. It must agree with known initialization values.
 - Include every supplied reachable function exactly once.
 - A helper's dynamic_calls is its total invocation count during one target call on the selected worst-case path.
+- A helper reachable only through an unselected branch has dynamic_calls=0; keep it in the functions list instead of inventing a call.
 - In conditional branching (if/else if/else, switch-case), alternative branches are mutually exclusive! If a helper is called in branch A and also in branch B, its dynamic_calls on any single path is at most 1, NEVER the sum of mutually exclusive branches.
 - Expand loop call sites using their proven source bounds.
 - For nested loops (a loop inside another loop), explicitly state both the individual
@@ -156,6 +161,12 @@ Function under analysis:
 {body}
 ```
 
+Relevant call-chain source (use only to propagate caller arguments and state
+into this function's path; synthesize assembly only for {name}):
+```c
+{chr(10).join(all_functions.values())}
+```
+
 Structure plan (authoritative call and loop bounds):
 {plan.model_dump_json(indent=2)}
 
@@ -174,7 +185,14 @@ Hardware profile:
 GCC 11.4 -O0 transformation examples:
 {json.dumps(gcc_evidence, indent=2)}
 
+Initialization/path context (outside the timed interval):
+{analysis_context or "No additional context supplied. Treat unknown values as unknown and choose one most expensive feasible path."}
+
 Rules for generating FunctionAssemblyPlan:
+- `selected_source_path` is mandatory. List, in execution order, the source
+  conditions and the one arm selected at each decision. Use initialization/path
+  context whenever it fixes a value; otherwise choose one most expensive
+  feasible arm. Never describe two mutually exclusive arms as selected.
 - Structure {name} into its natural sequential assembly sections:
   1. For a function without loops (straight-line or branching with if/else or switch-case):
      - One section named "straight_line" with execution_count = 1.
@@ -196,6 +214,17 @@ Rules for generating FunctionAssemblyPlan:
   * Type extensions: uxtb, uxth, sxtb, sxth
   * Multiplication/Division: mul, mul.w, mla, mls, sdiv, udiv
   * Calls and branches: bl <CalleeName>, b, beq, bne, bls, bx lr, pop
+- The instructions across all sections are ONE LINEAR DYNAMIC TRACE, not a
+  static disassembly containing every basic block. After a taken branch,
+  continue with instructions at its target; omit the skipped arm. After a
+  not-taken branch, continue with fallthrough instructions.
+- For every conditional branch instruction, add one `conditional_branches`
+  entry to that section. `instruction_index` is its zero-based index in the
+  section's `instructions` list. `taken_count + not_taken_count` must equal the
+  section's `execution_count`. Straight-line path decisions therefore have
+  either (1, 0) or (0, 1). A loop test may use repeated counts.
+- Do not add `conditional_branches` entries for unconditional `b`, calls `bl`,
+  returns, comparisons, or non-branch instructions.
 - GCC 11.4 -O0 compiler rules:
   * In -O0, all local variables and function parameters are homed on the stack frame ([r7, #offset]) and reloaded when referenced.
   * Operations on uint8_t produce explicit uxtb/sxtb extensions.
@@ -600,6 +629,81 @@ Draft block plan to audit and replace:
         return {"alu_move_compare_shift": 1}
 
     @staticmethod
+    def _is_conditional_branch_instruction(instruction: str) -> bool:
+        line = instruction.strip()
+        line = re.sub(r"^[0-9a-fA-F]+:\s*", "", line)
+        line = re.sub(r"/\*.*?\*/", "", line)
+        line = re.sub(r"@.*$", "", line).strip()
+        if not line or line.endswith(":"):
+            return False
+        opcode = re.sub(r"\.(?:n|w)$", "", line.partition(" ")[0].lower())
+        return opcode in {"cbz", "cbnz", "tbb", "tbh"} or bool(re.fullmatch(
+            r"b(?:eq|ne|cs|hs|cc|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al)",
+            opcode,
+        ))
+
+    @staticmethod
+    def _validate_assembly_plan(plan: FunctionAssemblyPlan) -> list[str]:
+        """Validate that the model returned one countable dynamic trace."""
+        errors: list[str] = []
+        return_locations: list[tuple[int, int]] = []
+
+        for section_index, section in enumerate(plan.sections):
+            conditional_indices = {
+                index for index, instruction in enumerate(section.instructions)
+                if StagedPredictor._is_conditional_branch_instruction(instruction)
+            }
+            declared_indices = [
+                branch.instruction_index
+                for branch in section.conditional_branches
+            ]
+            if len(declared_indices) != len(set(declared_indices)):
+                errors.append(
+                    f"{plan.function_name}/{section.section_name}: duplicate "
+                    "conditional branch instruction_index"
+                )
+            if set(declared_indices) != conditional_indices:
+                errors.append(
+                    f"{plan.function_name}/{section.section_name}: conditional "
+                    f"branch metadata indices {sorted(set(declared_indices))} "
+                    f"do not match instruction indices {sorted(conditional_indices)}"
+                )
+            for branch in section.conditional_branches:
+                if branch.instruction_index >= len(section.instructions):
+                    errors.append(
+                        f"{plan.function_name}/{section.section_name}: conditional "
+                        f"branch index {branch.instruction_index} is out of range"
+                    )
+                    continue
+                executions = branch.taken_count + branch.not_taken_count
+                if executions != section.execution_count:
+                    errors.append(
+                        f"{plan.function_name}/{section.section_name}: branch at "
+                        f"instruction {branch.instruction_index} executes {executions} "
+                        f"times but section executes {section.execution_count} times"
+                    )
+
+            for instruction_index, instruction in enumerate(section.instructions):
+                classified = StagedPredictor._classify_instruction(instruction)
+                if "function_return_with_refill" in classified:
+                    return_locations.append((section_index, instruction_index))
+
+        if len(return_locations) != 1:
+            errors.append(
+                f"{plan.function_name}: selected dynamic trace must contain exactly "
+                f"one return, found {len(return_locations)}"
+            )
+        elif return_locations[0] != (
+            len(plan.sections) - 1,
+            len(plan.sections[-1].instructions) - 1,
+        ):
+            errors.append(
+                f"{plan.function_name}: selected dynamic trace contains instructions "
+                "after its return"
+            )
+        return errors
+
+    @staticmethod
     def _assembly_plan_to_ledger(
         plan: FunctionAssemblyPlan, all_functions: dict[str, str]
     ) -> FunctionLedger:
@@ -614,8 +718,9 @@ Draft block plan to audit and replace:
                 "loop" in section.section_name.lower()
                 or "kernel" in section.section_name.lower()
             )
+            original_to_cleaned: dict[int, int] = {}
             cleaned_instructions: list[str] = []
-            for instr in section.instructions:
+            for original_index, instr in enumerate(section.instructions):
                 clean = instr.strip()
                 if not clean or clean.endswith(":"):
                     continue
@@ -624,9 +729,32 @@ Draft block plan to audit and replace:
                     and clean == cleaned_instructions[-1] == cleaned_instructions[-2]
                 ):
                     continue
+                original_to_cleaned[original_index] = len(cleaned_instructions)
                 cleaned_instructions.append(clean)
 
-            for instr in cleaned_instructions:
+            branch_metadata = {
+                original_to_cleaned[item.instruction_index]: item
+                for item in section.conditional_branches
+                if item.instruction_index in original_to_cleaned
+            }
+
+            for instruction_index, instr in enumerate(cleaned_instructions):
+                if StagedPredictor._is_conditional_branch_instruction(instr):
+                    branch = branch_metadata.get(instruction_index)
+                    if branch is not None:
+                        if branch.taken_count:
+                            counts["conditional_branch_taken"] += branch.taken_count
+                            evidence["conditional_branch_taken"].append(
+                                f"{section.section_name}: {branch.taken_count} ({instr}; "
+                                f"{branch.evidence})"
+                            )
+                        if branch.not_taken_count:
+                            counts["conditional_branch_not_taken"] += branch.not_taken_count
+                            evidence["conditional_branch_not_taken"].append(
+                                f"{section.section_name}: {branch.not_taken_count} ({instr}; "
+                                f"{branch.evidence})"
+                            )
+                        continue
                 classified = StagedPredictor._classify_instruction(instr, is_loop=is_loop)
                 for cls_name, amount in classified.items():
                     counts[cls_name] += amount * exec_count
@@ -681,7 +809,7 @@ Draft block plan to audit and replace:
 
         return FunctionLedger(
             function_name=plan.function_name,
-            selected_path=[s.section_name for s in plan.sections],
+            selected_path=plan.selected_source_path,
             callees=callees,
             conditional_branch_evaluations_per_invocation=conditional,
             instruction_counts=instruction_counts,
@@ -805,15 +933,164 @@ Draft block plan to audit and replace:
 
     @staticmethod
     def _matching_brace(text: str, opening: int) -> int | None:
+        return StagedPredictor._matching_delimiter(text, opening, "{", "}")
+
+    @staticmethod
+    def _matching_delimiter(
+        text: str, opening: int, open_char: str, close_char: str
+    ) -> int | None:
         depth = 0
         for index in range(opening, len(text)):
-            if text[index] == "{":
+            if text[index] == open_char:
                 depth += 1
-            elif text[index] == "}":
+            elif text[index] == close_char:
                 depth -= 1
                 if depth == 0:
                     return index
         return None
+
+    @staticmethod
+    def _masked_c_source(text: str) -> str:
+        """Mask comments and literals while preserving source offsets."""
+        result = list(text)
+        index = 0
+        while index < len(text):
+            if text.startswith("//", index):
+                end = text.find("\n", index)
+                end = len(text) if end < 0 else end
+                for position in range(index, end):
+                    result[position] = " "
+                index = end
+                continue
+            if text.startswith("/*", index):
+                end = text.find("*/", index + 2)
+                end = len(text) - 2 if end < 0 else end
+                for position in range(index, min(len(text), end + 2)):
+                    if result[position] != "\n":
+                        result[position] = " "
+                index = end + 2
+                continue
+            if text[index] in {'"', "'"}:
+                quote = text[index]
+                result[index] = " "
+                index += 1
+                while index < len(text):
+                    result[index] = " " if text[index] != "\n" else "\n"
+                    if text[index] == "\\":
+                        if index + 1 < len(text):
+                            result[index + 1] = (
+                                " " if text[index + 1] != "\n" else "\n"
+                            )
+                        index += 2
+                        continue
+                    if text[index] == quote:
+                        index += 1
+                        break
+                    index += 1
+                continue
+            index += 1
+        return "".join(result)
+
+    @staticmethod
+    def _braced_if_chains(body: str) -> list[tuple[int, int, list[tuple[int, int]]]]:
+        """Return braced if/else-if/else chains and their arm ranges."""
+        text = StagedPredictor._masked_c_source(body)
+        chains: list[tuple[int, int, list[tuple[int, int]]]] = []
+        for match in re.finditer(r"\bif\s*\(", text):
+            # An `else if` belongs to the chain that started at the preceding if.
+            if re.search(r"\belse\s*$", text[:match.start()]):
+                continue
+            cursor = match.start()
+            arms: list[tuple[int, int]] = []
+            chain_end = cursor
+            while True:
+                condition_open = text.find("(", cursor)
+                if condition_open < 0:
+                    break
+                condition_close = StagedPredictor._matching_delimiter(
+                    text, condition_open, "(", ")"
+                )
+                if condition_close is None:
+                    break
+                arm_open = condition_close + 1
+                while arm_open < len(text) and text[arm_open].isspace():
+                    arm_open += 1
+                if arm_open >= len(text) or text[arm_open] != "{":
+                    break
+                arm_close = StagedPredictor._matching_brace(text, arm_open)
+                if arm_close is None:
+                    break
+                arms.append((arm_open + 1, arm_close))
+                chain_end = arm_close + 1
+                cursor = chain_end
+                while cursor < len(text) and text[cursor].isspace():
+                    cursor += 1
+                else_match = re.match(r"else\b", text[cursor:])
+                if not else_match:
+                    break
+                cursor += else_match.end()
+                while cursor < len(text) and text[cursor].isspace():
+                    cursor += 1
+                if re.match(r"if\s*\(", text[cursor:]):
+                    continue
+                if cursor < len(text) and text[cursor] == "{":
+                    arm_close = StagedPredictor._matching_brace(text, cursor)
+                    if arm_close is not None:
+                        arms.append((cursor + 1, arm_close))
+                        chain_end = arm_close + 1
+                break
+            if arms:
+                chains.append((match.start(), chain_end, arms))
+        return chains
+
+    @staticmethod
+    def _max_direct_callee_calls_on_one_branch_path(
+        body: str, callee_name: str, source_facts: str
+    ) -> int:
+        """Conservative maximum across mutually exclusive braced branch arms."""
+        sites = list(re.finditer(rf"\b{re.escape(callee_name)}\s*\(", body))
+        macros = StagedPredictor._integer_macros(source_facts)
+        loops = StagedPredictor._proven_for_loops(body, macros)
+        weighted_sites = []
+        for site in sites:
+            multiplier = 1
+            for start, end, trip_count, _ in loops:
+                if start <= site.start() < end:
+                    multiplier *= trip_count
+            weighted_sites.append((site.start(), multiplier))
+
+        # Only outermost chains are needed here. Nested chains remaining inside
+        # one arm make this an upper bound, never an unsafe under-count.
+        outer_chains: list[tuple[int, int, list[tuple[int, int]]]] = []
+        for chain in sorted(
+            StagedPredictor._braced_if_chains(body),
+            key=lambda item: (item[0], -item[1]),
+        ):
+            if any(start <= chain[0] and chain[1] <= end
+                   for start, end, _ in outer_chains):
+                continue
+            outer_chains.append(chain)
+
+        assigned: set[int] = set()
+        maximum = 0
+        for _, _, arms in outer_chains:
+            arm_totals: list[int] = []
+            arm_site_indices: set[int] = set()
+            for arm_start, arm_end in arms:
+                indices = {
+                    index for index, (position, _) in enumerate(weighted_sites)
+                    if arm_start <= position < arm_end
+                }
+                arm_site_indices.update(indices)
+                arm_totals.append(sum(weighted_sites[index][1] for index in indices))
+            if arm_site_indices:
+                maximum += max([0, *arm_totals])
+                assigned.update(arm_site_indices)
+        maximum += sum(
+            weight for index, (_, weight) in enumerate(weighted_sites)
+            if index not in assigned
+        )
+        return maximum
 
     @staticmethod
     def _proven_for_loops(
@@ -948,24 +1225,29 @@ Draft block plan to audit and replace:
                 evidence = proof
             elif callee_name in synthesized_calls and synthesized_calls[callee_name] > 0:
                 calls_per_invocation = synthesized_calls[callee_name]
+                path_maximum = StagedPredictor._max_direct_callee_calls_on_one_branch_path(
+                    functions[name], callee_name, source_facts
+                )
+                if calls_per_invocation > path_maximum:
+                    errors.append(
+                        f"{name}->{callee_name}: selected assembly contains "
+                        f"{calls_per_invocation} BL calls, exceeding the source "
+                        f"single-path maximum {path_maximum}"
+                    )
                 evidence = (
                     f"synthesized BL calls on selected path: {calls_per_invocation} "
                     f"({call_sites} syntactic sites: {proof})"
                 )
-            elif parent_map.get(callee_name) == {name}:
-                planned_ratio = 0
-                if parent_calls >= 1 and child_calls % parent_calls == 0:
-                    planned_ratio = child_calls // parent_calls
-                calls_per_invocation = planned_ratio if planned_ratio > 0 else 1
-                evidence = (
-                    "fallback from pass-1 dynamic calls: "
-                    f"{calls_per_invocation} ({call_sites} syntactic sites: {proof})"
-                )
             else:
-                calls_per_invocation = 1
-                evidence = (
-                    f"single-path fallback for shared callee ({call_sites} syntactic sites: {proof})"
-                )
+                # A syntactic helper that appears only in an unselected branch
+                # legitimately has zero calls on this dynamic path.
+                if (parent_map.get(callee_name) == {name}
+                        and parent_calls > 0 and child_calls > 0):
+                    errors.append(
+                        f"{name}->{callee_name}: pass 1 selected the callee, but "
+                        "the selected assembly path contains no BL call"
+                    )
+                continue
             if calls_per_invocation < 1:
                 errors.append(f"no call multiplicity for {name}->{callee_name}")
                 continue
@@ -1092,6 +1374,7 @@ Draft block plan to audit and replace:
             )
             raw_outputs.append(raw)
             assembly_plans[name] = assembly_plan
+            errors.extend(self._validate_assembly_plan(assembly_plan))
             ledger = self._assembly_plan_to_ledger(assembly_plan, functions)
             if ledger.function_name != name:
                 errors.append(
@@ -1110,14 +1393,6 @@ Draft block plan to audit and replace:
                     f"{name} ledger calls unknown functions: "
                     f"{sorted(unknown_callees)}"
                 )
-            expected_callees = self._direct_callee_names(name, body, functions)
-            returned_callees = {item.function_name for item in ledger.callees}
-            for missing_callee in expected_callees - returned_callees:
-                ledger.callees.append(CalleeCount(
-                    function_name=missing_callee,
-                    calls_per_invocation=planned.get(missing_callee, 1),
-                    evidence="canonical direct callee",
-                ))
             ledgers[name] = ledger
 
         try:
@@ -1125,13 +1400,15 @@ Draft block plan to audit and replace:
         except ValueError as exc:
             errors.append(str(exc))
             composed_calls = {}
-        if composed_calls and composed_calls != planned:
-            # The syntactic call graph/call-site lower bound is authoritative
-            # when the model confuses number of callees with target calls.
-            planned = composed_calls
+        composed_all = {
+            function_name: composed_calls.get(function_name, 0)
+            for function_name in functions
+        }
+        if composed_calls and composed_all != planned:
+            planned = composed_all
             for item in plan.functions:
-                if item.function_name in composed_calls:
-                    item.dynamic_calls = composed_calls[item.function_name]
+                if item.function_name in composed_all:
+                    item.dynamic_calls = composed_all[item.function_name]
                     item.call_count_evidence += (
                         "; normalized by Python call-graph composition"
                     )
