@@ -110,8 +110,7 @@ Required rules:
 - A helper reachable only through an unselected branch has dynamic_calls=0; keep it in the functions list instead of inventing a call.
 - In conditional branching (if/else if/else, switch-case), alternative branches are mutually exclusive! If a helper is called in branch A and also in branch B, its dynamic_calls on any single path is at most 1, NEVER the sum of mutually exclusive branches.
 - Expand loop call sites using their proven source bounds.
-- For nested loops (a loop inside another loop), explicitly state both the individual
-  bounds and compound body iterations (e.g. outer 8 * inner 4 = 32 iterations) in loop_bounds.
+- For nested loops (a loop inside another loop), explicitly compute and state the compound body iterations across all enclosing loop levels in loop_bounds.
 - For loops with non-unit strides (e.g. `for (i = 0; i < N; i += step)`):
   * The number of loop iterations is `ceil((bound - start) / step)`, NOT `N`.
   * Never assume the loop increments by 1 when the loop update uses `+= step`.
@@ -153,6 +152,14 @@ Additional source/initialization context (outside the timed interval):
         control_obligations = self._control_flow_obligations(
             body, name=name, all_functions=all_functions, source_facts=source_facts
         )
+        arithmetic_obligations = {
+            "minimum_static_operations": self._source_arithmetic_obligations(
+                body, source_facts, apply_loop_counts=False
+            ),
+            "minimum_dynamic_operations": self._source_arithmetic_obligations(
+                body, source_facts
+            ),
+        }
         return f"""You are pass 2 of a staged GCC 11.4 -O0 compiler analysis for ARM Cortex-M4 (Thumb-2).
 Emit the actual Thumb-2 assembly sections for EXACTLY ONE invocation of function {name}.
 
@@ -175,6 +182,10 @@ Source-derived proven loop execution obligations:
 
 Source-derived control-flow regions:
 {json.dumps(control_obligations, indent=2)}
+
+Source-derived minimum arithmetic instruction obligations for the selected
+worst-case path (both static operations and proven dynamic counts):
+{json.dumps(arithmetic_obligations, indent=2)}
 
 Direct callees in this function:
 {json.dumps(direct_callees)}
@@ -206,12 +217,11 @@ Rules for generating FunctionAssemblyPlan:
    3. For functions with nested loops:
       - Section "prologue_and_init" with execution_count = 1: entry PUSH, stack allocation, outermost loop variable and index setup.
       - For each outer/enclosing loop level: Section "outer_loop_overhead" (or "middle_loop_overhead") with execution_count matching that loop's compound execution count (e.g. trip count from 'Source-derived proven loop execution obligations'): contains outer loop counter reload from stack, increment/addition, comparison, test branch, and inner loop counter init.
-      - For the innermost loop: Section "inner_loop_body" with execution_count matching the total compound inner body execution count from 'Source-derived proven loop execution obligations' (prod(trip_counts)). Contains the innermost body instructions for EXACTLY ONE single iteration of the inner loop (e.g. one multiplication and accumulation, array load/store, and inner index increment/test).
+      - For the innermost loop: Section "inner_loop_body" with execution_count matching the total compound inner body execution count from 'Source-derived proven loop execution obligations' (prod(trip_counts)). Must fully synthesize all actual arithmetic, math, and memory operations written in the C source for ONE single iteration (never emit an empty stub with only index comparisons or branch tests).
       - Section "epilogue_and_return" with execution_count = 1: stack teardown, POP, and return (bx lr or pop {{..., pc}}).
 - CRITICAL ANTI-UNROLLING RULE (MANDATORY FOR ALL LOOPS):
   * Every loop section ("loop_body" or "inner_loop_body") represents EXACTLY ONE single iteration of that loop body!
-  * Do NOT unroll or repeat loop iterations sequentially inside the section.
-  * For example, in a 2x2 matrix multiplication loop over k from 0 to 1, the inner_loop_body must contain ONLY ONE multiplication (A[i][k] * B[k][j]), NOT multiple multiplications!
+  * Do NOT unroll or repeat loop iterations sequentially inside the section; synthesize all operations of the loop body for one iteration once.
   * Python will automatically multiply all instructions in the section by its `execution_count`. Unrolling inside the section causes massive double-counting!
 - STRICT C-SOURCE SCOPE (NO HALLUCINATED EXPANSION):
   * Only synthesize instructions for operations and variables that actually exist in the supplied C source.
@@ -223,6 +233,9 @@ Rules for generating FunctionAssemblyPlan:
   * Type extensions: uxtb, uxth, sxtb, sxth
   * Multiplication/Division: mul, mul.w, mla, mls, sdiv, udiv
   * Calls and branches: bl <CalleeName>, b, beq, bne, bls, bx lr, pop
+- The source-derived arithmetic obligations are lower bounds, not suggested
+  totals. The emitted dynamic trace must contain at least that many matching
+  multiply/divide instructions after section execution counts are applied.
 - The instructions across all sections are ONE LINEAR DYNAMIC TRACE, not a
   static disassembly containing every basic block. After a taken branch,
   continue with instructions at its target; omit the skipped arm. After a
@@ -635,7 +648,9 @@ Draft block plan to audit and replace:
             return {"function_call_bl_with_refill": 1}
         if op == "bx" and re.fullmatch(r"lr", args):
             return {"function_return_with_refill": 1}
-        if op.startswith(("mul", "mla", "mls")):
+        if op.startswith((
+            "mul", "mla", "mls", "smull", "umull", "smlal", "umlal",
+        )):
             return {"multiply": 1}
         if op.startswith(("sdiv", "udiv")):
             return {"integer_divide_worst_case": 1}
@@ -1062,6 +1077,129 @@ Draft block plan to audit and replace:
         return "".join(result)
 
     @staticmethod
+    def _source_arithmetic_obligations(
+        body: str, source_facts: str, *, apply_loop_counts: bool = True
+    ) -> dict[str, int]:
+        """Derive conservative dynamic MUL/DIV lower bounds from C source.
+
+        Only variable-by-variable operators outside conditional arms are used.
+        Constant arithmetic is deliberately excluded because GCC may legally
+        strength-reduce it to shifts/adds even at -O0. Conditional-arm
+        arithmetic is excluded because this pass does not independently prove
+        which mutually exclusive arm the model selected.
+        """
+        text = StagedPredictor._masked_c_source(body)
+        macros = StagedPredictor._integer_macros(source_facts)
+        loops = StagedPredictor._proven_for_loops(text, macros)
+        conditional_arms = [
+            arm
+            for _, _, arms in StagedPredictor._braced_if_chains(text)
+            for arm in arms
+        ]
+        token_pattern = re.compile(
+            r"0[xX][0-9A-Fa-f]+[uUlL]*|\d+[uUlL]*|[A-Za-z_]\w*|"
+            r"<<=|>>=|==|!=|<=|>=|&&|\|\||\+\+|--|->|[{}()\[\];,*/%+\-&|^~!=<>?:.]"
+        )
+        tokens = [
+            (match.group(0), match.start())
+            for match in token_pattern.finditer(text)
+        ]
+        c_type_words = {
+            "void", "char", "short", "int", "long", "float", "double",
+            "signed", "unsigned", "const", "volatile", "struct", "union",
+            "enum", "static", "register", "extern", "auto", "restrict",
+        }
+
+        def is_constant(token: str) -> bool:
+            clean = re.sub(r"[uUlL]+$", "", token)
+            return bool(re.fullmatch(r"0[xX][0-9A-Fa-f]+|\d+", clean)) or (
+                token in macros
+            )
+
+        def in_conditional_arm(position: int) -> bool:
+            return any(start <= position < end for start, end in conditional_arms)
+
+        obligations = {"multiply": 0, "integer_divide_worst_case": 0}
+        for index, (token, position) in enumerate(tokens):
+            if token not in {"*", "/"} or index == 0 or index + 1 >= len(tokens):
+                continue
+            if in_conditional_arm(position):
+                continue
+            previous = tokens[index - 1][0]
+            following = tokens[index + 1][0]
+            previous_is_value = bool(re.fullmatch(
+                r"[A-Za-z_]\w*|0[xX][0-9A-Fa-f]+[uUlL]*|\d+[uUlL]*|\]|\)",
+                previous,
+            ))
+            following_is_value = bool(re.fullmatch(
+                r"[A-Za-z_]\w*|0[xX][0-9A-Fa-f]+[uUlL]*|\d+[uUlL]*|\(",
+                following,
+            ))
+            if not (previous_is_value and following_is_value):
+                continue
+            if token == "*" and (
+                previous in c_type_words
+                or previous.endswith("_t")
+            ):
+                # Pointer declarator, not multiplication.
+                continue
+            if is_constant(previous) or is_constant(following):
+                continue
+            multiplier = 1
+            if apply_loop_counts:
+                for start, end, trip_count, _ in loops:
+                    if start <= position < end:
+                        multiplier *= trip_count
+            instruction_class = (
+                "multiply" if token == "*" else "integer_divide_worst_case"
+            )
+            obligations[instruction_class] += multiplier
+        return obligations
+
+    @staticmethod
+    def _validate_source_operation_coverage(
+        name: str, body: str, plan: FunctionAssemblyPlan,
+        ledger: FunctionLedger, source_facts: str
+    ) -> list[str]:
+        """Reject a semantically incomplete assembly trace before SUPPORTED."""
+        required_dynamic = StagedPredictor._source_arithmetic_obligations(
+            body, source_facts
+        )
+        required_static = StagedPredictor._source_arithmetic_obligations(
+            body, source_facts, apply_loop_counts=False
+        )
+        emitted_dynamic = {
+            item.instruction_class: item.dynamic_count_per_invocation
+            for item in ledger.instruction_counts
+        }
+        emitted_static = {"multiply": 0, "integer_divide_worst_case": 0}
+        for section in plan.sections:
+            for instruction in section.instructions:
+                classified = StagedPredictor._classify_instruction(instruction)
+                for instruction_class in emitted_static:
+                    emitted_static[instruction_class] += classified.get(
+                        instruction_class, 0
+                    )
+        errors = []
+        for instruction_class, minimum in required_static.items():
+            actual = emitted_static.get(instruction_class, 0)
+            if actual < minimum:
+                errors.append(
+                    f"{name}: source requires at least {minimum} static "
+                    f"{instruction_class} operations on the proven non-conditional "
+                    f"path, but synthesized assembly contains {actual}"
+                )
+        for instruction_class, minimum in required_dynamic.items():
+            actual = emitted_dynamic.get(instruction_class, 0)
+            if actual < minimum:
+                errors.append(
+                    f"{name}: source requires at least {minimum} dynamic "
+                    f"{instruction_class} operations on the proven non-conditional "
+                    f"path, but synthesized assembly contains {actual}"
+                )
+        return errors
+
+    @staticmethod
     def _braced_if_chains(body: str) -> list[tuple[int, int, list[tuple[int, int]]]]:
         """Return braced if/else-if/else chains and their arm ranges."""
         text = StagedPredictor._masked_c_source(body)
@@ -1461,6 +1599,9 @@ Draft block plan to audit and replace:
                 name, ledger, functions, planned, parent_map, source_facts
             )
             errors.extend(relation_errors)
+            errors.extend(self._validate_source_operation_coverage(
+                name, body, assembly_plan, ledger, source_facts
+            ))
             unknown_callees = {
                 item.function_name for item in ledger.callees
             } - set(functions)

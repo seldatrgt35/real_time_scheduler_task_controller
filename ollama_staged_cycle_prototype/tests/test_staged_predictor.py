@@ -594,6 +594,61 @@ class StagedPredictorTest(unittest.TestCase):
         self.assertEqual(plan.sections[0].instructions[5], "nop")
         self.assertEqual(plan.sections[0].instructions[-1], "pop {r7, pc}")
 
+    def test_source_arithmetic_coverage_rejects_an_empty_loop_stub(self):
+        body = """
+        void Kernel(int *a, int *b, int *c, int divisor) {
+          for (int i = 0; i < 8; ++i) {
+            c[i] = (a[i] * b[i] + b[i] * c[i]) / divisor;
+          }
+        }
+        """
+        incomplete = FunctionAssemblyPlan.model_validate({
+            "function_name": "Kernel",
+            "selected_source_path": ["eight loop iterations", "return"],
+            "sections": [{
+                "section_name": "loop_body",
+                "execution_count": 8,
+                "instructions": ["ldr r3, [r7, #4]", "adds r3, #1"],
+            }, {
+                "section_name": "epilogue_and_return",
+                "execution_count": 1,
+                "instructions": ["pop {r7, pc}"],
+            }],
+        })
+        incomplete_ledger = StagedPredictor._assembly_plan_to_ledger(
+            incomplete, {"Kernel": body}
+        )
+        errors = StagedPredictor._validate_source_operation_coverage(
+            "Kernel", body, incomplete, incomplete_ledger, ""
+        )
+        self.assertTrue(any("static multiply" in error for error in errors))
+        self.assertTrue(any("static integer_divide" in error for error in errors))
+
+        complete = FunctionAssemblyPlan.model_validate({
+            "function_name": "Kernel",
+            "selected_source_path": ["eight loop iterations", "return"],
+            "sections": [{
+                "section_name": "loop_body",
+                "execution_count": 8,
+                "instructions": [
+                    "mul r2, r0, r1", "mul r3, r1, r2", "udiv r3, r3, r4",
+                ],
+            }, {
+                "section_name": "epilogue_and_return",
+                "execution_count": 1,
+                "instructions": ["pop {r7, pc}"],
+            }],
+        })
+        complete_ledger = StagedPredictor._assembly_plan_to_ledger(
+            complete, {"Kernel": body}
+        )
+        self.assertEqual(
+            StagedPredictor._validate_source_operation_coverage(
+                "Kernel", body, complete, complete_ledger, ""
+            ),
+            [],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
