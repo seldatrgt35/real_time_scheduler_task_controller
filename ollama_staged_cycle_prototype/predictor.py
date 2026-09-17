@@ -153,6 +153,10 @@ Additional source/initialization context (outside the timed interval):
             body, name=name, all_functions=all_functions, source_facts=source_facts
         )
         statement_checklist = self._source_statement_checklist(body)
+        statement_obligations = [
+            {"statement_id": index, "source_statement": statement}
+            for index, statement in enumerate(statement_checklist, start=1)
+        ]
         access_obligations = self._indexed_access_checklist(statement_checklist)
         arithmetic_obligations = {
             "minimum_static_operations": self._source_arithmetic_obligations(
@@ -187,7 +191,7 @@ Source-derived control-flow regions:
 
 Mandatory source-statement coverage checklist (preserve this order and
 translate every entry; do not summarize or merge entries away):
-{json.dumps(statement_checklist, indent=2)}
+{json.dumps(statement_obligations, indent=2)}
 
 Mandatory indexed memory-access expressions (each occurrence in the source
 statement checklist needs its own GCC -O0 address formation and load/store):
@@ -210,6 +214,14 @@ Initialization/path context (outside the timed interval):
 {analysis_context or "No additional context supplied. Treat unknown values as unknown and choose one most expensive feasible path."}
 
 Rules for generating FunctionAssemblyPlan:
+- `statement_blocks` is mandatory in every section. Leave the legacy
+  `instructions` list empty. Each block has a globally unique `block_id`.
+- Emit exactly one block for every mandatory `statement_id`, in ascending source
+  order. Put compiler-only prologue, loop-control and epilogue blocks around
+  them with `statement_id=null`. Never reuse a statement ID.
+- A statement block contains only that statement's GCC -O0 translation and is
+  capped at 64 instructions. Finish it before starting the next block. Never
+  repeat a block or instruction sequence merely to consume the output budget.
 - `selected_source_path` is mandatory. List, in execution order, the source
   conditions and the one arm selected at each decision. Use initialization/path
   context whenever it fixes a value; otherwise choose one most expensive
@@ -237,7 +249,8 @@ Rules for generating FunctionAssemblyPlan:
   * Only synthesize instructions for operations and variables that actually exist in the supplied C source.
   * Never invent extra array elements, continuous loads/stores beyond declared dimensions, or repetitive memory accesses.
   * A function's straight-line trace must conclude its computation concisely and reach its epilogue return.
-- Emit real ARM Cortex-M4 Thumb-2 instructions in 'instructions' list for each section:
+- Emit real ARM Cortex-M4 Thumb-2 instructions in each statement block's
+  `instructions` list:
   * Memory access: ldr, ldrb, ldrh, ldrsb, ldrsh, str, strb, strh
   * Arithmetic/logic: adds, subs, mov, movs, lsls, lsrs, asrs, eor, eors, and, ands, orr, bic, cmp
   * Type extensions: uxtb, uxth, sxtb, sxth
@@ -579,6 +592,13 @@ Draft block plan to audit and replace:
                 obligations.append(
                     f"LOOP: {desc} -> BODY EXECUTION COUNT = {trip} times"
                 )
+        for _, _, total, description in StagedPredictor._variable_nested_loop_counts(
+            body, macros
+        ):
+            obligations.append(
+                f"STAGE-VARYING NESTED LOOP: {description} -> AUTHORITATIVE "
+                f"COMPOUND INNER BODY EXECUTION COUNT = {total} times"
+            )
         return obligations
 
     @staticmethod
@@ -699,11 +719,63 @@ Draft block plan to audit and replace:
         ))
 
     @staticmethod
+    def _section_instructions(section: AssemblySection) -> list[str]:
+        """Flatten statement blocks while retaining legacy fixture support."""
+        if section.statement_blocks:
+            return [
+                instruction
+                for block in section.statement_blocks
+                for instruction in block.instructions
+            ]
+        return section.instructions
+
+    @staticmethod
+    def _replace_section_instruction(
+        section: AssemblySection, flat_index: int, instruction: str
+    ) -> None:
+        if not section.statement_blocks:
+            section.instructions[flat_index] = instruction
+            return
+        offset = flat_index
+        for block in section.statement_blocks:
+            if offset < len(block.instructions):
+                block.instructions[offset] = instruction
+                return
+            offset -= len(block.instructions)
+        raise IndexError(flat_index)
+
+    @staticmethod
+    def _append_section_instruction(
+        section: AssemblySection, instruction: str
+    ) -> None:
+        if section.statement_blocks:
+            section.statement_blocks[-1].instructions.append(instruction)
+        else:
+            section.instructions.append(instruction)
+
+    @staticmethod
+    def _has_repeated_instruction_ngram(
+        instructions: list[str], *, width: int = 8, repeats: int = 3
+    ) -> bool:
+        """Detect the consecutive repetition collapse seen in local-model output."""
+        normalized = [item.strip().lower() for item in instructions if item.strip()]
+        span = width * repeats
+        for start in range(0, len(normalized) - span + 1):
+            unit = normalized[start:start + width]
+            if all(
+                normalized[start + n * width:start + (n + 1) * width] == unit
+                for n in range(1, repeats)
+            ):
+                return True
+        return False
+
+    @staticmethod
     def _map_conditional_branches(
         section: AssemblySection,
     ) -> dict[int, ConditionalBranchExecution]:
+        instructions = StagedPredictor._section_instructions(section)
         actual_branch_indices = [
-            index for index, instruction in enumerate(section.instructions)
+            index for index, instruction in enumerate(instructions)
             if StagedPredictor._is_conditional_branch_instruction(instruction)
         ]
         branch_map: dict[int, ConditionalBranchExecution] = {}
@@ -733,8 +805,30 @@ Draft block plan to audit and replace:
         return_locations: list[tuple[int, int]] = []
 
         for section_index, section in enumerate(plan.sections):
+            instructions = StagedPredictor._section_instructions(section)
+            if section.instructions and section.statement_blocks:
+                errors.append(
+                    f"{plan.function_name}/{section.section_name}: use statement_blocks "
+                    "only; legacy instructions must be empty"
+                )
+            for block in section.statement_blocks:
+                if len(block.instructions) == 64:
+                    errors.append(
+                        f"{plan.function_name}/{block.block_id}: reached the 64-instruction "
+                        "block limit; probable truncation or repetition"
+                    )
+                if StagedPredictor._has_repeated_instruction_ngram(block.instructions):
+                    errors.append(
+                        f"{plan.function_name}/{block.block_id}: repeated instruction "
+                        "sequence indicates generation collapse"
+                    )
+            if StagedPredictor._has_repeated_instruction_ngram(instructions):
+                errors.append(
+                    f"{plan.function_name}/{section.section_name}: repeated instruction "
+                    "sequence indicates generation collapse"
+                )
             conditional_indices = {
-                index for index, instruction in enumerate(section.instructions)
+                index for index, instruction in enumerate(instructions)
                 if StagedPredictor._is_conditional_branch_instruction(instruction)
             }
             if conditional_indices and not section.conditional_branches:
@@ -754,12 +848,15 @@ Draft block plan to audit and replace:
                             f"{executions} times but section executes {section.execution_count} times"
                         )
 
-            for instruction_index, instruction in enumerate(section.instructions):
+            for instruction_index, instruction in enumerate(instructions):
                 classified = StagedPredictor._classify_instruction(instruction)
                 if "function_return_with_refill" in classified:
                     return_locations.append((section_index, instruction_index))
 
-        last_instr = plan.sections[-1].instructions[-1].strip().lower()
+        last_section_instructions = StagedPredictor._section_instructions(
+            plan.sections[-1]
+        )
+        last_instr = last_section_instructions[-1].strip().lower()
         is_epilogue_jump = (
             last_instr.startswith("b ")
             or last_instr.startswith("b.n ")
@@ -768,20 +865,30 @@ Draft block plan to audit and replace:
         if len(return_locations) == 0:
             if is_epilogue_jump:
                 pass
-            elif plan.sections and plan.sections[-1].instructions:
-                plan.sections[-1].instructions.append("pop {r7, pc}")
-                return_locations.append((len(plan.sections) - 1, len(plan.sections[-1].instructions) - 1))
+            elif plan.sections and last_section_instructions:
+                StagedPredictor._append_section_instruction(
+                    plan.sections[-1], "pop {r7, pc}"
+                )
+                return_locations.append((
+                    len(plan.sections) - 1,
+                    len(StagedPredictor._section_instructions(plan.sections[-1])) - 1,
+                ))
             else:
                 errors.append(
                     f"{plan.function_name}: selected dynamic trace must contain exactly "
                     f"one return, found {len(return_locations)}"
                 )
         elif len(return_locations) > 1:
-            last_pos = (len(plan.sections) - 1, len(plan.sections[-1].instructions) - 1)
+            last_pos = (
+                len(plan.sections) - 1,
+                len(StagedPredictor._section_instructions(plan.sections[-1])) - 1,
+            )
             if last_pos in return_locations:
                 for s_idx, i_idx in return_locations:
                     if (s_idx, i_idx) != last_pos:
-                        plan.sections[s_idx].instructions[i_idx] = "nop"
+                        StagedPredictor._replace_section_instruction(
+                            plan.sections[s_idx], i_idx, "nop"
+                        )
                 return_locations = [last_pos]
             else:
                 errors.append(
@@ -790,7 +897,7 @@ Draft block plan to audit and replace:
                 )
         elif return_locations[0] != (
             len(plan.sections) - 1,
-            len(plan.sections[-1].instructions) - 1,
+            len(StagedPredictor._section_instructions(plan.sections[-1])) - 1,
         ):
             errors.append(
                 f"{plan.function_name}: selected dynamic trace contains instructions "
@@ -822,7 +929,9 @@ Draft block plan to audit and replace:
             )
             original_to_cleaned: dict[int, int] = {}
             cleaned_instructions: list[str] = []
-            for original_index, instr in enumerate(section.instructions):
+            for original_index, instr in enumerate(
+                StagedPredictor._section_instructions(section)
+            ):
                 clean = instr.strip()
                 if not clean or clean.endswith(":"):
                     continue
@@ -1098,30 +1207,58 @@ Draft block plan to audit and replace:
     def _source_statement_checklist(body: str) -> list[str]:
         """Return executable C statements without asking Python to compile them."""
         masked = StagedPredictor._masked_c_source(body)
+        opening = masked.find("{")
+        closing = (
+            StagedPredictor._matching_brace(masked, opening)
+            if opening >= 0 else None
+        )
+        if opening >= 0 and closing is not None:
+            masked = masked[opening + 1:closing]
+
+        # Remove balanced control headers before splitting on semicolons. This
+        # keeps one-line functions and the two semicolons in `for (...)` from
+        # becoming bogus source statements.
+        compact: list[str] = []
+        cursor = 0
+        control = re.compile(r"\b(?:for|if|while|switch)\s*\(")
+        while cursor < len(masked):
+            match = control.search(masked, cursor)
+            if not match:
+                compact.append(masked[cursor:])
+                break
+            compact.append(masked[cursor:match.start()])
+            paren = masked.find("(", match.start())
+            depth = 0
+            end = paren
+            while end < len(masked):
+                if masked[end] == "(":
+                    depth += 1
+                elif masked[end] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        end += 1
+                        break
+                end += 1
+            cursor = end
+        masked = "".join(compact).replace("{", ";").replace("}", ";")
         statements: list[str] = []
-        for raw_line in masked.splitlines():
-            line = raw_line.strip()
-            if not line or line in {"{", "}"}:
+        for raw_statement in masked.split(";"):
+            statement = raw_statement.strip()
+            statement = re.sub(r"^else\b", "", statement).strip()
+            if not statement or statement in {"else", "do"}:
                 continue
-            if re.match(r"^(?:for|if|else\s+if|while|switch)\s*\(", line):
+            if re.match(r"^(?:case\b|default\s*:)", statement):
                 continue
-            for fragment in line.split(";"):
-                statement = fragment.strip().strip("{} ")
-                if not statement or statement in {"else", "do"}:
-                    continue
-                if re.match(r"^(?:case\b|default\s*:)", statement):
-                    continue
-                if "(" in statement and statement.endswith(")") and not re.search(
-                    r"(?:=|\breturn\b|\+\+|--)", statement
-                ):
-                    # Skip the function signature while retaining ordinary call
-                    # statements, which contain a callee name followed by `(`.
-                    if re.match(
-                        r"^(?:static\s+)?(?:void|[A-Za-z_]\w*_t|int|unsigned|signed)\b.*\b\w+\s*\(",
-                        statement,
-                    ):
-                        continue
-                statements.append(re.sub(r"\s+", " ", statement)[:300])
+            if re.fullmatch(
+                r"(?:(?:static|const|volatile|signed|unsigned)\s+)*"
+                r"(?:void|char|short|int|long|float|double|[A-Za-z_]\w*_t)"
+                r"(?:\s+|\s*\*+\s*)[A-Za-z_]\w*(?:\s*\[[^]]*\])*",
+                statement,
+            ):
+                # A declaration without an initializer emits no executable
+                # instruction and therefore needs no assembly block.
+                continue
+            statements.append(re.sub(r"\s+", " ", statement)[:300])
         return statements[:64]
 
     @staticmethod
@@ -1142,6 +1279,41 @@ Draft block plan to audit and replace:
         return obligations[:128]
 
     @staticmethod
+    def _validate_statement_block_coverage(
+        name: str, plan: FunctionAssemblyPlan, statements: list[str]
+    ) -> list[str]:
+        """Require one and only one model-produced block per source statement."""
+        expected = set(range(1, len(statements) + 1))
+        actual = {
+            block.statement_id
+            for section in plan.sections
+            for block in section.statement_blocks
+            if block.statement_id is not None
+        }
+        errors: list[str] = []
+        if not any(section.statement_blocks for section in plan.sections):
+            return [
+                f"{name}: statement_blocks are required for model-generated assembly"
+            ]
+        missing = sorted(expected - actual)
+        unexpected = sorted(actual - expected)
+        if missing:
+            errors.append(f"{name}: missing source statement block IDs {missing}")
+        if unexpected:
+            errors.append(f"{name}: unexpected source statement block IDs {unexpected}")
+        for section in plan.sections:
+            for block in section.statement_blocks:
+                if block.statement_id is None:
+                    continue
+                expected_statement = statements[block.statement_id - 1]
+                if re.sub(r"\s+", " ", block.source_statement).strip() != expected_statement:
+                    errors.append(
+                        f"{name}/{block.block_id}: statement_id {block.statement_id} "
+                        "does not reproduce its mandatory source statement"
+                    )
+        return errors
+
+    @staticmethod
     def _source_arithmetic_obligations(
         body: str, source_facts: str, *, apply_loop_counts: bool = True
     ) -> dict[str, int]:
@@ -1156,6 +1328,7 @@ Draft block plan to audit and replace:
         text = StagedPredictor._masked_c_source(body)
         macros = StagedPredictor._integer_macros(source_facts)
         loops = StagedPredictor._proven_for_loops(text, macros)
+        variable_nested = StagedPredictor._variable_nested_loop_counts(text, macros)
         conditional_arms = [
             arm
             for _, _, arms in StagedPredictor._braced_if_chains(text)
@@ -1212,9 +1385,17 @@ Draft block plan to audit and replace:
                 continue
             multiplier = 1
             if apply_loop_counts:
-                for start, end, trip_count, _ in loops:
-                    if start <= position < end:
-                        multiplier *= trip_count
+                exact_nested = next(
+                    (total for start, end, total, _ in variable_nested
+                     if start <= position < end),
+                    None,
+                )
+                if exact_nested is not None:
+                    multiplier = exact_nested
+                else:
+                    for start, end, trip_count, _ in loops:
+                        if start <= position < end:
+                            multiplier *= trip_count
             instruction_class = (
                 "multiply" if token == "*" else "integer_divide_worst_case"
             )
@@ -1239,7 +1420,7 @@ Draft block plan to audit and replace:
         }
         emitted_static = {"multiply": 0, "integer_divide_worst_case": 0}
         for section in plan.sections:
-            for instruction in section.instructions:
+            for instruction in StagedPredictor._section_instructions(section):
                 classified = StagedPredictor._classify_instruction(instruction)
                 for instruction_class in emitted_static:
                     emitted_static[instruction_class] += classified.get(
@@ -1370,6 +1551,7 @@ Draft block plan to audit and replace:
         body: str, macro_values: dict[str, int]
     ) -> list[tuple[int, int, int, str]]:
         """Return braced, canonical for-loop body ranges and trip counts."""
+        body = StagedPredictor._masked_c_source(body)
         loops: list[tuple[int, int, int, str]] = []
         pattern = re.compile(
             r"\bfor\s*\(\s*(?:[A-Za-z_]\w*\s+)*([A-Za-z_]\w*)\s*=\s*"
@@ -1391,6 +1573,90 @@ Draft block plan to audit and replace:
                 loops.append((opening + 1, closing, trip_count,
                               f"{variable}: {start} {comparator} {bound_text}"))
         return loops
+
+    @staticmethod
+    def _variable_nested_loop_counts(
+        body: str, macro_values: dict[str, int]
+    ) -> list[tuple[int, int, int, str]]:
+        """Resolve geometric bounds/strides carried by a proven outer loop.
+
+        This covers source patterns where an outer stage doubles variables used
+        as a middle-loop stride and an inner-loop bound. It derives execution
+        counts only; assembly selection remains model-owned.
+        """
+        results: list[tuple[int, int, int, str]] = []
+        outer_loops = StagedPredictor._proven_for_loops(body, macro_values)
+        middle_pattern = re.compile(
+            r"\bfor\s*\(\s*(?:[A-Za-z_]\w*\s+)*([A-Za-z_]\w*)\s*=\s*"
+            r"(\d+)[uUlL]*\s*;\s*\1\s*<\s*([A-Za-z_]\w*|\d+[uUlL]*)"
+            r"\s*;\s*\1\s*\+=\s*([A-Za-z_]\w*)\s*\)\s*\{"
+        )
+        inner_pattern = re.compile(
+            r"\bfor\s*\(\s*(?:[A-Za-z_]\w*\s+)*([A-Za-z_]\w*)\s*=\s*"
+            r"(\d+)[uUlL]*\s*;\s*\1\s*<\s*([A-Za-z_]\w*)"
+            r"\s*;\s*(?:\+\+\s*\1|\1\s*\+\+)\s*\)\s*\{"
+        )
+
+        def integer_value(token: str) -> int | None:
+            clean = re.sub(r"[uUlL]+$", "", token)
+            return int(clean) if clean.isdigit() else macro_values.get(clean)
+
+        for outer_start, outer_end, stages, outer_desc in outer_loops:
+            for middle in middle_pattern.finditer(body, outer_start, outer_end):
+                _, middle_start_text, middle_bound_text, stride_var = middle.groups()
+                middle_bound = integer_value(middle_bound_text)
+                if middle_bound is None:
+                    continue
+                middle_open = middle.end() - 1
+                middle_close = StagedPredictor._matching_brace(body, middle_open)
+                if middle_close is None or middle_close > outer_end:
+                    continue
+                inner = inner_pattern.search(body, middle_open + 1, middle_close)
+                if not inner:
+                    continue
+                _, inner_start_text, bound_var = inner.groups()
+                prefix = body[:outer_start]
+                stride_initials = list(re.finditer(
+                    rf"\b{re.escape(stride_var)}\s*=\s*(\d+)[uUlL]*\s*;", prefix
+                ))
+                bound_initials = list(re.finditer(
+                    rf"\b{re.escape(bound_var)}\s*=\s*(\d+)[uUlL]*\s*;", prefix
+                ))
+                outer_text = body[outer_start:outer_end]
+                stride_shift = re.search(
+                    rf"\b{re.escape(stride_var)}\s*<<=\s*(\d+)[uUlL]*", outer_text
+                )
+                bound_shift = re.search(
+                    rf"\b{re.escape(bound_var)}\s*<<=\s*(\d+)[uUlL]*", outer_text
+                )
+                if not (stride_initials and bound_initials and stride_shift and bound_shift):
+                    continue
+                stride = int(stride_initials[-1].group(1))
+                inner_bound = int(bound_initials[-1].group(1))
+                middle_start = int(middle_start_text)
+                inner_start = int(inner_start_text)
+                stride_factor = 1 << int(stride_shift.group(1))
+                bound_factor = 1 << int(bound_shift.group(1))
+                per_stage: list[int] = []
+                for _ in range(stages):
+                    middle_trips = max(
+                        0, (middle_bound - middle_start + stride - 1) // stride
+                    )
+                    inner_trips = max(0, inner_bound - inner_start)
+                    per_stage.append(middle_trips * inner_trips)
+                    stride *= stride_factor
+                    inner_bound *= bound_factor
+                inner_open = inner.end() - 1
+                inner_close = StagedPredictor._matching_brace(body, inner_open)
+                if inner_close is None:
+                    continue
+                results.append((
+                    inner_open + 1,
+                    inner_close,
+                    sum(per_stage),
+                    f"{outer_desc}; per-stage inner executions={per_stage}",
+                ))
+        return results
 
     @staticmethod
     def _proven_direct_callee_calls(
@@ -1654,6 +1920,9 @@ Draft block plan to audit and replace:
             raw_outputs.append(raw)
             assembly_plans[name] = assembly_plan
             errors.extend(self._validate_assembly_plan(assembly_plan))
+            errors.extend(self._validate_statement_block_coverage(
+                name, assembly_plan, self._source_statement_checklist(body)
+            ))
             ledger = self._assembly_plan_to_ledger(assembly_plan, functions)
             if ledger.function_name != name:
                 errors.append(
@@ -1743,7 +2012,7 @@ Draft block plan to audit and replace:
             if item.strip() not in known_functions
         )
         status = "VALIDATION_REQUIRED" if errors or unresolved else "SUPPORTED"
-        suppress_estimate = bool(unresolved)
+        suppress_estimate = bool(errors or unresolved)
         prediction = StagedPrediction(
             analysis_status=status,
             provider=self.client.provider,
