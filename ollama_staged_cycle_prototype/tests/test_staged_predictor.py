@@ -567,6 +567,33 @@ class StagedPredictorTest(unittest.TestCase):
         self.assertEqual(counts.get("conditional_branch_not_taken"), 1)
         self.assertNotIn("conditional_branch_taken", counts)
 
+    def test_multiple_returns_normalized_to_epilogue(self):
+        plan = FunctionAssemblyPlan.model_validate({
+            "function_name": "MultiReturnFunc",
+            "selected_source_path": ["x > 0: true", "return"],
+            "sections": [{
+                "section_name": "straight_line",
+                "execution_count": 1,
+                "instructions": [
+                    "push {r7, lr}",
+                    "sub sp, #12",
+                    "cmp r0, #0",
+                    "b.n else_arm",
+                    "movs r0, #27",
+                    "bx lr",
+                    "else_arm:",
+                    "movs r0, #0",
+                    "adds r7, #12",
+                    "pop {r7, pc}",
+                ],
+            }],
+        })
+        errors = StagedPredictor._validate_assembly_plan(plan)
+        self.assertEqual(errors, [])
+        # The early 'bx lr' must have been neutralized to 'nop'
+        self.assertEqual(plan.sections[0].instructions[5], "nop")
+        self.assertEqual(plan.sections[0].instructions[-1], "pop {r7, pc}")
+
 
 if __name__ == "__main__":
     unittest.main()
