@@ -152,6 +152,8 @@ Additional source/initialization context (outside the timed interval):
         control_obligations = self._control_flow_obligations(
             body, name=name, all_functions=all_functions, source_facts=source_facts
         )
+        statement_checklist = self._source_statement_checklist(body)
+        access_obligations = self._indexed_access_checklist(statement_checklist)
         arithmetic_obligations = {
             "minimum_static_operations": self._source_arithmetic_obligations(
                 body, source_facts, apply_loop_counts=False
@@ -182,6 +184,14 @@ Source-derived proven loop execution obligations:
 
 Source-derived control-flow regions:
 {json.dumps(control_obligations, indent=2)}
+
+Mandatory source-statement coverage checklist (preserve this order and
+translate every entry; do not summarize or merge entries away):
+{json.dumps(statement_checklist, indent=2)}
+
+Mandatory indexed memory-access expressions (each occurrence in the source
+statement checklist needs its own GCC -O0 address formation and load/store):
+{json.dumps(access_obligations, indent=2)}
 
 Source-derived minimum arithmetic instruction obligations for the selected
 worst-case path (both static operations and proven dynamic counts):
@@ -236,6 +246,14 @@ Rules for generating FunctionAssemblyPlan:
 - The source-derived arithmetic obligations are lower bounds, not suggested
   totals. The emitted dynamic trace must contain at least that many matching
   multiply/divide instructions after section execution counts are applied.
+- Translate the mandatory source-statement checklist statement by statement:
+  first load every operand, then emit every arithmetic/logical operation, then
+  store the C result. Do not replace a compound expression with representative
+  instructions. For example, `a*b - c*d` requires both multiplications and the
+  subtraction; emitting only address arithmetic or loop control is invalid.
+- Before returning JSON, audit that every checklist entry is represented in an
+  assembly section and every indexed access has explicit address formation plus
+  its data load/store. This audit changes the assembly; do not output prose.
 - The instructions across all sections are ONE LINEAR DYNAMIC TRACE, not a
   static disassembly containing every basic block. After a taken branch,
   continue with instructions at its target; omit the skipped arm. After a
@@ -1075,6 +1093,53 @@ Draft block plan to audit and replace:
                 continue
             index += 1
         return "".join(result)
+
+    @staticmethod
+    def _source_statement_checklist(body: str) -> list[str]:
+        """Return executable C statements without asking Python to compile them."""
+        masked = StagedPredictor._masked_c_source(body)
+        statements: list[str] = []
+        for raw_line in masked.splitlines():
+            line = raw_line.strip()
+            if not line or line in {"{", "}"}:
+                continue
+            if re.match(r"^(?:for|if|else\s+if|while|switch)\s*\(", line):
+                continue
+            for fragment in line.split(";"):
+                statement = fragment.strip().strip("{} ")
+                if not statement or statement in {"else", "do"}:
+                    continue
+                if re.match(r"^(?:case\b|default\s*:)", statement):
+                    continue
+                if "(" in statement and statement.endswith(")") and not re.search(
+                    r"(?:=|\breturn\b|\+\+|--)", statement
+                ):
+                    # Skip the function signature while retaining ordinary call
+                    # statements, which contain a callee name followed by `(`.
+                    if re.match(
+                        r"^(?:static\s+)?(?:void|[A-Za-z_]\w*_t|int|unsigned|signed)\b.*\b\w+\s*\(",
+                        statement,
+                    ):
+                        continue
+                statements.append(re.sub(r"\s+", " ", statement)[:300])
+        return statements[:64]
+
+    @staticmethod
+    def _indexed_access_checklist(statements: list[str]) -> list[str]:
+        """Keep every variable-indexed source occurrence visible to the LLM."""
+        pattern = re.compile(
+            r"\b[A-Za-z_]\w*(?:\s*\[[^\]]+\])+"
+            r"(?:\s*(?:\.|->)\s*[A-Za-z_]\w*)?"
+        )
+        obligations = []
+        for statement in statements:
+            for match in pattern.finditer(statement):
+                expression = re.sub(r"\s+", "", match.group(0))
+                indexes = re.findall(r"\[([^\]]+)\]", expression)
+                if not any(re.search(r"[A-Za-z_]", index) for index in indexes):
+                    continue
+                obligations.append(f"{expression} :: {statement}"[:400])
+        return obligations[:128]
 
     @staticmethod
     def _source_arithmetic_obligations(
