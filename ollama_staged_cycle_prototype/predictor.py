@@ -86,6 +86,16 @@ class StagedPredictor:
             for o in self._loop_execution_obligations(f_name, f_body, functions, source_facts):
                 all_loop_obligations.append(f"[{f_name}] {o}")
 
+        statement_catalog = {
+            function_name: [
+                {"statement_id": index, "source_statement": statement}
+                for index, statement in enumerate(
+                    self._source_statement_checklist(function_body), start=1
+                )
+            ]
+            for function_name, function_body in functions.items()
+        }
+
         return f"""You are pass 1 of a staged GCC -O0 source timing analysis.
 Analyze only control flow and dynamic function-call multiplicities on one
 feasible source path. Initialization/path context is authoritative when it
@@ -106,6 +116,16 @@ Required rules:
 - `selected_path` is mandatory and lists the target's executed source decisions
   in order. It must agree with known initialization values.
 - Include every supplied reachable function exactly once.
+- Every function entry has its own `selected_path`. It describes only that
+  function's feasible control-flow decisions for one invocation; never copy
+  caller or callee decisions into it.
+- Every function entry has `selected_statement_ids`. Select exactly the
+  executable statement IDs reached on that function's one chosen path,
+  including unconditional statements and statements in the selected branch.
+  Exclude statements belonging only to unselected if/else arms, switch cases,
+  or code bypassed by an early return. Keep IDs unique and in source order.
+- A function with no executable statement in its body uses an empty
+  `selected_statement_ids` list.
 - A helper's dynamic_calls is its total invocation count during one target call on the selected worst-case path.
 - A helper reachable only through an unselected branch has dynamic_calls=0; keep it in the functions list instead of inventing a call.
 - In conditional branching (if/else if/else, switch-case), alternative branches are mutually exclusive! If a helper is called in branch A and also in branch B, its dynamic_calls on any single path is at most 1, NEVER the sum of mutually exclusive branches.
@@ -120,6 +140,9 @@ Required rules:
 
 Functions supplied:
 {json.dumps(list(functions), indent=2)}
+
+Per-function source statement IDs (authoritative):
+{json.dumps(statement_catalog, indent=2)}
 
 Source constants/macros (authoritative for loop bounds):
 ```c
@@ -137,7 +160,8 @@ Additional source/initialization context (outside the timed interval):
 
     def _assembly_prompt(
         self, name: str, body: str, all_functions: dict[str, str],
-        plan: StructurePlan, source_facts: str,
+        selected_path: list[str], selected_statement_ids: list[int],
+        source_facts: str,
         analysis_context: str, gcc_evidence: list[dict],
     ) -> str:
         direct_callees = sorted(
@@ -153,11 +177,20 @@ Additional source/initialization context (outside the timed interval):
             body, name=name, all_functions=all_functions, source_facts=source_facts
         )
         statement_checklist = self._source_statement_checklist(body)
-        statement_obligations = [
+        all_statement_obligations = [
             {"statement_id": index, "source_statement": statement}
             for index, statement in enumerate(statement_checklist, start=1)
         ]
-        access_obligations = self._indexed_access_checklist(statement_checklist)
+        selected_id_set = set(selected_statement_ids)
+        selected_statement_obligations = [
+            obligation for obligation in all_statement_obligations
+            if obligation["statement_id"] in selected_id_set
+        ]
+        selected_statements = [
+            obligation["source_statement"]
+            for obligation in selected_statement_obligations
+        ]
+        access_obligations = self._indexed_access_checklist(selected_statements)
         arithmetic_obligations = {
             "minimum_static_operations": self._source_arithmetic_obligations(
                 body, source_facts, apply_loop_counts=False
@@ -174,24 +207,29 @@ Function under analysis:
 {body}
 ```
 
-Relevant call-chain source (use only to propagate caller arguments and state
-into this function's path; synthesize assembly only for {name}):
-```c
-{chr(10).join(all_functions.values())}
-```
+Pass-1 selected path for this function (authoritative; reproduce this exact
+array in `selected_source_path`):
+{json.dumps(selected_path, indent=2)}
 
-Structure plan (authoritative call and loop bounds):
-{plan.model_dump_json(indent=2)}
+Pass-1 selected source statement IDs for this function (authoritative):
+{json.dumps(selected_statement_ids)}
 
 Source-derived proven loop execution obligations:
 {json.dumps(loop_obligations, indent=2)}
 
-Source-derived control-flow regions:
+Only apply a loop obligation when that loop lies on the authoritative pass-1
+path. A loop located solely in an unselected branch emits no section.
+
+Source-derived control-flow regions (static context only; emit tests and arms
+only where required by the authoritative pass-1 path):
 {json.dumps(control_obligations, indent=2)}
 
-Mandatory source-statement coverage checklist (preserve this order and
-translate every entry; do not summarize or merge entries away):
-{json.dumps(statement_obligations, indent=2)}
+All source statements and IDs (context only; do not translate unselected IDs):
+{json.dumps(all_statement_obligations, indent=2)}
+
+Mandatory selected source-statement coverage checklist (preserve this order
+and translate every entry; these are the only non-null statement IDs allowed):
+{json.dumps(selected_statement_obligations, indent=2)}
 
 Mandatory indexed memory-access expressions (each occurrence in the source
 statement checklist needs its own GCC -O0 address formation and load/store):
@@ -203,6 +241,9 @@ worst-case path (both static operations and proven dynamic counts):
 
 Direct callees in this function:
 {json.dumps(direct_callees)}
+
+This is a syntactic possibility list. Emit `bl` only for calls reached by the
+authoritative selected path and selected statement IDs.
 
 Hardware profile:
 {json.dumps(self.hardware, indent=2)}
@@ -216,22 +257,23 @@ Initialization/path context (outside the timed interval):
 Rules for generating FunctionAssemblyPlan:
 - `statement_blocks` is mandatory in every section. Leave the legacy
   `instructions` list empty. Each block has a globally unique `block_id`.
-- Emit exactly one block for every mandatory `statement_id`, in ascending source
-  order. Put compiler-only prologue, loop-control and epilogue blocks around
-  them with `statement_id=null`. Never reuse a statement ID.
+- Emit exactly one block for every selected mandatory `statement_id`, in
+  ascending source order. Never emit a block for an unselected statement ID.
+  Put compiler-only prologue, loop-control and epilogue blocks around them with
+  `statement_id=null`. Never reuse a statement ID.
 - A statement block contains only that statement's GCC -O0 translation and is
   capped at 64 instructions. Finish it before starting the next block. Never
   repeat a block or instruction sequence merely to consume the output budget.
-- `selected_source_path` is mandatory. List, in execution order, the source
-  conditions and the one arm selected at each decision. Use initialization/path
-  context whenever it fixes a value; otherwise choose one most expensive
-  feasible arm. Never describe two mutually exclusive arms as selected.
+- `selected_source_path` is mandatory. Reproduce the pass-1 function path array
+  above exactly; do not choose a different arm and do not add caller/callee
+  decisions.
 - Structure {name} into its natural sequential assembly sections:
   1. For a function without loops (straight-line or branching with if/else or switch-case):
      - There must be EXACTLY ONE section named "straight_line" with execution_count = 1.
      - Do NOT emit multiple sections!
      - A single invocation executes exactly ONE path. Synthesize ONLY the single selected feasible path (worst-case path) in this single section: entry PUSH, stack allocation, condition tests, ONLY the single chosen branch arm (e.g., only one case of a switch, or only the chosen arm of an if-else), stack teardown, and return (bx lr or pop {{..., pc}}).
-     - Completely omit all unselected alternative branch arms! Do not emit multiple alternative sections!
+     - Completely omit all unselected alternative branch arms and their
+       statement IDs. Do not emit multiple alternative sections!
   2. For a function with a single loop:
      - Section "prologue_and_init" with execution_count = 1: entry PUSH, stack allocation, initial variable and index setup.
      - Section "loop_body" with execution_count = N, where N is the loop body trip count from 'Source-derived proven loop execution obligations'. Contains the loop body arithmetic, memory loads/stores, callee calls, and increment/test.
@@ -1280,10 +1322,11 @@ Draft block plan to audit and replace:
 
     @staticmethod
     def _validate_statement_block_coverage(
-        name: str, plan: FunctionAssemblyPlan, statements: list[str]
+        name: str, plan: FunctionAssemblyPlan, statements: list[str],
+        selected_statement_ids: list[int],
     ) -> list[str]:
-        """Require one and only one model-produced block per source statement."""
-        expected = set(range(1, len(statements) + 1))
+        """Require exactly the source statements selected by pass 1."""
+        expected = set(selected_statement_ids)
         actual = {
             block.statement_id
             for section in plan.sections
@@ -1304,6 +1347,12 @@ Draft block plan to audit and replace:
         for section in plan.sections:
             for block in section.statement_blocks:
                 if block.statement_id is None:
+                    continue
+                if not (1 <= block.statement_id <= len(statements)):
+                    errors.append(
+                        f"{name}/{block.block_id}: statement_id {block.statement_id} "
+                        f"is out of bounds for source statements (1..{len(statements)})"
+                    )
                     continue
                 expected_statement = statements[block.statement_id - 1]
                 if re.sub(r"\s+", " ", block.source_statement).strip() != expected_statement:
@@ -1889,6 +1938,30 @@ Draft block plan to audit and replace:
             )
         for missing_fn in set(functions) - set(planned):
             planned[missing_fn] = 0
+
+        planned_functions = {
+            item.function_name: item for item in plan.functions
+        }
+        for function_name, function_body in functions.items():
+            function_plan = planned_functions.get(function_name)
+            statements = self._source_statement_checklist(function_body)
+            if function_plan is None:
+                errors.append(
+                    f"structure plan is missing per-function path for {function_name}"
+                )
+                continue
+            valid_ids = set(range(1, len(statements) + 1))
+            selected_ids = set(function_plan.selected_statement_ids)
+            unknown_ids = sorted(selected_ids - valid_ids)
+            if unknown_ids:
+                errors.append(
+                    f"{function_name}: structure plan selected unknown source "
+                    f"statement IDs {unknown_ids}"
+                )
+            if statements and not function_plan.selected_statement_ids:
+                errors.append(
+                    f"{function_name}: structure plan selected no source statements"
+                )
         # One CLI prediction always represents exactly one target invocation.
         planned[target] = 1
         for item in plan.functions:
@@ -1907,12 +1980,23 @@ Draft block plan to audit and replace:
         assembly_plans: dict[str, FunctionAssemblyPlan] = {}
         ledgers: dict[str, FunctionLedger] = {}
         for name, body in functions.items():
+            statement_checklist = self._source_statement_checklist(body)
+            function_plan = planned_functions.get(name)
+            if function_plan is None:
+                selected_path = ["unresolved: pass 1 omitted this function"]
+                selected_statement_ids = list(
+                    range(1, len(statement_checklist) + 1)
+                )
+            else:
+                selected_path = function_plan.selected_path
+                selected_statement_ids = function_plan.selected_statement_ids
             function_evidence = retrieve_assembly_evidence(
                 source, self.gcc_pattern_path, function_name=name, limit=8
             )
             assembly_plan, raw = self.client.predict(
                 self._assembly_prompt(
-                    name, body, functions, plan, source_facts,
+                    name, body, functions, selected_path,
+                    selected_statement_ids, source_facts,
                     analysis_context, function_evidence,
                 ),
                 response_schema=FunctionAssemblyPlan,
@@ -1921,8 +2005,14 @@ Draft block plan to audit and replace:
             assembly_plans[name] = assembly_plan
             errors.extend(self._validate_assembly_plan(assembly_plan))
             errors.extend(self._validate_statement_block_coverage(
-                name, assembly_plan, self._source_statement_checklist(body)
+                name, assembly_plan, statement_checklist,
+                selected_statement_ids,
             ))
+            if assembly_plan.selected_source_path != selected_path:
+                errors.append(
+                    f"{name}: assembly selected_source_path does not reproduce "
+                    "the authoritative pass-1 function path"
+                )
             ledger = self._assembly_plan_to_ledger(assembly_plan, functions)
             if ledger.function_name != name:
                 errors.append(

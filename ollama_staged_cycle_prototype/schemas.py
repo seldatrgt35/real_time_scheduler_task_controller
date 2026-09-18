@@ -27,6 +27,18 @@ class PlannedFunction(BaseModel):
     function_name: str = Field(max_length=128)
     dynamic_calls: int = Field(ge=0)
     call_count_evidence: str = Field(max_length=500)
+    selected_path: list[str] = Field(min_length=1, max_length=32)
+    selected_statement_ids: list[int] = Field(max_length=64)
+
+    @model_validator(mode="after")
+    def ordered_unique_statement_ids(self) -> "PlannedFunction":
+        if any(statement_id < 1 for statement_id in self.selected_statement_ids):
+            raise ValueError("selected statement IDs must be positive")
+        if self.selected_statement_ids != sorted(set(self.selected_statement_ids)):
+            raise ValueError(
+                "selected statement IDs must be unique and in source order"
+            )
+        return self
 
 
 class StructurePlan(BaseModel):

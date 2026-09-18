@@ -38,9 +38,13 @@ class FakeClient:
                 "selected_path": ["loop executes three times", "return"],
                 "functions": [
                     {"function_name": "Task", "dynamic_calls": 1,
-                     "call_count_evidence": "entry"},
+                     "call_count_evidence": "entry",
+                     "selected_path": ["loop executes three times", "return"],
+                     "selected_statement_ids": [1]},
                     {"function_name": "Helper", "dynamic_calls": calls,
-                     "call_count_evidence": "three loop iterations"},
+                     "call_count_evidence": "three loop iterations",
+                     "selected_path": ["straight-line return"],
+                     "selected_statement_ids": [1]},
                 ],
                 "loop_bounds": ["i=0..2"],
             }
@@ -704,12 +708,12 @@ class StagedPredictorTest(unittest.TestCase):
         })
         self.assertEqual(
             StagedPredictor._validate_statement_block_coverage(
-                "Kernel", plan, ["x = a + b"]
+                "Kernel", plan, ["x = a + b", "y = x * c"], [1]
             ),
             [],
         )
         errors = StagedPredictor._validate_statement_block_coverage(
-            "Kernel", plan, ["x = a + b", "y = x * c"]
+            "Kernel", plan, ["x = a + b", "y = x * c"], [1, 2]
         )
         self.assertTrue(any("missing source statement block IDs [2]" in e for e in errors))
 

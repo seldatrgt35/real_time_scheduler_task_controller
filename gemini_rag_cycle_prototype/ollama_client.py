@@ -223,17 +223,20 @@ class OllamaClient:
     def _save_invalid_response(
         raw: str, attempt: int, error: Exception | None = None
     ) -> None:
-        base_path = Path(os.getenv(
-            "OLLAMA_INVALID_RESPONSE_PATH",
-            "gemini_rag_cycle_prototype/results/last_invalid_ollama_response.json",
-        ))
-        base_path.parent.mkdir(parents=True, exist_ok=True)
-        base_path.write_text(raw, encoding="utf-8")
-        attempt_path = base_path.with_name(
-            f"{base_path.stem}.attempt-{attempt}{base_path.suffix}"
-        )
-        attempt_path.write_text(raw, encoding="utf-8")
-        if error is not None:
-            attempt_path.with_suffix(".error.txt").write_text(
-                str(error), encoding="utf-8"
+        try:
+            base_path = Path(os.getenv(
+                "OLLAMA_INVALID_RESPONSE_PATH",
+                "gemini_rag_cycle_prototype/results/last_invalid_ollama_response.json",
+            ))
+            base_path.parent.mkdir(parents=True, exist_ok=True)
+            base_path.write_text(raw, encoding="utf-8")
+            attempt_path = base_path.with_name(
+                f"{base_path.stem}.attempt-{attempt}{base_path.suffix}"
             )
+            attempt_path.write_text(raw, encoding="utf-8")
+            if error is not None:
+                attempt_path.with_suffix(".error.txt").write_text(
+                    str(error), encoding="utf-8"
+                )
+        except OSError:
+            pass
