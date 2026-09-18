@@ -53,7 +53,13 @@ class StaticAssemblyV2Tests(unittest.TestCase):
         self.assertIn("STATIC", prompt)
         self.assertIn("NEVER unroll a loop", prompt)
         self.assertIn("Do not calculate cycles", prompt)
+        self.assertIn("HARD LIMIT of 320 items", prompt)
+        self.assertIn("do not emit their", prompt)
         self.assertNotIn('"execution_count"', prompt)
+
+    def test_llm_schema_caps_static_assembly_length(self):
+        schema = StaticAssemblyFunction.model_json_schema()
+        self.assertEqual(320, schema["properties"]["assembly"]["maxItems"])
 
     def test_loop_requires_backward_branch(self):
         draft = StaticAssemblyFunction(
@@ -117,7 +123,54 @@ class StaticAssemblyV2Tests(unittest.TestCase):
         self.assertEqual(5, analysis.instruction_count)
         self.assertGreater(analysis.static_core_cycle_sum, 0)
         self.assertFalse(analysis.validation_errors)
+    def test_data_symbol_call_with_bl_is_rejected(self):
+        draft = StaticAssemblyFunction(
+            function_name="Task",
+            assembly=["Task:", "push {r7, lr}", "bl s_aes_sbox", "pop {r7, pc}"],
+        )
+        predictor = self.predictor(FakeClient([]))
+        decls = "static const uint8_t s_aes_sbox[256];"
+        errors = predictor._audit(draft, "Task", "void Task(void) {}", {"Task": ""}, declarations=decls)
+        self.assertTrue(any("attempts to call data symbol 's_aes_sbox' with BL" in e for e in errors))
+
+    def test_numeric_branch_offset_target_is_rejected(self):
+        draft = StaticAssemblyFunction(
+            function_name="Task",
+            assembly=["Task:", "push {r7}", "loop_start:", "cmp r0, #4", "bls.n 10 <Task+0x10>", "pop {r7}", "bx lr"],
+        )
+        predictor = self.predictor(FakeClient([]))
+        errors = predictor._audit(draft, "Task", "void Task(void) {}", {"Task": ""})
+        self.assertTrue(any("numeric or an offset" in e for e in errors))
+
+    def test_data_directives_are_rejected(self):
+        draft = StaticAssemblyFunction(
+            function_name="Task",
+            assembly=["Task:", "push {r7}", ".word 0x1234", "pop {r7}", "bx lr"],
+        )
+        predictor = self.predictor(FakeClient([]))
+        errors = predictor._audit(draft, "Task", "void Task(void) {}", {"Task": ""})
+        self.assertTrue(any("assembly contains data directive '.word 0x1234'" in e for e in errors))
+
+    def test_stack_offset_overflow_is_rejected(self):
+        draft = StaticAssemblyFunction(
+            function_name="Task",
+            assembly=["Task:", "push {r7}", "sub sp, #16", "ldr r0, [r7, #24]", "adds r7, #16", "pop {r7}", "bx lr"],
+        )
+        predictor = self.predictor(FakeClient([]))
+        errors = predictor._audit(draft, "Task", "void Task(void) {}", {"Task": ""})
+        self.assertTrue(any("exceeds allocated frame size #16" in e for e in errors))
+
+    def test_loop_relational_operator_consistency_is_checked(self):
+        draft = StaticAssemblyFunction(
+            function_name="Task",
+            assembly=["Task:", "push {r7}", "loop:", "adds r0, #1", "cmp r0, #16", "bls loop", "pop {r7}", "bx lr"],
+        )
+        predictor = self.predictor(FakeClient([]))
+        body = "void Task(void) { for (int i = 0; i < 16; ++i) {} }"
+        errors = predictor._audit(draft, "Task", body, {"Task": ""})
+        self.assertTrue(any("loop condition is strictly '< 16'" in e for e in errors))
 
 
 if __name__ == "__main__":
     unittest.main()
+

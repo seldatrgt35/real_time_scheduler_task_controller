@@ -156,9 +156,17 @@ STRICT RULES
 8. Use symbolic labels and symbols. Each assembly array item is exactly one label or instruction.
 9. If exact code generation is genuinely unresolved, state the narrow uncertainty in `unresolved`; do not
    hide missing source behavior or manufacture hundreds of repeated instructions.
+10. The `assembly` array has a HARD LIMIT of 320 items and normally should be much shorter. Never approach
+    that limit by expanding iterations, branch executions, lookup-table contents or source array data.
+11. Emit function-body instructions only. Refer to constants and global tables by symbol; do not emit their
+    `.word`, `.byte`, initializer, literal-pool data or other translation-unit data in this response.
+12. All branch instructions (b, beq, bne, bls, etc.) MUST target declared symbolic labels (e.g. `b loop_start`),
+    NEVER numeric addresses or offset strings like `bls 10 <func+0x10>`.
+13. Global or static arrays/tables (e.g. lookup tables) are DATA, never functions. NEVER invoke data arrays with `bl`.
+    Form their address and load/store data.
 
 Before returning JSON, silently audit that all source constructs are represented, every loop has a
-back-edge, every direct call is a BL, and no long instruction sequence is repeated verbatim.
+symbolic back-edge, every direct call is a BL to a real function, and no data symbols are called with BL.
 
 TRANSLATION-UNIT DECLARATIONS AND GLOBAL CONTEXT
 {declarations}
@@ -228,12 +236,53 @@ Return JSON only with exactly these fields:
         pattern = rf"\b[A-Za-z_]\w*(?:\s*\[[^]]+\])?\s*{escaped}\s*[A-Za-z_]\w*"
         return bool(re.search(pattern, stripped))
 
+    @staticmethod
+    def _data_symbols(declarations: str) -> set[str]:
+        """Extract global/static array and variable symbol names from declarations context."""
+        symbols: set[str] = set()
+        for line in declarations.splitlines():
+            clean = re.sub(r"/\*.*?\*/|//.*$", "", line).strip()
+            if not clean or clean.startswith("#"):
+                continue
+            # Match declarations like: static const uint8_t s_aes_sbox[256]; or uint8_t g_bench_sink8;
+            matches = re.finditer(
+                r"\b(?:const\s+|static\s+|volatile\s+|extern\s+|unsigned\s+|signed\s+|"
+                r"[A-Za-z_]\w*_t|[A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*;",
+                clean,
+            )
+            for m in matches:
+                sym = m.group(1).strip()
+                if sym and not sym.startswith(("int", "uint", "void", "char")):
+                    symbols.add(sym.lower())
+        return symbols
+
+    @staticmethod
+    def _allocated_stack_frame_size(instructions: list[str]) -> int | None:
+        """Parse prologue stack allocation size (e.g. sub sp, #16)."""
+        for inst in instructions[:10]:
+            match = re.match(r"^\s*sub(?:s)?(?:\.w)?\s+sp,\s*(?:sp,\s*)?#?(\d+)\b", inst, flags=re.I)
+            if match:
+                return int(match.group(1))
+        return None
+
+    @staticmethod
+    def _max_stack_offset(instructions: list[str]) -> int | None:
+        """Find the maximum immediate offset used in stack accesses ([r7, #N] or [sp, #N])."""
+        max_val = None
+        for inst in instructions:
+            for m in re.finditer(r"\[(?:r7|sp),\s*#?(\d+)\]", inst, flags=re.I):
+                val = int(m.group(1))
+                if max_val is None or val > max_val:
+                    max_val = val
+        return max_val
+
     def _audit(
         self,
         draft: StaticAssemblyFunction,
         expected_name: str,
         body: str,
         functions: dict[str, str],
+        declarations: str = "",
     ) -> list[str]:
         errors: list[str] = []
         if draft.function_name != expected_name:
@@ -243,12 +292,62 @@ Return JSON only with exactly these fields:
         instructions = self._instruction_lines(draft.assembly)
         if len(instructions) < 2:
             errors.append("assembly contains fewer than two instructions")
-        if len(draft.assembly) >= 590:
+        if len(draft.assembly) >= 310:
             errors.append("assembly reached the output ceiling and is probably truncated")
         if StagedPredictor._has_repeated_instruction_ngram(instructions):
             errors.append("assembly contains a repeated 8-instruction sequence three times")
 
+        # 1. Directives rejection (.word, .byte, etc. within assembly array)
+        for line in draft.assembly:
+            clean = re.sub(r"@.*$", "", line).strip()
+            if re.match(r"^\.(?:word|byte|short|ascii|asciz|space|fill|zero)\b", clean, flags=re.I):
+                errors.append(
+                    f"assembly contains data directive {clean!r}; refer to global data by symbol, "
+                    "do not emit literal-pool or data declarations in assembly"
+                )
+                break
+
+        # 2. Branch targets must be defined symbolic labels (no numeric offsets or undefined targets)
+        labels = {
+            line[:-1].strip()
+            for line in draft.assembly
+            if line.strip().endswith(":")
+        }
+        for line in instructions:
+            match = re.match(
+                r"^(?:b(?:eq|ne|cs|hs|cc|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al)?|cbz|cbnz)(?:\.[nw])?\s+(.+)$",
+                line, flags=re.I,
+            )
+            if match:
+                operands = [item.strip() for item in match.group(1).split(",")]
+                target = operands[-1]
+                # Reject hex/numeric offset branch targets like "10 <func+0x10>" or bare numbers
+                if re.match(r"^(?:0x[0-9a-f]+|\d+)\b", target, flags=re.I) or "<" in target:
+                    errors.append(
+                        f"branch target {target!r} is numeric or an offset; "
+                        "all branch targets must be symbolic labels"
+                    )
+                    break
+                elif target not in labels:
+                    errors.append(
+                        f"branch target {target!r} does not match any declared label in this function"
+                    )
+                    break
+
+        # 3. Reject BL to data/array symbols
+        data_symbols = self._data_symbols(declarations)
         lowered = [line.lower() for line in instructions]
+        for line in lowered:
+            bl_match = re.search(r"\bblx?\s+([A-Za-z_]\w*)\b", line)
+            if bl_match:
+                called = bl_match.group(1)
+                if called in data_symbols:
+                    errors.append(
+                        f"instruction {line.strip()!r} attempts to call data symbol {called!r} with BL; "
+                        "load its address instead of invoking it as a function"
+                    )
+
+        # 4. Callee call sites audit
         for callee in sorted(self._direct_callees(expected_name, body, functions)):
             expected_sites = len(re.findall(
                 rf"\b{re.escape(callee)}\s*\(", body
@@ -263,9 +362,43 @@ Return JSON only with exactly these fields:
                     f"assembly has {actual_sites} BL instruction(s)"
                 )
 
+        # 5. Loops must have a backward branch
         if re.search(r"\b(?:for|while)\s*\(|\bdo\b", body):
             if not self._has_backward_branch(draft.assembly):
                 errors.append("source contains a loop but assembly has no backward branch")
+
+        # 6. Loop relational operator consistency (< vs <=)
+        # In GCC -O0, for loops like for(i=0; i < N; ++i) compare i with N and use blt/blo or bne,
+        # never bls/ble against N (which would execute N+1 iterations).
+        strict_loop_matches = re.findall(
+            r"\bfor\s*\(\s*(?:[A-Za-z_]\w*\s+)*([A-Za-z_]\w*)\s*=\s*\d+[uUlL]*\s*;\s*\1\s*<\s*(\d+)[uUlL]*\s*;",
+            body,
+        )
+        for var_name, bound_str in strict_loop_matches:
+            bound_val = int(bound_str)
+            # Check if assembly compares with bound_val and branches with bls/ble
+            for idx, inst in enumerate(instructions):
+                cmp_match = re.search(rf"\bcmp(?:\.w)?\s+[rR]\d+,\s*#?{bound_val}\b", inst, flags=re.I)
+                if cmp_match:
+                    # Look ahead for immediate branch
+                    for next_inst in instructions[idx + 1:idx + 3]:
+                        if re.match(r"^\s*b(?:ls|le)(?:\.[nw])?\b", next_inst, flags=re.I):
+                            errors.append(
+                                f"loop condition is strictly '< {bound_val}', but assembly tests "
+                                f"with <= ({next_inst.strip()}); use < comparison or test != bound"
+                            )
+                            break
+
+        # 7. Stack frame allocation bounds check
+        frame_size = self._allocated_stack_frame_size(instructions)
+        if frame_size is not None:
+            max_offset = self._max_stack_offset(instructions)
+            if max_offset is not None and max_offset >= frame_size:
+                errors.append(
+                    f"stack access offset #{max_offset} exceeds allocated frame size #{frame_size}"
+                )
+
+        # 8. Control flow & operator audits
         if re.search(r"\b(?:if|switch)\s*\(|\?", body):
             if not self._has_conditional_branch(instructions):
                 errors.append("source contains conditional control flow but assembly has no conditional branch")
@@ -338,7 +471,7 @@ Return JSON only with exactly these fields:
                 )
                 draft = result
                 raw_outputs.append((f"{name}.attempt-{attempt + 1}", raw))
-                errors = self._audit(draft, name, body, functions)
+                errors = self._audit(draft, name, body, functions, declarations=declarations)
                 if not errors:
                     break
                 previous = draft

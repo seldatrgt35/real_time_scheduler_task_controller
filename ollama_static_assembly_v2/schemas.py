@@ -9,7 +9,10 @@ class StaticAssemblyFunction(BaseModel):
     """The only structure the LLM is allowed to produce."""
 
     function_name: str = Field(min_length=1, max_length=128)
-    assembly: list[str] = Field(min_length=1, max_length=600)
+    # A single static GCC function should not need a dynamic trace-sized
+    # response.  This bound is also emitted in Ollama's JSON schema, so the
+    # decoder can close the response before exhausting the output budget.
+    assembly: list[str] = Field(min_length=1, max_length=320)
     unresolved: list[str] = Field(default_factory=list, max_length=16)
 
     @model_validator(mode="after")
