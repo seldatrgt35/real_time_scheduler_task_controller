@@ -1,0 +1,227 @@
+You are pass 1 of a staged GCC -O0 source timing analysis.
+Analyze only control flow and dynamic function-call multiplicities on one
+feasible source path. Initialization/path context is authoritative when it
+determines a condition; among genuinely unknown alternatives, select the most
+expensive feasible path. Do not calculate cycles or write assembly.
+
+Target: SecOcAesBlock_Task5ms
+Compiler: ARM GCC 11.4 -O0, Cortex-M4 Thumb-2
+
+Source-derived indexed-access obligations:
+[
+  "state[i]",
+  "rk[i]",
+  "s_aes_sbox[state[i]",
+  "state[idx+0U]",
+  "state[idx+1U]",
+  "state[idx+2U]",
+  "state[idx+3U]"
+]
+
+Source-derived proven loop execution obligations:
+[
+  "[SecOcAesBlock_Task5ms] LOOP: round: 1 < 10U -> BODY EXECUTION COUNT = 9 times",
+  "[AesAddRoundKey] LOOP: i: 0 < 16U -> BODY EXECUTION COUNT = 16 times",
+  "[AesSubBytes] LOOP: i: 0 < 16U -> BODY EXECUTION COUNT = 16 times",
+  "[AesMixColumns] LOOP: c: 0 < 4U -> BODY EXECUTION COUNT = 4 times"
+]
+
+Required rules:
+- The target function has dynamic_calls=1.
+- `selected_path` is mandatory and lists the target's executed source decisions
+  in order. It must agree with known initialization values.
+- Include every supplied reachable function exactly once.
+- A helper's dynamic_calls is its total invocation count during one target call on the selected worst-case path.
+- A helper reachable only through an unselected branch has dynamic_calls=0; keep it in the functions list instead of inventing a call.
+- In conditional branching (if/else if/else, switch-case), alternative branches are mutually exclusive! If a helper is called in branch A and also in branch B, its dynamic_calls on any single path is at most 1, NEVER the sum of mutually exclusive branches.
+- Expand loop call sites using their proven source bounds.
+- For nested loops (a loop inside another loop), explicitly compute and state the compound body iterations across all enclosing loop levels in loop_bounds.
+- For loops with non-unit strides (e.g. `for (i = 0; i < N; i += step)`):
+  * The number of loop iterations is `ceil((bound - start) / step)`, NOT `N`.
+  * Never assume the loop increments by 1 when the loop update uses `+= step`.
+  * If `step` or inner bounds change across outer loop iterations, compute the true sum of inner iterations across all outer iterations.
+- Never invent a helper or omit a supplied reachable helper.
+- Put genuinely unprovable source bounds in unresolved.
+
+Functions supplied:
+[
+  "SecOcAesBlock_Task5ms",
+  "AesAddRoundKey",
+  "AesSubBytes",
+  "AesShiftRows",
+  "AesMixColumns",
+  "AesXtime"
+]
+
+Source constants/macros (authoritative for loop bounds):
+```c
+#define KF_SCALE 256
+#define CORDIC_STAGES 16U
+#define FFT_POINTS 16U
+```
+
+Source:
+```c
+#include "automotive_literature_hard_benchmarks.h"
+
+volatile uint32_t g_bench_sink32;
+volatile uint8_t  g_bench_sink8;
+
+/* ========================================================================= */
+/* 1. ADAS KALMAN FILTER (2D State: [Position, Velocity])                    */
+/* ========================================================================= */
+#define KF_SCALE 256
+
+static int32_t s_kf_x[2];        /* [pos, vel] */
+static int32_t s_kf_P[2][2];     /* Error covariance */
+static int32_t s_kf_A[2][2];     /* State transition */
+static int32_t s_kf_Q[2][2];     /* Process noise */
+static int32_t s_kf_meas_pos;    /* Input measurement */
+
+
+
+void SecOcAesBlock_Task5ms(void)
+{
+    uint32_t round;
+    AesAddRoundKey(s_aes_state, s_aes_round_key);
+
+    for (round = 1U; round < 10U; ++round)
+    {
+        AesSubBytes(s_aes_state);
+        AesShiftRows(s_aes_state);
+        AesMixColumns(s_aes_state);
+        AesAddRoundKey(s_aes_state, s_aes_round_key);
+    }
+
+    /* Final round (no MixColumns) */
+    AesSubBytes(s_aes_state);
+    AesShiftRows(s_aes_state);
+    AesAddRoundKey(s_aes_state, s_aes_round_key);
+
+    g_bench_sink8 = s_aes_state[0] ^ s_aes_state[15];
+}
+
+static void AesAddRoundKey(uint8_t state[16], const uint8_t rk[16])
+{
+    uint32_t i;
+    for (i = 0U; i < 16U; ++i)
+    {
+        state[i] ^= rk[i];
+    }
+}
+
+static void AesSubBytes(uint8_t state[16])
+{
+    uint32_t i;
+    for (i = 0U; i < 16U; ++i)
+    {
+        state[i] = s_aes_sbox[state[i]];
+    }
+}
+
+static void AesShiftRows(uint8_t state[16])
+{
+    uint8_t temp;
+    /* Row 1: shift left by 1 */
+    temp = state[1];
+    state[1] = state[5];
+    state[5] = state[9];
+    state[9] = state[13];
+    state[13] = temp;
+
+    /* Row 2: shift left by 2 */
+    temp = state[2];
+    state[2] = state[10];
+    state[10] = temp;
+    temp = state[6];
+    state[6] = state[14];
+    state[14] = temp;
+
+    /* Row 3: shift left by 3 */
+    temp = state[15];
+    state[15] = state[11];
+    state[11] = state[7];
+    state[7] = state[3];
+    state[3] = temp;
+}
+
+static void AesMixColumns(uint8_t state[16])
+{
+    uint32_t c;
+    for (c = 0U; c < 4U; ++c)
+    {
+        uint32_t idx = c * 4U;
+        uint8_t a0 = state[idx + 0U];
+        uint8_t a1 = state[idx + 1U];
+        uint8_t a2 = state[idx + 2U];
+        uint8_t a3 = state[idx + 3U];
+
+        uint8_t t = a0 ^ a1 ^ a2 ^ a3;
+        uint8_t u = a0;
+
+        state[idx + 0U] ^= t ^ AesXtime((uint8_t)(a0 ^ a1));
+        state[idx + 1U] ^= t ^ AesXtime((uint8_t)(a1 ^ a2));
+        state[idx + 2U] ^= t ^ AesXtime((uint8_t)(a2 ^ a3));
+        state[idx + 3U] ^= t ^ AesXtime((uint8_t)(a3 ^ u));
+    }
+}
+
+static uint8_t AesXtime(uint8_t b)
+{
+    return (uint8_t)((b << 1) ^ (((b >> 7) & 1U) ? 0x1BU : 0x00U));
+}
+```
+
+Additional source/initialization context (outside the timed interval):
+Initialization context (outside timed interval):
+void LiteratureHardBenchmarks_Initialize(uint32_t task_id)
+{
+    uint32_t i;
+    switch (task_id)
+    {
+        case 0U: /* AdasKalmanFilter_Task10ms */
+            s_kf_x[0] = 100 * KF_SCALE;
+            s_kf_x[1] = 15 * KF_SCALE;
+            s_kf_P[0][0] = 10 * KF_SCALE; s_kf_P[0][1] = 0;
+            s_kf_P[1][0] = 0;             s_kf_P[1][1] = 10 * KF_SCALE;
+            s_kf_A[0][0] = 1 * KF_SCALE;  s_kf_A[0][1] = (KF_SCALE * 1) / 100; /* dt = 10ms */
+            s_kf_A[1][0] = 0;             s_kf_A[1][1] = 1 * KF_SCALE;
+            s_kf_Q[0][0] = 2 * KF_SCALE;  s_kf_Q[0][1] = 0;
+            s_kf_Q[1][0] = 0;             s_kf_Q[1][1] = 2 * KF_SCALE;
+            s_kf_meas_pos = 102 * KF_SCALE;
+            break;
+
+        case 1U: /* CordicResolver_Task1ms */
+            s_cordic_target_angle = 12500; /* ~43.9 degrees in Q14 (16384 rad) */
+            break;
+
+        case 2U: /* SecOcAesBlock_Task5ms */
+            for (i = 0U; i < 16U; ++i)
+            {
+                s_aes_state[i] = (uint8_t)(0x30U + i * 7U);
+            }
+            break;
+
+        case 3U: /* PowertrainKnockFft_Task20ms */
+            for (i = 0U; i < FFT_POINTS; ++i)
+            {
+                s_fft_real[i] = (int16_t)(i * 210 - 1500);
+                s_fft_imag[i] = 0;
+            }
+            break;
+
+        case 4U: /* AccAdaptiveControl_Task20ms */
+            s_acc_state = ACC_DISTANCE_CONTROL;
+            s_acc_ego_speed = 25000;     /* 25 m/s (~90 km/h) */
+            s_acc_set_speed = 28000;     /* 28 m/s (~100 km/h) */
+            s_acc_target_dist = 35000;   /* 35m */
+            s_acc_target_relspd = -1000; /* closing in at 1 m/s */
+            s_acc_integral_err = 500;
+            s_acc_prev_err = 450;
+            s_acc_prev_cmd = 100;
+            break;
+
+        default:
+            break;
+    }
+}
