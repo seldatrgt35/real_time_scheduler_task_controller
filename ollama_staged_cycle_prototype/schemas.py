@@ -27,18 +27,6 @@ class PlannedFunction(BaseModel):
     function_name: str = Field(max_length=128)
     dynamic_calls: int = Field(ge=0)
     call_count_evidence: str = Field(max_length=500)
-    selected_path: list[str] = Field(min_length=1, max_length=32)
-    selected_statement_ids: list[int] = Field(max_length=64)
-
-    @model_validator(mode="after")
-    def ordered_unique_statement_ids(self) -> "PlannedFunction":
-        if any(statement_id < 1 for statement_id in self.selected_statement_ids):
-            raise ValueError("selected statement IDs must be positive")
-        if self.selected_statement_ids != sorted(set(self.selected_statement_ids)):
-            raise ValueError(
-                "selected statement IDs must be unique and in source order"
-            )
-        return self
 
 
 class StructurePlan(BaseModel):
@@ -124,33 +112,13 @@ class ConditionalBranchExecution(BaseModel):
     evidence: str = Field(max_length=300)
 
 
-class StatementAssemblyBlock(BaseModel):
-    """Assembly emitted for one source statement or compiler-control region."""
-
-    block_id: str = Field(max_length=96)
-    statement_id: int | None = Field(default=None, ge=1)
-    source_statement: str = Field(max_length=500)
-    instructions: list[str] = Field(min_length=1, max_length=64)
-
-
 class AssemblySection(BaseModel):
     section_name: str = Field(max_length=64)
     execution_count: int = Field(ge=0)
-    # `instructions` is retained for old saved fixtures. New model responses must
-    # use statement_blocks; predictor validation rejects mixed/new flat output.
-    instructions: list[str] = Field(default_factory=list, max_length=256)
-    statement_blocks: list[StatementAssemblyBlock] = Field(
-        default_factory=list, max_length=64
-    )
+    instructions: list[str] = Field(min_length=1, max_length=256)
     conditional_branches: list[ConditionalBranchExecution] = Field(
         default_factory=list, max_length=64
     )
-
-    @model_validator(mode="after")
-    def has_one_instruction_representation(self) -> "AssemblySection":
-        if not self.instructions and not self.statement_blocks:
-            raise ValueError("section requires instructions or statement_blocks")
-        return self
 
 
 class FunctionAssemblyPlan(BaseModel):
@@ -158,25 +126,6 @@ class FunctionAssemblyPlan(BaseModel):
     selected_source_path: list[str] = Field(min_length=1, max_length=32)
     sections: list[AssemblySection] = Field(min_length=1, max_length=16)
     unresolved: list[str] = Field(default_factory=list, max_length=16)
-
-    @model_validator(mode="after")
-    def unique_statement_blocks(self) -> "FunctionAssemblyPlan":
-        block_ids = [
-            block.block_id
-            for section in self.sections
-            for block in section.statement_blocks
-        ]
-        if len(block_ids) != len(set(block_ids)):
-            raise ValueError("statement assembly block IDs must be unique")
-        statement_ids = [
-            block.statement_id
-            for section in self.sections
-            for block in section.statement_blocks
-            if block.statement_id is not None
-        ]
-        if len(statement_ids) != len(set(statement_ids)):
-            raise ValueError("source statement IDs must be unique")
-        return self
 
 
 class FunctionBlockPlan(BaseModel):

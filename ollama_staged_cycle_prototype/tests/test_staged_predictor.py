@@ -38,13 +38,9 @@ class FakeClient:
                 "selected_path": ["loop executes three times", "return"],
                 "functions": [
                     {"function_name": "Task", "dynamic_calls": 1,
-                     "call_count_evidence": "entry",
-                     "selected_path": ["loop executes three times", "return"],
-                     "selected_statement_ids": [1]},
+                     "call_count_evidence": "entry"},
                     {"function_name": "Helper", "dynamic_calls": calls,
-                     "call_count_evidence": "three loop iterations",
-                     "selected_path": ["straight-line return"],
-                     "selected_statement_ids": [1]},
+                     "call_count_evidence": "three loop iterations"},
                 ],
                 "loop_bounds": ["i=0..2"],
             }
@@ -57,38 +53,23 @@ class FakeClient:
                         {
                             "section_name": "prologue_and_init",
                             "execution_count": 1,
-                            "statement_blocks": [{
-                                "block_id": "task_prologue",
-                                "statement_id": None,
-                                "source_statement": "compiler prologue and loop init",
-                                "instructions": [
-                                    "push {r7, lr}", "sub sp, #8", "add r7, sp, #0",
-                                    "movs r3, #0", "str r3, [r7, #4]",
-                                ],
-                            }],
+                            "instructions": [
+                                "push {r7, lr}", "sub sp, #8", "add r7, sp, #0",
+                                "movs r3, #0", "str r3, [r7, #4]",
+                            ],
                         },
                         {
                             "section_name": "loop_body",
                             "execution_count": 3,
-                            "statement_blocks": [{
-                                "block_id": "task_statement_1",
-                                "statement_id": 1,
-                                "source_statement": "Helper(i)",
-                                "instructions": [
-                                    "ldr r0, [r7, #4]", "bl Helper",
-                                    "ldr r3, [r7, #4]", "adds r3, #1", "str r3, [r7, #4]",
-                                ],
-                            }],
+                            "instructions": [
+                                "ldr r0, [r7, #4]", "bl Helper",
+                                "ldr r3, [r7, #4]", "adds r3, #1", "str r3, [r7, #4]",
+                            ],
                         },
                         {
                             "section_name": "epilogue_and_return",
                             "execution_count": 1,
-                            "statement_blocks": [{
-                                "block_id": "task_epilogue",
-                                "statement_id": None,
-                                "source_statement": "compiler epilogue",
-                                "instructions": ["adds r7, #8", "mov sp, r7", "pop {r7, pc}"],
-                            }],
+                            "instructions": ["adds r7, #8", "mov sp, r7", "pop {r7, pc}"],
                         },
                     ],
                 }
@@ -100,29 +81,12 @@ class FakeClient:
                         {
                             "section_name": "straight_line",
                             "execution_count": 1,
-                            "statement_blocks": [{
-                                "block_id": "helper_prologue",
-                                "statement_id": None,
-                                "source_statement": "compiler prologue",
-                                "instructions": [
-                                    "push {r7}", "sub sp, #12", "add r7, sp, #0",
-                                    "str r0, [r7, #4]",
-                                ],
-                            }, {
-                                "block_id": "helper_statement_1",
-                                "statement_id": 1,
-                                "source_statement": "return x + 1",
-                                "instructions": [
-                                    "ldr r3, [r7, #4]", "adds r3, #1", "mov r0, r3",
-                                ],
-                            }, {
-                                "block_id": "helper_epilogue",
-                                "statement_id": None,
-                                "source_statement": "compiler epilogue",
-                                "instructions": [
-                                    "adds r7, #12", "mov sp, r7", "pop {r7}", "bx lr",
-                                ],
-                            }],
+                            "instructions": [
+                                "push {r7}", "sub sp, #12", "add r7, sp, #0",
+                                "str r0, [r7, #4]", "ldr r3, [r7, #4]",
+                                "adds r3, #1", "mov r0, r3", "adds r7, #12",
+                                "mov sp, r7", "pop {r7}", "bx lr",
+                            ],
                         }
                     ],
                     "unresolved": (["unknown loop bound"]
@@ -686,38 +650,7 @@ class StagedPredictorTest(unittest.TestCase):
             [],
         )
 
-    def test_statement_blocks_require_complete_unique_source_coverage(self):
-        plan = FunctionAssemblyPlan.model_validate({
-            "function_name": "Kernel",
-            "selected_source_path": ["straight line"],
-            "sections": [{
-                "section_name": "straight_line",
-                "execution_count": 1,
-                "statement_blocks": [{
-                    "block_id": "source_1",
-                    "statement_id": 1,
-                    "source_statement": "x = a + b",
-                    "instructions": ["add r0, r1"],
-                }, {
-                    "block_id": "epilogue",
-                    "statement_id": None,
-                    "source_statement": "compiler epilogue",
-                    "instructions": ["bx lr"],
-                }],
-            }],
-        })
-        self.assertEqual(
-            StagedPredictor._validate_statement_block_coverage(
-                "Kernel", plan, ["x = a + b", "y = x * c"], [1]
-            ),
-            [],
-        )
-        errors = StagedPredictor._validate_statement_block_coverage(
-            "Kernel", plan, ["x = a + b", "y = x * c"], [1, 2]
-        )
-        self.assertTrue(any("missing source statement block IDs [2]" in e for e in errors))
-
-    def test_repeated_statement_instruction_sequence_is_rejected(self):
+    def test_repeated_instruction_sequence_is_rejected(self):
         repeated = [
             "ldr r3, [r7, #4]", "lsls r3, r3, #1", "ldr r2, [r7, #8]",
             "add r3, r2", "ldrh r3, [r3]", "uxth r3, r3", "mov r2, r3",
@@ -729,17 +662,7 @@ class StagedPredictorTest(unittest.TestCase):
             "sections": [{
                 "section_name": "straight_line",
                 "execution_count": 1,
-                "statement_blocks": [{
-                    "block_id": "collapsed_source",
-                    "statement_id": 1,
-                    "source_statement": "x = table[i]",
-                    "instructions": repeated,
-                }, {
-                    "block_id": "epilogue",
-                    "statement_id": None,
-                    "source_statement": "compiler epilogue",
-                    "instructions": ["bx lr"],
-                }],
+                "instructions": repeated + ["bx lr"],
             }],
         })
         errors = StagedPredictor._validate_assembly_plan(plan)
