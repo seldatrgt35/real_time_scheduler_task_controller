@@ -17,6 +17,7 @@ from ollama_staged_cycle_prototype.assembly_evidence import (
 from ollama_staged_cycle_prototype.predictor import StagedPredictor
 
 from .schemas import (
+    SemanticAssemblyReview,
     StaticAssemblyFunction,
     StaticAssemblyReport,
     StaticFunctionAnalysis,
@@ -110,12 +111,89 @@ class StaticAssemblyPredictor:
             chunks.append("\n".join(lines))
         return "\n\n".join(chunks) or "No matching example was selected."
 
+    @staticmethod
+    def _signature_contracts(functions: dict[str, str]) -> str:
+        """Render compact source-derived AAPCS entry contracts."""
+        rows: list[str] = []
+        for name, body in functions.items():
+            signature = " ".join(body.split("{", 1)[0].split())
+            match = re.search(rf"\b{re.escape(name)}\s*\((.*)\)\s*$", signature)
+            params = [] if not match else [
+                item.strip() for item in match.group(1).split(",")
+                if item.strip() and item.strip() != "void"
+            ]
+            incoming = ", ".join(
+                f"r{index} <- {param}" for index, param in enumerate(params[:4])
+            ) or "no incoming argument registers"
+            if len(params) > 4:
+                incoming += ", remaining arguments follow AAPCS stack rules"
+            return_type = signature.split(name, 1)[0].strip()
+            returned = "void" if re.search(r"\bvoid\s*$", return_type) else "r0"
+            rows.append(
+                f"{name}: `{signature}`; entry {incoming}; scalar/pointer return: {returned}"
+            )
+        return "\n".join(rows) or "(none)"
+
+    @staticmethod
+    def _split_call_arguments(arguments: str) -> list[str]:
+        parts: list[str] = []
+        start = 0
+        depth = 0
+        for index, char in enumerate(arguments):
+            if char in "([{" :
+                depth += 1
+            elif char in ")]}" :
+                depth = max(0, depth - 1)
+            elif char == "," and depth == 0:
+                parts.append(arguments[start:index].strip())
+                start = index + 1
+        tail = arguments[start:].strip()
+        if tail:
+            parts.append(tail)
+        return parts
+
+    @classmethod
+    def _call_site_contracts(
+        cls, function_name: str, body: str, functions: dict[str, str]
+    ) -> str:
+        """Render exact source call expressions and their AAPCS argument registers."""
+        sites: list[tuple[int, str]] = []
+        for callee in sorted(cls._direct_callees(function_name, body, functions)):
+            for match in re.finditer(rf"\b{re.escape(callee)}\s*\(", body):
+                open_index = body.find("(", match.start())
+                depth = 0
+                close_index = None
+                for index in range(open_index, len(body)):
+                    if body[index] == "(":
+                        depth += 1
+                    elif body[index] == ")":
+                        depth -= 1
+                        if depth == 0:
+                            close_index = index
+                            break
+                if close_index is None:
+                    continue
+                arguments = cls._split_call_arguments(body[open_index + 1:close_index])
+                bindings = ", ".join(
+                    f"r{index} <- `{argument}`"
+                    for index, argument in enumerate(arguments[:4])
+                ) or "no argument registers"
+                if len(arguments) > 4:
+                    bindings += ", remaining arguments follow AAPCS stack rules"
+                sites.append((match.start(), f"before `bl {callee}`: {bindings}"))
+        return "\n".join(row for _, row in sorted(sites)) or "(no direct helper calls)"
+
     def _prompt(
         self,
         function_name: str,
         function_source: str,
         declarations: str,
         source_facts: str,
+        callable_symbols: set[str],
+        data_symbols: set[str],
+        signature_contracts: str,
+        call_site_contracts: str,
+        data_type_contracts: str,
         evidence: str,
         audit_errors: list[str] | None = None,
         previous: StaticAssemblyFunction | None = None,
@@ -160,19 +238,59 @@ STRICT RULES
     that limit by expanding iterations, branch executions, lookup-table contents or source array data.
 11. Emit function-body instructions only. Refer to constants and global tables by symbol; do not emit their
     `.word`, `.byte`, initializer, literal-pool data or other translation-unit data in this response.
-12. All branch instructions (b, beq, bne, bls, etc.) MUST target declared symbolic labels (e.g. `b loop_start`),
+12. Respect symbol kinds exactly. Symbols listed as DATA are addressable objects and must never be direct
+    `bl`/`blx` targets. Only symbols listed as CALLABLE may be named direct-call targets.
+13. All branch instructions (b, beq, bne, bls, etc.) MUST target declared symbolic labels (e.g. `b loop_start`),
     NEVER numeric addresses or offset strings like `bls 10 <func+0x10>`.
-13. Global or static arrays/tables (e.g. lookup tables) are DATA, never functions. NEVER invoke data arrays with `bl`.
-    Form their address and load/store data.
+14. Global or static arrays/tables (e.g. lookup tables) are DATA, never functions. NEVER invoke data arrays with `bl`.
+    A subscripted DATA expression such as `table[index]` is a memory access, not a function call. Form the
+    table address, calculate the indexed element address, and load or store the element using its C width.
+    Never emit `bl` or `blx` to implement a DATA lookup.
+15. Follow the C function signature and the Arm procedure-call convention. Do not invent incoming argument
+    values for a no-argument function. A `void name(void)` function must obtain source globals/statics through
+    their DATA symbols. Before a real helper call, place its source arguments in `r0`-`r3` as required; consume
+    its scalar return value from `r0`.
+16. Preserve the declared C access width and signedness. Use byte loads/stores for 8-bit objects, halfword
+    loads/stores for 16-bit objects, and word loads/stores for 32-bit objects. Use signed loads or explicit
+    extension when the C object is signed. Pointer/address loads do not change the pointee's access width.
+17. Make the stack frame self-consistent. Every local stack access must lie within the byte count reserved by
+    the prologue, with enough aligned space for all locals and spills. Do not emit an `[r7, #offset]` local
+    access beyond the allocated frame, and restore exactly that frame in the epilogue.
+18. Preserve loop initialization, comparison operator, bound and update exactly. In particular, `< N` must
+    not become `<= N`, and `<= N` must not become `< N`. Emit the initial condition check when required by
+    the C loop form, one body, one update and the correct symbolic back-edge.
+19. Keep register and memory dataflow valid across the whole function. Every consumed value must come from
+    a preceding definition, load or legitimate incoming argument. Treat `r0`-`r3` and `r12` as call-clobbered;
+    save a live value before `bl` when the source still needs it afterward. Store results through the intended
+    destination address, never through a register that currently contains an ordinary scalar value.
+20. Preserve source DATA dependencies explicitly. Every global or static DATA symbol referenced by this C
+    function must still be named in the symbolic assembly. Never satisfy another rule by silently omitting a
+    DATA read or write; form or load the symbol's address and perform the source access.
 
 Before returning JSON, silently audit that all source constructs are represented, every loop has a
-symbolic back-edge, every direct call is a BL to a real function, and no data symbols are called with BL.
+symbolic back-edge, every direct call is a BL to a real function, no data symbols are called with BL,
+every source DATA symbol remains referenced, all memory widths match their C objects, and every stack
+offset is inside the allocated frame.
 
 TRANSLATION-UNIT DECLARATIONS AND GLOBAL CONTEXT
 {declarations}
 
 OBJECT-LIKE MACROS
 {source_facts}
+
+SYMBOL KIND CONTRACT
+CALLABLE: {", ".join(sorted(callable_symbols)) or "(none)"}
+DATA: {", ".join(sorted(data_symbols)) or "(none)"}
+
+FUNCTION SIGNATURE AND ABI CONTRACT
+These bindings come directly from the C signatures and call expressions; preserve them exactly.
+{signature_contracts}
+
+CALL-SITE ARGUMENT CONTRACT FOR {function_name}
+{call_site_contracts}
+
+DATA TYPE AND ACCESS-WIDTH CONTRACT
+{data_type_contracts}
 
 FUNCTION TO TRANSLATE
 {function_source}
@@ -181,8 +299,62 @@ REAL GCC 11.4 -O0 TRANSFORMATION EXAMPLES
 These are shape examples, not code to concatenate or copy wholesale:
 {evidence}
 {repair}
+        Return JSON only with exactly these fields:
+        {{"function_name":"{function_name}","assembly":["label:","opcode operands"],"unresolved":[]}}
+        """
+
+    def _review_prompt(
+        self,
+        function_name: str,
+        function_source: str,
+        assembly: list[str],
+        source_facts: str,
+        signature_contracts: str,
+        call_site_contracts: str,
+        data_type_contracts: str,
+    ) -> str:
+        return f"""Perform an independent SEMANTIC REVIEW of one proposed Thumb-2 function.
+
+Do not generate replacement assembly, do not calculate cycles, and do not demand an
+exact GCC instruction layout. Compare only the C semantics with the proposed assembly.
+
+Check concrete correctness defects only:
+- macro constants versus addressable globals, locals and parameters;
+- address values versus loaded scalar values and the destination of every source assignment;
+- AAPCS argument placement at every call, including fifth and later stack arguments;
+- live values across call-clobbered r0-r3/r12;
+- load/store width and signedness;
+- local stack lifetime, extent and non-overlapping object layout;
+- pointer/scalar register dataflow;
+- exact loop initialization, bounds, updates and absence of unrolling;
+- preservation of each source read, write, call and return value.
+
+Do not report stylistic differences, register-allocation choices, harmless redundant
+instructions, or uncertain compiler preferences. A FAIL error must name a specific C
+operation and the conflicting assembly behavior. Report at most 12 errors.
+
+OBJECT-LIKE MACROS
+{source_facts}
+
+FUNCTION SIGNATURE AND ABI CONTRACT
+{signature_contracts}
+
+CALL-SITE ARGUMENT CONTRACT FOR {function_name}
+{call_site_contracts}
+
+DATA TYPE AND ACCESS-WIDTH CONTRACT
+{data_type_contracts}
+
+C FUNCTION
+{function_source}
+
+PROPOSED ASSEMBLY
+{chr(10).join(assembly)}
+
 Return JSON only with exactly these fields:
-{{"function_name":"{function_name}","assembly":["label:","opcode operands"],"unresolved":[]}}
+{{"function_name":"{function_name}","verdict":"PASS","errors":[]}}
+or
+{{"function_name":"{function_name}","verdict":"FAIL","errors":["concrete semantic defect"]}}
 """
 
     @staticmethod
@@ -237,24 +409,75 @@ Return JSON only with exactly these fields:
         return bool(re.search(pattern, stripped))
 
     @staticmethod
-    def _data_symbols(declarations: str) -> set[str]:
-        """Extract global/static array and variable symbol names from declarations context."""
-        symbols: set[str] = set()
-        for line in declarations.splitlines():
-            clean = re.sub(r"/\*.*?\*/|//.*$", "", line).strip()
-            if not clean or clean.startswith("#"):
+    def _has_variable_multiplication(body: str) -> bool:
+        """Detect value multiplication without confusing pointer declarators/dereferences."""
+        stripped = re.sub(r"/\*.*?\*/|//[^\n]*", " ", body, flags=re.S)
+        if "{" in stripped:
+            stripped = stripped.split("{", 1)[1]
+        operand = r"[A-Za-z_]\w*(?:\s*\[[^\]]+\])*"
+        type_words = {
+            "char", "short", "int", "long", "float", "double", "signed",
+            "unsigned", "const", "volatile", "void", "struct", "union", "enum",
+        }
+        for match in re.finditer(rf"(?P<left>{operand})\s*\*\s*(?P<right>{operand}|\d+[uUlL]*)", stripped):
+            left = re.match(r"[A-Za-z_]\w*", match.group("left"))
+            if left is None:
                 continue
-            # Match declarations like: static const uint8_t s_aes_sbox[256]; or uint8_t g_bench_sink8;
-            matches = re.finditer(
-                r"\b(?:const\s+|static\s+|volatile\s+|extern\s+|unsigned\s+|signed\s+|"
-                r"[A-Za-z_]\w*_t|[A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*;",
-                clean,
+            token = left.group(0)
+            if token in type_words or token.endswith("_t"):
+                continue
+            return True
+        return False
+
+    @staticmethod
+    def _clean_data_declarations(declarations: str) -> str:
+        clean = re.sub(r"/\*.*?\*/|//[^\n]*", " ", declarations, flags=re.S)
+        # Declaration context also contains function prototypes. Remove them before
+        # scanning objects so parameter names are never classified as DATA.
+        clean = re.sub(
+            r"\b(?:(?:static|extern|inline|const|volatile|signed|unsigned|long|short)\s+)*"
+            r"(?:u?int(?:8|16|32|64)_t|void|char|short|int|long|float|double|"
+            r"[A-Za-z_]\w*)\s+\**\s*[A-Za-z_]\w*\s*\([^;{}]*\)\s*;",
+            " ", clean,
+        )
+        # If malformed/overlapping prototype extraction left a bare parameter
+        # list behind, remove its contents so parameter declarations cannot be
+        # mistaken for translation-unit objects.
+        clean = re.sub(r"\([^(){};]*\)", " ", clean)
+        return clean
+
+    @classmethod
+    def _data_symbols(cls, declarations: str) -> set[str]:
+        """Extract translation-unit data objects, including initialized arrays."""
+        clean = cls._clean_data_declarations(declarations)
+        pattern = re.compile(
+            r"\b(?:(?:static|const|volatile|extern|register)\s+)*"
+            r"(?:u?int(?:8|16|32|64)_t|char|short|int|long|float|double|"
+            r"[A-Za-z_]\w*_t)\s+"
+            r"([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)*"
+            r"(?=\s*(?:=|;|,))"
+        )
+        return {match.group(1).lower() for match in pattern.finditer(clean)}
+
+    @classmethod
+    def _data_type_contracts(cls, declarations: str) -> str:
+        """Render source-derived types and array shapes for global/static objects."""
+        clean = cls._clean_data_declarations(declarations)
+        pattern = re.compile(
+            r"\b((?:(?:static|const|volatile|extern|register)\s+)*"
+            r"(?:u?int(?:8|16|32|64)_t|char|short|int|long|float|double|"
+            r"[A-Za-z_]\w*_t))\s+"
+            r"([A-Za-z_]\w*)\s*((?:\[[^\]]*\]\s*)*)"
+            r"(?=\s*(?:=|;|,))"
+        )
+        contracts = {
+            match.group(2).lower(): (
+                f"{match.group(2)}: {' '.join(match.group(1).split())}"
+                f"{''.join(match.group(3).split())}"
             )
-            for m in matches:
-                sym = m.group(1).strip()
-                if sym and not sym.startswith(("int", "uint", "void", "char")):
-                    symbols.add(sym.lower())
-        return symbols
+            for match in pattern.finditer(clean)
+        }
+        return "\n".join(contracts[name] for name in sorted(contracts)) or "(none)"
 
     @staticmethod
     def _allocated_stack_frame_size(instructions: list[str]) -> int | None:
@@ -266,15 +489,21 @@ Return JSON only with exactly these fields:
         return None
 
     @staticmethod
-    def _max_stack_offset(instructions: list[str]) -> int | None:
-        """Find the maximum immediate offset used in stack accesses ([r7, #N] or [sp, #N])."""
-        max_val = None
+    def _max_stack_extent(instructions: list[str]) -> tuple[int, int, str] | None:
+        """Return the stack access requiring the largest allocated byte extent."""
+        widest: tuple[int, int, str] | None = None
         for inst in instructions:
+            opcode_match = re.match(r"^\s*(ldrb|strb|ldrh|strh|ldrd|strd|ldr|str)(?:\.[nw])?\b", inst, flags=re.I)
+            if not opcode_match:
+                continue
+            opcode = opcode_match.group(1).lower()
+            width = 1 if opcode.endswith("b") else 2 if opcode.endswith("h") else 8 if opcode.endswith("d") else 4
             for m in re.finditer(r"\[(?:r7|sp),\s*#?(\d+)\]", inst, flags=re.I):
-                val = int(m.group(1))
-                if max_val is None or val > max_val:
-                    max_val = val
-        return max_val
+                offset = int(m.group(1))
+                extent = offset + width
+                if widest is None or extent > widest[0] + widest[1]:
+                    widest = (offset, width, inst)
+        return widest
 
     def _audit(
         self,
@@ -347,7 +576,25 @@ Return JSON only with exactly these fields:
                         "load its address instead of invoking it as a function"
                     )
 
-        # 4. Callee call sites audit
+        # 4. A source-level global/static data dependency must not disappear.
+        source_identifiers = {
+            match.group(0).lower()
+            for match in re.finditer(r"\b[A-Za-z_]\w*\b", body)
+        }
+        required_data_symbols = source_identifiers & data_symbols
+        assembly_identifiers = {
+            match.group(0).lower()
+            for line in instructions
+            for match in re.finditer(r"\b[A-Za-z_]\w*\b", line)
+        }
+        for symbol in sorted(required_data_symbols - assembly_identifiers):
+            errors.append(
+                f"source references DATA symbol {symbol!r}, but assembly never names it; "
+                "do not omit the access: form or load that symbol's address and preserve "
+                "the source read/write"
+            )
+
+        # 5. Callee call sites audit
         for callee in sorted(self._direct_callees(expected_name, body, functions)):
             expected_sites = len(re.findall(
                 rf"\b{re.escape(callee)}\s*\(", body
@@ -362,12 +609,12 @@ Return JSON only with exactly these fields:
                     f"assembly has {actual_sites} BL instruction(s)"
                 )
 
-        # 5. Loops must have a backward branch
+        # 6. Loops must have a backward branch
         if re.search(r"\b(?:for|while)\s*\(|\bdo\b", body):
             if not self._has_backward_branch(draft.assembly):
                 errors.append("source contains a loop but assembly has no backward branch")
 
-        # 6. Loop relational operator consistency (< vs <=)
+        # 7. Loop relational operator consistency (< vs <=)
         # In GCC -O0, for loops like for(i=0; i < N; ++i) compare i with N and use blt/blo or bne,
         # never bls/ble against N (which would execute N+1 iterations).
         strict_loop_matches = re.findall(
@@ -389,16 +636,23 @@ Return JSON only with exactly these fields:
                             )
                             break
 
-        # 7. Stack frame allocation bounds check
+        # 8. Stack frame allocation bounds check
         frame_size = self._allocated_stack_frame_size(instructions)
         if frame_size is not None:
-            max_offset = self._max_stack_offset(instructions)
-            if max_offset is not None and max_offset >= frame_size:
+            stack_extent = self._max_stack_extent(instructions)
+            if stack_extent is not None:
+                offset, width, instruction = stack_extent
+                required_size = offset + width
+            else:
+                required_size = 0
+            if stack_extent is not None and required_size > frame_size:
                 errors.append(
-                    f"stack access offset #{max_offset} exceeds allocated frame size #{frame_size}"
+                    f"stack access {instruction!r} at offset #{offset} with width {width} "
+                    f"requires {required_size} bytes and exceeds allocated frame size #{frame_size}; "
+                    "increase the aligned frame or correct the local layout"
                 )
 
-        # 8. Control flow & operator audits
+        # 9. Control flow & operator audits
         if re.search(r"\b(?:if|switch)\s*\(|\?", body):
             if not self._has_conditional_branch(instructions):
                 errors.append("source contains conditional control flow but assembly has no conditional branch")
@@ -406,8 +660,8 @@ Return JSON only with exactly these fields:
             re.match(r"^(?:sdiv|udiv)\b", line) for line in lowered
         ):
             errors.append("source contains variable division but assembly has no SDIV/UDIV")
-        if self._variable_operator_present(body, "*") and not any(
-            re.match(r"^(?:mul|mla|mls|smull|umull|smlal|umlal)\b", line)
+        if self._has_variable_multiplication(body) and not any(
+            re.match(r"^(?:muls?|mla|mls|smull|umull|smlal|umlal)(?:\.[nw])?\b", line)
             for line in lowered
         ):
             errors.append("source contains variable multiplication but assembly has no multiply instruction")
@@ -415,7 +669,7 @@ Return JSON only with exactly these fields:
             re.match(r"^(?:bx\s+lr|pop\s+.*\bpc\b)", line) for line in lowered
         ):
             errors.append("assembly has no recognizable function return")
-        return errors
+        return list(dict.fromkeys(errors))
 
     def _analyze(
         self, draft: StaticAssemblyFunction, errors: list[str]
@@ -449,11 +703,16 @@ Return JSON only with exactly these fields:
         functions = self._relevant_functions(source, target)
         declarations = self._declaration_context(source)
         source_facts = self._source_facts(source)
+        callable_symbols = set(function_names(source))
+        data_symbols = self._data_symbols(declarations)
+        signature_contracts = self._signature_contracts(functions)
+        data_type_contracts = self._data_type_contracts(declarations)
         semantic_attempts = max(1, int(os.getenv("OLLAMA_V2_SEMANTIC_ATTEMPTS", "2")))
         analyses: list[StaticFunctionAnalysis] = []
         raw_outputs: list[tuple[str, str]] = []
 
         for name, body in functions.items():
+            call_site_contracts = self._call_site_contracts(name, body, functions)
             evidence = self._format_evidence(retrieve_assembly_evidence(
                 source, self.pattern_path, function_name=name, limit=5,
             ))
@@ -462,7 +721,10 @@ Return JSON only with exactly these fields:
             draft: StaticAssemblyFunction | None = None
             for attempt in range(semantic_attempts):
                 prompt = self._prompt(
-                    name, body, declarations, source_facts, evidence,
+                    name, body, declarations, source_facts,
+                    callable_symbols, data_symbols,
+                    signature_contracts, call_site_contracts, data_type_contracts,
+                    evidence,
                     audit_errors=errors or None,
                     previous=previous,
                 )
@@ -472,6 +734,23 @@ Return JSON only with exactly these fields:
                 draft = result
                 raw_outputs.append((f"{name}.attempt-{attempt + 1}", raw))
                 errors = self._audit(draft, name, body, functions, declarations=declarations)
+                if not errors:
+                    review, review_raw = self.client.predict(
+                        self._review_prompt(
+                            name, body, draft.assembly, source_facts,
+                            signature_contracts, call_site_contracts,
+                            data_type_contracts,
+                        ),
+                        response_schema=SemanticAssemblyReview,
+                    )
+                    raw_outputs.append((f"{name}.review-{attempt + 1}", review_raw))
+                    if review.function_name != name:
+                        errors = [
+                            f"semantic reviewer returned function_name {review.function_name!r}, "
+                            f"expected {name!r}"
+                        ]
+                    elif review.verdict == "FAIL":
+                        errors = [f"semantic reviewer: {error}" for error in review.errors]
                 if not errors:
                     break
                 previous = draft

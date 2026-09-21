@@ -23,6 +23,23 @@ class StaticAssemblyFunction(BaseModel):
         return self
 
 
+class SemanticAssemblyReview(BaseModel):
+    """Compact second-pass verdict comparing one C function with its assembly."""
+
+    function_name: str = Field(min_length=1, max_length=128)
+    verdict: Literal["PASS", "FAIL"]
+    errors: list[str] = Field(default_factory=list, max_length=12)
+
+    @model_validator(mode="after")
+    def verdict_matches_errors(self) -> "SemanticAssemblyReview":
+        self.errors = [error.strip() for error in self.errors if error.strip()]
+        if self.verdict == "PASS" and self.errors:
+            raise ValueError("PASS review must not contain errors")
+        if self.verdict == "FAIL" and not self.errors:
+            raise ValueError("FAIL review requires at least one concrete error")
+        return self
+
+
 class StaticInstructionClassCount(BaseModel):
     instruction_class: str
     static_count: int = Field(ge=0)
