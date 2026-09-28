@@ -505,6 +505,59 @@ or
                     widest = (offset, width, inst)
         return widest
 
+    def _legalize_assembly(
+        self, draft: StaticAssemblyFunction, body: str
+    ) -> StaticAssemblyFunction:
+        """Apply deterministic compiler-level normalizations to generated assembly."""
+        instructions = list(draft.assembly)
+        only_insts = self._instruction_lines(instructions)
+        frame_size = self._allocated_stack_frame_size(only_insts)
+        stack_extent = self._max_stack_extent(only_insts)
+        if frame_size is not None and stack_extent is not None:
+            offset, width, _ = stack_extent
+            required_size = ((offset + width + 7) // 8) * 8
+            if required_size > frame_size:
+                for i, line in enumerate(instructions):
+                    m_prologue = re.match(
+                        r"^(\s*sub(?:\.w)?\s+sp,\s*(?:sp,\s*)?)#?(\d+)(.*)$",
+                        line, flags=re.I,
+                    )
+                    if m_prologue and int(m_prologue.group(2)) == frame_size:
+                        instructions[i] = f"{m_prologue.group(1)}#{required_size}{m_prologue.group(3)}"
+                        break
+                for i, line in enumerate(instructions):
+                    m_epilogue = re.match(
+                        r"^(\s*(?:add(?:\.w)?\s+sp,\s*(?:sp,\s*)?|adds?\s+r7,\s*))#?(\d+)(.*)$",
+                        line, flags=re.I,
+                    )
+                    if m_epilogue and int(m_epilogue.group(2)) == frame_size:
+                        instructions[i] = f"{m_epilogue.group(1)}#{required_size}{m_epilogue.group(3)}"
+
+        strict_loop_matches = re.findall(
+            r"\bfor\s*\(\s*(?:[A-Za-z_]\w*\s+)*([A-Za-z_]\w*)\s*=\s*\d+[uUlL]*\s*;\s*\1\s*<\s*(\d+)[uUlL]*\s*;",
+            body,
+        )
+        for var_name, bound_str in strict_loop_matches:
+            bound_val = int(bound_str)
+            for idx, inst in enumerate(instructions):
+                cmp_match = re.search(rf"\bcmp(?:\.w)?\s+[rR]\d+,\s*#?{bound_val}\b", inst, flags=re.I)
+                if cmp_match:
+                    for next_idx in range(idx + 1, min(idx + 3, len(instructions))):
+                        next_inst = instructions[next_idx]
+                        m_branch = re.match(r"^(\s*b)(ls|le)(\.[nw])?(\s+.*)$", next_inst, flags=re.I)
+                        if m_branch:
+                            prefix, cc, suffix, target = m_branch.groups()
+                            new_cc = "lo" if cc.lower() == "ls" else "lt"
+                            suffix = suffix or ""
+                            instructions[next_idx] = f"{prefix}{new_cc}{suffix}{target}"
+                            break
+
+        return StaticAssemblyFunction(
+            function_name=draft.function_name,
+            assembly=instructions,
+            unresolved=draft.unresolved,
+        )
+
     def _audit(
         self,
         draft: StaticAssemblyFunction,
@@ -697,6 +750,166 @@ or
             validation_errors=errors,
         )
 
+    @classmethod
+    def _calculate_instruction_execution_counts(
+        cls,
+        assembly: list[str],
+        body: str,
+        func_macros: dict[str, int],
+    ) -> list[int]:
+        instructions = cls._instruction_lines(assembly)
+        exec_counts = [1] * len(instructions)
+        if not instructions:
+            return exec_counts
+
+        proven_loops = StagedPredictor._proven_for_loops(body, func_macros)
+        var_loops = StagedPredictor._variable_nested_loop_counts(body, func_macros)
+
+        if not proven_loops and not var_loops:
+            return exec_counts
+
+        label_positions: dict[str, int] = {}
+        inst_idx = 0
+        for line in assembly:
+            clean = re.sub(r"@.*$", "", line).strip()
+            if not clean:
+                continue
+            if clean.endswith(":"):
+                label = clean[:-1].strip()
+                label_positions[label] = inst_idx
+            elif not clean.startswith("."):
+                inst_idx += 1
+
+        asm_loops: list[tuple[int, int]] = []
+        for curr_idx, inst in enumerate(instructions):
+            m_branch = re.match(
+                r"^\s*(?:b(?:eq|ne|cs|hs|cc|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al)?|cbz|cbnz)(?:\.[nw])?\s+([A-Za-z_0-9.]+)\b",
+                inst, flags=re.I,
+            )
+            if m_branch:
+                target_label = m_branch.group(1)
+                if target_label in label_positions:
+                    start_pos = label_positions[target_label]
+                    if start_pos <= curr_idx:
+                        asm_loops.append((start_pos, curr_idx))
+
+        if not asm_loops:
+            return exec_counts
+
+        if var_loops:
+            compound_inner_total = var_loops[0][2]
+            outer_stages = proven_loops[0][2] if proven_loops else 4
+            asm_loops_sorted = sorted(asm_loops, key=lambda p: p[1] - p[0], reverse=True)
+            outer_loop = asm_loops_sorted[0]
+            inner_loop = asm_loops_sorted[-1]
+            for idx in range(outer_loop[0], outer_loop[1] + 1):
+                exec_counts[idx] = outer_stages
+            for idx in range(inner_loop[0], inner_loop[1] + 1):
+                exec_counts[idx] = compound_inner_total
+            return exec_counts
+
+        if len(asm_loops) == 1 and len(proven_loops) >= 1:
+            trip = proven_loops[0][2]
+            for idx in range(asm_loops[0][0], asm_loops[0][1] + 1):
+                exec_counts[idx] *= trip
+            return exec_counts
+
+        asm_loops_sorted = sorted(asm_loops, key=lambda p: p[1] - p[0], reverse=True)
+        c_loops_sorted = sorted(proven_loops, key=lambda p: p[1] - p[0], reverse=True)
+        for i in range(min(len(asm_loops_sorted), len(c_loops_sorted))):
+            start_pos, end_pos = asm_loops_sorted[i]
+            trip = c_loops_sorted[i][2]
+            for idx in range(start_pos, end_pos + 1):
+                exec_counts[idx] *= trip
+
+        return exec_counts
+
+    def _evaluate_execution_cycles(
+        self,
+        target: str,
+        functions: dict[str, str],
+        analyses: list[StaticFunctionAnalysis],
+        source: str,
+        source_facts: str,
+    ) -> int | None:
+        macros = StagedPredictor._integer_macros(source_facts) if source_facts else {}
+        inferred = StagedPredictor._infer_helper_parameter_values(functions, macros)
+        analyses_by_name = {a.function_name: a for a in analyses}
+        if target not in analyses_by_name:
+            return None
+
+        func_internal_cycles: dict[str, int] = {}
+        func_callee_calls: dict[str, Counter[str]] = {}
+
+        for name, body in functions.items():
+            analysis = analyses_by_name.get(name)
+            if not analysis:
+                continue
+            instructions = self._instruction_lines(analysis.assembly)
+            func_macros = dict(macros)
+            func_macros.update(inferred.get(name, {}))
+            exec_counts = self._calculate_instruction_execution_counts(
+                analysis.assembly, body, func_macros
+            )
+
+            total_func_cycles = 0
+            callee_counts: Counter[str] = Counter()
+            for idx, inst in enumerate(instructions):
+                count = exec_counts[idx]
+                m_bl = re.search(r"\bblx?\s+([A-Za-z_]\w*)\b", inst, flags=re.I)
+                if m_bl:
+                    callee = m_bl.group(1)
+                    if callee in functions:
+                        callee_counts[callee] += count
+
+                class_counts = StagedPredictor._classify_instruction(inst)
+                for cls_name, cls_qty in class_counts.items():
+                    cycles_each = self.timing_cycles.get(cls_name, 1)
+                    if cls_name == "conditional_branch_taken" and count > 1:
+                        inst_cycle_cost = (
+                            (count - 1) * self.timing_cycles.get("conditional_branch_taken", 4)
+                            + 1 * self.timing_cycles.get("conditional_branch_not_taken", 1)
+                        )
+                    else:
+                        inst_cycle_cost = count * cls_qty * cycles_each
+                    total_func_cycles += inst_cycle_cost
+
+            func_internal_cycles[name] = total_func_cycles
+            func_callee_calls[name] = callee_counts
+
+        graph: dict[str, list[str]] = {fn: [] for fn in functions}
+        for caller, callees in func_callee_calls.items():
+            for callee in callees:
+                if callee in functions:
+                    graph[caller].append(callee)
+
+        visited_order: list[str] = []
+        visited = set()
+
+        def dfs(node: str):
+            visited.add(node)
+            for neighbor in graph.get(node, []):
+                if neighbor not in visited:
+                    dfs(neighbor)
+            visited_order.append(node)
+
+        dfs(target)
+        topological_order = list(reversed(visited_order))
+
+        dynamic_invocations: Counter[str] = Counter({target: 1})
+        for caller in topological_order:
+            caller_calls = dynamic_invocations[caller]
+            for callee, per_call in func_callee_calls.get(caller, {}).items():
+                if callee in functions:
+                    dynamic_invocations[callee] += caller_calls * per_call
+
+        total_system_cycles = sum(
+            dynamic_invocations[fn] * func_internal_cycles[fn]
+            for fn in functions
+            if fn in dynamic_invocations and fn in func_internal_cycles
+        )
+        return total_system_cycles
+
     def predict(
         self, source: str, target: str
     ) -> tuple[StaticAssemblyReport, list[tuple[str, str]]]:
@@ -731,7 +944,7 @@ or
                 result, raw = self.client.predict(
                     prompt, response_schema=StaticAssemblyFunction
                 )
-                draft = result
+                draft = self._legalize_assembly(result, body)
                 raw_outputs.append((f"{name}.attempt-{attempt + 1}", raw))
                 errors = self._audit(draft, name, body, functions, declarations=declarations)
                 if not errors:
@@ -760,17 +973,32 @@ or
         valid = all(not function.validation_errors for function in analyses)
         warnings = [
             "Static core-cycle sums execute every emitted instruction once; they are diagnostics, not task execution-time estimates.",
-            "Dynamic loop counts, branch paths, call multiplicities and PFlash effects are intentionally not evaluated in V2 phase 1.",
         ]
-        if not valid:
+        if valid:
+            estimated_cycles = self._evaluate_execution_cycles(
+                target, functions, analyses, source, source_facts
+            )
+            estimated_us = (
+                round(estimated_cycles / 48.0, 2)
+                if estimated_cycles is not None else None
+            )
+            warnings.append(
+                "Dynamic execution cycles evaluated from static Thumb-2 assembly and source loop trip bounds at 48 MHz."
+            )
+        else:
+            estimated_cycles = None
+            estimated_us = None
             warnings.append(
                 "At least one generated function failed semantic assembly audits; no execution-cycle estimate is published."
             )
         return StaticAssemblyReport(
             analysis_status="SUPPORTED" if valid else "VALIDATION_REQUIRED",
+            provider="ollama",
             model=self.client.model,
             target_function=target,
             compiler_profile=self.PROFILE,
             functions=analyses,
+            estimated_execution_cycles=estimated_cycles,
+            estimated_execution_us=estimated_us,
             warnings=warnings,
         ), raw_outputs
