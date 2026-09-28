@@ -39,14 +39,26 @@ def main(argv: list[str] | None = None) -> int:
         args.repository_root, client
     ).predict(args.source.read_text(encoding="utf-8"), args.function)
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    try:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        out_file = args.output
+        out_file.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    except OSError:
+        fallback_dir = (
+            Path("/kaggle/working/results")
+            if Path("/kaggle/working").exists()
+            else Path("/tmp/results")
+        )
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+        out_file = fallback_dir / args.output.name
+        out_file.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+
     for label, raw in raw_outputs:
         safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", label)
-        args.output.with_name(
-            f"{args.output.stem}.{safe}.raw.json"
+        out_file.with_name(
+            f"{out_file.stem}.{safe}.raw.json"
         ).write_text(raw, encoding="utf-8")
-    print(args.output)
+    print(out_file)
     if report.analysis_status != "SUPPORTED":
         print(
             "Assembly report was saved with analysis_status=VALIDATION_REQUIRED; "
