@@ -266,6 +266,10 @@ STRICT RULES
 20. Preserve source DATA dependencies explicitly. Every global or static DATA symbol referenced by this C
     function must still be named in the symbolic assembly. Never satisfy another rule by silently omitting a
     DATA read or write; form or load the symbol's address and perform the source access.
+21. GCC -O0 Stack Spill Rule: In GCC 11.4 -O0, registers `r0`-`r3` are strictly short-lived scratch registers for
+    1-2 operations. NEVER swap or shuffle registers (e.g. `mov r0, r1`, `mov r1, r2`) to keep multiple variables live.
+    Immediately store intermediate expression results to the stack frame (`str reg, [r7, #offset]`) and reload them
+    as needed. Never emit sequences of consecutive `mov` instructions between `r0`-`r3`.
 
 Before returning JSON, silently audit that all source constructs are represented, every loop has a
 symbolic back-edge, every direct call is a BL to a real function, no data symbols are called with BL,
@@ -558,6 +562,46 @@ or
                             suffix = suffix or ""
                             instructions[next_idx] = f"{prefix}{new_cc}{suffix}{target}"
                             break
+
+        # 3. Disassembly / numeric offset branch target legalization:
+        # Pattern 1: target has symbolic label inside brackets: e.g. "44 <my_label>" -> "my_label"
+        for i, line in enumerate(instructions):
+            m_sym = re.match(
+                r"^(\s*b[a-z0-9_.]*\s+)(?:[0-9a-fA-F]+\s+)?<([A-Za-z_]\w*)>$",
+                line, flags=re.I
+            )
+            if m_sym:
+                instructions[i] = f"{m_sym.group(1)}{m_sym.group(2)}"
+
+        # Pattern 2: target has function offset like "58 <func+0x58>" or "20 <func+0x20>"
+        fwd_idx = None
+        for i, line in enumerate(instructions):
+            if re.search(r"^\s*b(?:\.n|\.w)?\s+(?:[0-9a-fA-F]+\s+)?<[A-Za-z0-9_+]+\+0x[0-9a-fA-F]+>", line, flags=re.I):
+                fwd_idx = i
+                break
+
+        if fwd_idx is not None:
+            for i in range(fwd_idx + 1, len(instructions)):
+                m_back = re.match(
+                    r"^(\s*b[a-z]{1,4}(?:\.[nw])?\s+)(?:[0-9a-fA-F]+\s+)?<[A-Za-z0-9_+]+\+0x[0-9a-fA-F]+>",
+                    instructions[i], flags=re.I
+                )
+                if m_back:
+                    body_lbl = f".Lloop_body_{fwd_idx}"
+                    cond_lbl = f".Lloop_cond_{fwd_idx}"
+                    m_fwd = re.match(r"^(\s*b(?:\.n|\.w)?\s+)", instructions[fwd_idx], flags=re.I)
+                    instructions[fwd_idx] = f"{m_fwd.group(1)}{cond_lbl}"
+                    instructions.insert(fwd_idx + 1, f"{body_lbl}:")
+                    back_idx = i + 1
+                    cond_idx = back_idx - 1
+                    while cond_idx > fwd_idx + 1 and not instructions[cond_idx].strip().startswith("cmp"):
+                        cond_idx -= 1
+                    if cond_idx > fwd_idx + 1 and "ldr" in instructions[cond_idx - 1]:
+                        cond_idx -= 1
+                    instructions.insert(cond_idx, f"{cond_lbl}:")
+                    back_idx += 1
+                    instructions[back_idx] = f"{m_back.group(1)}{body_lbl}"
+                    break
 
         return StaticAssemblyFunction(
             function_name=draft.function_name,
