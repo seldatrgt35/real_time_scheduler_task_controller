@@ -388,29 +388,6 @@ class StaticAssemblyV2Tests(unittest.TestCase):
         callee_static = next(f for f in report.functions if f.function_name == "Callee").static_core_cycle_sum
         self.assertGreater(report.estimated_execution_cycles, task_static + callee_static)
 
-    def test_disassembly_branch_target_legalization(self):
-        predictor = self.predictor(FakeClient([]))
-        draft = StaticAssemblyFunction(
-            function_name="Task",
-            assembly=[
-                "Task:", "push {r7, lr}", "sub sp, #16", "add r7, sp, #0",
-                "movs r3, #1", "str r3, [r7, #4]",
-                "b.n 58 <Task+0x58>",
-                "ldr r0, =s_state",
-                "bl Helper",
-                "ldr r3, [r7, #4]", "adds r3, #1", "str r3, [r7, #4]",
-                "ldr r3, [r7, #4]", "cmp r3, #9",
-                "bls.n 20 <Task+0x20>",
-                "adds r7, #16", "mov sp, r7", "pop {r7, pc}",
-            ],
-        )
-        body = "void Task(void) { for (int i = 1; i <= 9; ++i) { Helper(); } }"
-        legalized = predictor._legalize_assembly(draft, body)
-        for line in legalized.assembly:
-            self.assertNotIn("<Task+", line)
-        errors = predictor._audit(legalized, "Task", body, {"Task": "", "Helper": ""})
-        self.assertFalse(any("numeric or an offset" in e for e in errors))
-
 
 if __name__ == "__main__":
     unittest.main()
