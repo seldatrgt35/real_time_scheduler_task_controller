@@ -207,12 +207,22 @@ class StaticAssemblyPredictor:
                 + "\n- ".join(audit_errors)
                 + "\nRegenerate the complete function; do not patch individual lines.\n"
             )
-            if previous is not None:
+            has_repetition = any(
+                "repeated" in err or "ceiling" in err or "truncated" in err for err in audit_errors
+            )
+            if previous is not None and not has_repetition:
                 repair += (
                     "The previous output is shown only to identify the defect; do not "
                     "copy repeated or incomplete regions:\n"
-                    + "\n".join(previous.assembly[:220])
+                    + "\n".join(previous.assembly[:60])
                     + "\n"
+                )
+            elif has_repetition:
+                repair += (
+                    "IMPORTANT: Your previous attempt entered a repetitive loop or was truncated. "
+                    "Do NOT manufacture repeated shift, mov, or arithmetic instructions. Under GCC -O0, "
+                    "evaluate each source statement once, spill intermediate values immediately to [r7, #offset], "
+                    "and use native Arm Thumb-2 instructions (e.g. asrs/lsrs/lsls for variable shifts).\n"
                 )
         return f"""You are performing exactly one compiler-emulation task.
 
@@ -234,7 +244,9 @@ STRICT RULES
    `[r7, #offset]`. Scratch registers `r0`-`r3` are only used transiently to compute one operation and
    immediately store back to stack. Never generate chains of register-to-register `mov` instructions to
    hold variables across statements; always spill to and load from `[r7, #offset]`.
-5. Preserve the source operations. Do not omit calls, memory accesses, comparisons, MUL or DIV operations.
+5. Preserve the source operations. Do not omit calls, memory accesses, comparisons, MUL or DIV operations,
+   or array/pointer assignments. Every source assignment to an array parameter (e.g. `arr[idx] = ...`) or
+   pointer dereference MUST produce its corresponding memory store instruction (`strb`, `strh`, `str`).
 6. Produce assembly only for {function_name}. Do not repeat an instruction sequence to represent iterations.
 7. Do not calculate cycles, paths, execution counts, statement IDs, CFG objects or instruction ledgers.
 8. Use symbolic labels and symbols. Each assembly array item is exactly one label or instruction.
@@ -259,6 +271,9 @@ STRICT RULES
 16. Preserve the declared C access width and signedness. Use byte loads/stores for 8-bit objects, halfword
     loads/stores for 16-bit objects, and word loads/stores for 32-bit objects. Use signed loads or explicit
     extension when the C object is signed. Pointer/address loads do not change the pointee's access width.
+    In Arm Cortex-M4 Thumb-2, variable-shift operations `val >> var` and `val << var` are single native
+    instructions where the shift amount is in a register (e.g. `asrs rD, rN, rS`, `lsrs rD, rN, rS`, `lsls rD, rN, rS`).
+    NEVER synthesize software shift loops, repeated single-bit shifts, or bit-clearing loops.
 17. Make the stack frame self-consistent. Every local stack access must lie within the byte count reserved by
     the prologue, with enough aligned space for all locals and spills. Do not emit an `[r7, #offset]` local
     access beyond the allocated frame, and restore exactly that frame in the epilogue.
@@ -777,6 +792,26 @@ or
             for line in lowered
         ):
             errors.append("source contains variable multiplication but assembly has no multiply instruction")
+        # 10. Parameter array write completeness: functions with writes to array parameters
+        brace_idx = body.find("{")
+        inner_body = body[brace_idx + 1:] if brace_idx >= 0 else body
+        array_writes = re.findall(r"\b([A-Za-z_]\w*)\s*\[[^\]]+\]\s*=[^=]", inner_body)
+        local_array_decls = set(re.findall(
+            r"\b(?:int\d+_t|uint\d+_t|int|char|short|long|float|double)\s+([A-Za-z_]\w*)\s*\[",
+            inner_body,
+        ))
+        parameter_array_writes = [arr for arr in array_writes if arr not in local_array_decls]
+        if parameter_array_writes:
+            has_array_store = any(
+                re.search(r"^\s*str(?:b|h|d)?(?:\.[nw])?\s+[rR]\d+,\s*\[(?!r7\b|sp\b)[rR]\d+", line, flags=re.I)
+                for line in instructions
+            )
+            if not has_array_store:
+                errors.append(
+                    f"source assigns to parameter array(s) {', '.join(sorted(set(parameter_array_writes)))!r}, "
+                    "but assembly contains no store instructions (STR/STRH/STRB) through a pointer register to memory"
+                )
+
         if not any(
             re.match(r"^(?:bx\s+lr|pop\s+.*\bpc\b)", line) for line in lowered
         ):

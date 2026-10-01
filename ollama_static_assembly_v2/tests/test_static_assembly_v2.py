@@ -403,8 +403,47 @@ class StaticAssemblyV2Tests(unittest.TestCase):
         report, _ = self.predictor(client).predict(source, "Task")
         self.assertEqual("SUPPORTED", report.analysis_status)
         self.assertIsNotNone(report.estimated_execution_cycles)
+        self.assertIsNotNone(report.estimated_execution_cycles)
         self.assertGreater(report.estimated_execution_cycles, 0)
         self.assertIsNotNone(report.estimated_execution_us)
+
+    def test_audit_flags_missing_parameter_array_stores(self):
+        draft = StaticAssemblyFunction(
+            function_name="ArrayMutator",
+            assembly=[
+                "ArrayMutator:",
+                "push {r7}",
+                "sub sp, #16",
+                "add r7, sp, #0",
+                "movs r3, #42",
+                "str r3, [r7, #4]",  # stores only to local stack
+                "adds r7, #16",
+                "mov sp, r7",
+                "pop {r7}",
+                "bx lr",
+            ],
+            unresolved=[],
+        )
+        body = "void ArrayMutator(int16_t real[16]) { real[0] = 42; }"
+        errors = self.predictor(FakeClient([]))._audit(draft, "ArrayMutator", body, {"ArrayMutator": body})
+        self.assertTrue(any("source assigns to parameter array(s) 'real'" in e for e in errors))
+
+    def test_prompt_repair_handles_repetition_without_dumping_garbage(self):
+        draft = StaticAssemblyFunction(
+            function_name="Looper",
+            assembly=["mov r0, r1"] * 100,
+            unresolved=[],
+        )
+        predictor = self.predictor(FakeClient([]))
+        prompt = predictor._prompt(
+            "Looper", "void Looper(void) {}", "", "",
+            {"Looper"}, set(), "", "", "", "",
+            audit_errors=["assembly reached the output ceiling and is probably truncated"],
+            previous=draft,
+        )
+        self.assertIn("entered a repetitive loop or was truncated", prompt)
+        # Should not dump 60+ repeated mov r0, r1 instructions
+        self.assertNotIn("mov r0, r1\n" * 50, prompt)
 
 
 if __name__ == "__main__":
