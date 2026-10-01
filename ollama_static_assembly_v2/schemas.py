@@ -64,5 +64,6 @@ class StaticAssemblyReport(BaseModel):
     target_function: str
     compiler_profile: str
     functions: list[StaticFunctionAnalysis]
-    estimated_execution_cycles: None = None
+    estimated_execution_cycles: int | None = None
+    estimated_execution_us: float | None = None
     warnings: list[str] = Field(default_factory=list)

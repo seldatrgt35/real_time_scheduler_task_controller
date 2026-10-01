@@ -318,6 +318,94 @@ class StaticAssemblyV2Tests(unittest.TestCase):
         self.assertIn("semantic reviewer:", client.prompts[2])
         self.assertIn("stores zero", client.prompts[2])
 
+    def test_legalize_assembly_fixes_stack_frame_and_loop_branch(self):
+        draft = StaticAssemblyFunction(
+            function_name="Worker",
+            assembly=[
+                "Worker:",
+                "push {r7}",
+                "sub sp, #16",
+                "add r7, sp, #0",
+                "movs r3, #0",
+                "str r3, [r7, #28]",  # requires 32 bytes (offset 28 + 4)
+                "b.n loop_start",
+                "loop_body:",
+                "adds r3, #1",
+                "str r3, [r7, #28]",
+                "cmp r3, #10",
+                "bls.n loop_body",    # loop condition is < 10, should be blt
+                "adds r7, #16",
+                "mov sp, r7",
+                "pop {r7}",
+                "bx lr",
+            ],
+            unresolved=[],
+        )
+        body = "void Worker(void) { for (int i = 0; i < 10; ++i) { ... } }"
+        legalized = StaticAssemblyPredictor._legalize_assembly(draft, body)
+        # 1. Stack frame enlarged to 32 bytes in prologue and epilogue
+        self.assertIn("sub sp, #32", legalized.assembly)
+        self.assertIn("adds r7, #32", legalized.assembly)
+        # 2. Missing loop_start: label created right before loop_body:
+        self.assertIn("loop_start:", legalized.assembly)
+        # 3. bls.n converted to blt.n
+        self.assertIn("blt.n loop_body", legalized.assembly)
+        self.assertNotIn("bls.n loop_body", legalized.assembly)
+
+    def test_filter_spurious_review_errors(self):
+        raw_errors = [
+            "semantic reviewer: Function does not preserve r0 across the call to Helper.",
+            "semantic reviewer: Assembly fails to preserve r12 register.",
+            "semantic reviewer: Load from s_acc_state into r0 which is semantically correct.",
+            "semantic reviewer: Real arithmetic error: missing division by 10.",
+        ]
+        filtered = StaticAssemblyPredictor._filter_spurious_review_errors(raw_errors)
+        self.assertEqual(1, len(filtered))
+        self.assertIn("Real arithmetic error", filtered[0])
+
+    def test_predict_computes_execution_cycles(self):
+        client = FakeClient([
+            {
+                "function_name": "Task",
+                "assembly": [
+                    "Task:", "push {r7, lr}", "sub sp, #16", "add r7, sp, #0",
+                    "movs r3, #0", "str r3, [r7, #4]",
+                    "b.n .Lcond",
+                    ".Lbody:",
+                    "ldr r0, [r7, #4]", "bl Helper",
+                    "ldr r3, [r7, #4]", "adds r3, #1", "str r3, [r7, #4]",
+                    ".Lcond:",
+                    "ldr r3, [r7, #4]", "cmp r3, #4", "blt .Lbody",
+                    "adds r7, #16", "mov sp, r7", "pop {r7, pc}",
+                ],
+                "unresolved": [],
+            },
+            {
+                "function_name": "Task",
+                "verdict": "PASS",
+                "errors": [],
+            },
+            {
+                "function_name": "Helper",
+                "assembly": ["Helper:", "push {r7}", "mov r0, r0", "pop {r7}", "bx lr"],
+                "unresolved": [],
+            },
+            {
+                "function_name": "Helper",
+                "verdict": "PASS",
+                "errors": [],
+            },
+        ])
+        source = """
+        static int Helper(int x) { return x; }
+        void Task(void) { for (int i = 0; i < 4; ++i) { Helper(i); } }
+        """
+        report, _ = self.predictor(client).predict(source, "Task")
+        self.assertEqual("SUPPORTED", report.analysis_status)
+        self.assertIsNotNone(report.estimated_execution_cycles)
+        self.assertGreater(report.estimated_execution_cycles, 0)
+        self.assertIsNotNone(report.estimated_execution_us)
+
 
 if __name__ == "__main__":
     unittest.main()

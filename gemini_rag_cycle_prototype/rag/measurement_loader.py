@@ -80,12 +80,19 @@ def extract_function(source: str, function_name: str) -> str | None:
     return None
 
 
+C_RESERVED_KEYWORDS = {
+    "if", "else", "for", "while", "do", "switch", "case", "default",
+    "return", "break", "continue", "goto", "sizeof", "typedef", "struct", "union", "enum"
+}
+
+
 def function_names(source: str) -> list[str]:
-    return list(dict.fromkeys(re.findall(
+    names = re.findall(
         r"\b(?:void|[A-Za-z_]\w*(?:\s*\*)?)\s+([A-Za-z_]\w*)\s*\([^;]*?\)\s*\{",
         source,
         flags=re.S,
-    )))
+    )
+    return list(dict.fromkeys(name for name in names if name not in C_RESERVED_KEYWORDS))
 
 
 def called_functions(function_source: str) -> list[str]:
