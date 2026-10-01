@@ -506,10 +506,7 @@ or
         return widest
 
     def _legalize_assembly(
-        self,
-        draft: StaticAssemblyFunction,
-        body: str,
-        func_macros: dict[str, int] | None = None,
+        self, draft: StaticAssemblyFunction, body: str
     ) -> StaticAssemblyFunction:
         """Apply deterministic compiler-level normalizations to generated assembly."""
         instructions = list(draft.assembly)
@@ -537,15 +534,11 @@ or
                         instructions[i] = f"{m_epilogue.group(1)}#{required_size}{m_epilogue.group(3)}"
 
         strict_loop_matches = re.findall(
-            r"\bfor\s*\(\s*(?:[A-Za-z_]\w*\s+)*([A-Za-z_]\w*)\s*=\s*\d+[uUlL]*\s*;\s*\1\s*<\s*([A-Za-z_]\w*|\d+[uUlL]*)\s*;",
+            r"\bfor\s*\(\s*(?:[A-Za-z_]\w*\s+)*([A-Za-z_]\w*)\s*=\s*\d+[uUlL]*\s*;\s*\1\s*<\s*(\d+)[uUlL]*\s*;",
             body,
         )
-        macros = func_macros or {}
         for var_name, bound_str in strict_loop_matches:
-            clean_bound = re.sub(r"[uUlL]+$", "", bound_str)
-            bound_val = int(clean_bound) if clean_bound.isdigit() else macros.get(clean_bound)
-            if bound_val is None:
-                continue
+            bound_val = int(bound_str)
             for idx, inst in enumerate(instructions):
                 cmp_match = re.search(rf"\bcmp(?:\.w)?\s+[rR]\d+,\s*#?{bound_val}\b", inst, flags=re.I)
                 if cmp_match:
@@ -931,12 +924,7 @@ or
         analyses: list[StaticFunctionAnalysis] = []
         raw_outputs: list[tuple[str, str]] = []
 
-        macros = StagedPredictor._integer_macros(source_facts) if source_facts else {}
-        inferred = StagedPredictor._infer_helper_parameter_values(functions, macros)
-
         for name, body in functions.items():
-            func_macros = dict(macros)
-            func_macros.update(inferred.get(name, {}))
             call_site_contracts = self._call_site_contracts(name, body, functions)
             evidence = self._format_evidence(retrieve_assembly_evidence(
                 source, self.pattern_path, function_name=name, limit=5,
@@ -956,7 +944,7 @@ or
                 result, raw = self.client.predict(
                     prompt, response_schema=StaticAssemblyFunction
                 )
-                draft = self._legalize_assembly(result, body, func_macros=func_macros)
+                draft = self._legalize_assembly(result, body)
                 raw_outputs.append((f"{name}.attempt-{attempt + 1}", raw))
                 errors = self._audit(draft, name, body, functions, declarations=declarations)
                 if not errors:
@@ -986,20 +974,22 @@ or
         warnings = [
             "Static core-cycle sums execute every emitted instruction once; they are diagnostics, not task execution-time estimates.",
         ]
-        estimated_cycles = self._evaluate_execution_cycles(
-            target, functions, analyses, source, source_facts
-        )
-        estimated_us = (
-            round(estimated_cycles / 48.0, 2)
-            if estimated_cycles is not None else None
-        )
         if valid:
+            estimated_cycles = self._evaluate_execution_cycles(
+                target, functions, analyses, source, source_facts
+            )
+            estimated_us = (
+                round(estimated_cycles / 48.0, 2)
+                if estimated_cycles is not None else None
+            )
             warnings.append(
                 "Dynamic execution cycles evaluated from static Thumb-2 assembly and source loop trip bounds at 48 MHz."
             )
         else:
+            estimated_cycles = None
+            estimated_us = None
             warnings.append(
-                "At least one generated function had semantic reviewer warnings; execution cycles are estimated from generated assembly."
+                "At least one generated function failed semantic assembly audits; no execution-cycle estimate is published."
             )
         return StaticAssemblyReport(
             analysis_status="SUPPORTED" if valid else "VALIDATION_REQUIRED",
