@@ -531,7 +531,14 @@ or
     def _legalize_assembly(
         cls, draft: StaticAssemblyFunction, body: str
     ) -> StaticAssemblyFunction:
-        assembly = list(draft.assembly)
+        raw_assembly = list(draft.assembly)
+        # Strip objdump disassembly offset annotations:
+        # e.g. '00000028 <label>:' -> 'label:', 'b.n 28 <label>' -> 'b.n label'
+        assembly = []
+        for line in raw_assembly:
+            l = re.sub(r"^\s*(?:[0-9a-fA-F]+\s+)?<([A-Za-z_]\w*)>:\s*$", r"\1:", line)
+            l = re.sub(r"\b[0-9a-fA-F]+\s*<([A-Za-z_]\w*)>", r"\1", l)
+            assembly.append(l)
 
         # 1. Resolve missing loop start/body label typos (e.g. b.n foo_start followed immediately by foo_body:)
         declared_labels = {

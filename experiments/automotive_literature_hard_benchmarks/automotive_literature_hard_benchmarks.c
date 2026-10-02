@@ -492,6 +492,108 @@ void AccAdaptiveControl_Task20ms(void)
 }
 
 /* ========================================================================= */
+/* 6. MOTOR FIELD ORIENTED CONTROL (FOC - Clarke, Park, PI, InvPark, SVPWM)  */
+/* ========================================================================= */
+#define FOC_SCALE_Q15       32768
+#define FOC_INV_SQRT3_Q15   18892 /* 1 / sqrt(3) * 32768 */
+#define FOC_SQRT3_Q15       56756 /* sqrt(3) * 32768 */
+#define FOC_V_MAX_Q15       30000 /* Voltage limit */
+
+static int32_t s_foc_ia;          /* Phase A current (Q15) */
+static int32_t s_foc_ib;          /* Phase B current (Q15) */
+static int32_t s_foc_id_ref;      /* Direct axis reference current */
+static int32_t s_foc_iq_ref;      /* Quadrature axis reference current */
+static int32_t s_foc_id_integ;    /* D-axis integrator */
+static int32_t s_foc_iq_integ;    /* Q-axis integrator */
+static int32_t s_foc_sector;      /* Output SVPWM sector (1..6) */
+
+/* Forward Clarke Transformation: (ia, ib) -> (ialpha, ibeta) */
+static void FocClarkeTransform(int32_t ia, int32_t ib, int32_t *ialpha, int32_t *ibeta)
+{
+    *ialpha = ia;
+    int32_t sum = ia + 2 * ib;
+    *ibeta = (sum * FOC_INV_SQRT3_Q15) / FOC_SCALE_Q15;
+}
+
+/* Forward Park Transformation: (ialpha, ibeta, sin, cos) -> (id, iq) */
+static void FocParkTransform(int32_t ialpha, int32_t ibeta, int32_t sin_t, int32_t cos_t, int32_t *id, int32_t *iq)
+{
+    *id = (ialpha * cos_t + ibeta * sin_t) / FOC_SCALE_Q15;
+    *iq = (-ialpha * sin_t + ibeta * cos_t) / FOC_SCALE_Q15;
+}
+
+/* PI Current Controller with Anti-Windup Saturation */
+static int32_t FocPiController(int32_t err, int32_t *integral, int32_t kp, int32_t ki)
+{
+    *integral += (err * ki) / FOC_SCALE_Q15;
+    if (*integral > FOC_V_MAX_Q15)
+    {
+        *integral = FOC_V_MAX_Q15;
+    }
+    else if (*integral < -FOC_V_MAX_Q15)
+    {
+        *integral = -FOC_V_MAX_Q15;
+    }
+
+    int32_t out = (err * kp) / FOC_SCALE_Q15 + *integral;
+    if (out > FOC_V_MAX_Q15)
+    {
+        out = FOC_V_MAX_Q15;
+    }
+    else if (out < -FOC_V_MAX_Q15)
+    {
+        out = -FOC_V_MAX_Q15;
+    }
+    return out;
+}
+
+/* Inverse Park Transformation: (vd, vq, sin, cos) -> (valpha, vbeta) */
+static void FocInvParkTransform(int32_t vd, int32_t vq, int32_t sin_t, int32_t cos_t, int32_t *valpha, int32_t *vbeta)
+{
+    *valpha = (vd * cos_t - vq * sin_t) / FOC_SCALE_Q15;
+    *vbeta  = (vd * sin_t + vq * cos_t) / FOC_SCALE_Q15;
+}
+
+/* Space Vector PWM Sector Identification */
+static int32_t FocSvpwmSector(int32_t valpha, int32_t vbeta)
+{
+    int32_t v_ref1 = vbeta;
+    int32_t v_ref2 = (-vbeta + ((valpha * FOC_SQRT3_Q15) / FOC_SCALE_Q15)) / 2;
+    int32_t v_ref3 = (-vbeta - ((valpha * FOC_SQRT3_Q15) / FOC_SCALE_Q15)) / 2;
+
+    int32_t a = (v_ref1 > 0) ? 1 : 0;
+    int32_t b = (v_ref2 > 0) ? 2 : 0;
+    int32_t c = (v_ref3 > 0) ? 4 : 0;
+
+    return a + b + c;
+}
+
+void MotorFoc_CurrentLoop_Task1ms(void)
+{
+    int32_t ialpha, ibeta;
+    int32_t id, iq;
+    int32_t vd, vq;
+    int32_t valpha, vbeta;
+
+    int32_t sin_t = 19260; /* ~0.5878 in Q15 */
+    int32_t cos_t = 26509; /* ~0.8090 in Q15 */
+
+    FocClarkeTransform(s_foc_ia, s_foc_ib, &ialpha, &ibeta);
+    FocParkTransform(ialpha, ibeta, sin_t, cos_t, &id, &iq);
+
+    int32_t id_err = s_foc_id_ref - id;
+    int32_t iq_err = s_foc_iq_ref - iq;
+
+    vd = FocPiController(id_err, &s_foc_id_integ, 15000, 3000);
+    vq = FocPiController(iq_err, &s_foc_iq_integ, 15000, 3000);
+
+    FocInvParkTransform(vd, vq, sin_t, cos_t, &valpha, &vbeta);
+
+    s_foc_sector = FocSvpwmSector(valpha, vbeta);
+    g_bench_sink32 = (uint32_t)(valpha ^ vbeta ^ s_foc_sector);
+}
+
+/* ========================================================================= */
 /* INITIALIZATION ROUTINE                                                    */
 /* ========================================================================= */
 void LiteratureHardBenchmarks_Initialize(uint32_t task_id)
@@ -539,6 +641,16 @@ void LiteratureHardBenchmarks_Initialize(uint32_t task_id)
             s_acc_integral_err = 500;
             s_acc_prev_err = 450;
             s_acc_prev_cmd = 100;
+            break;
+
+        case 5U: /* MotorFoc_CurrentLoop_Task1ms */
+            s_foc_ia = 8000;      /* Phase A current: ~0.244 in Q15 */
+            s_foc_ib = -4000;     /* Phase B current: ~-0.122 in Q15 */
+            s_foc_id_ref = 0;     /* Id ref = 0 for PMSM MTPA */
+            s_foc_iq_ref = 10000; /* Iq ref = 10000 in Q15 */
+            s_foc_id_integ = 500;
+            s_foc_iq_integ = 1200;
+            s_foc_sector = 1;
             break;
 
         default:

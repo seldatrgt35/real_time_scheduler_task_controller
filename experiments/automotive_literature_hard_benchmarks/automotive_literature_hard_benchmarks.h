@@ -15,5 +15,6 @@ void CordicResolver_Task1ms(void);
 void SecOcAesBlock_Task5ms(void);
 void PowertrainKnockFft_Task20ms(void);
 void AccAdaptiveControl_Task20ms(void);
+void MotorFoc_CurrentLoop_Task1ms(void);
 
 #endif /* AUTOMOTIVE_LITERATURE_HARD_BENCHMARKS_H */

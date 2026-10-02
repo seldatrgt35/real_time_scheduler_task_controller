@@ -1473,17 +1473,23 @@ Draft block plan to audit and replace:
         loops: list[tuple[int, int, int, str]] = []
         pattern = re.compile(
             r"\bfor\s*\(\s*(?:[A-Za-z_]\w*\s+)*([A-Za-z_]\w*)\s*=\s*"
-            r"(\d+)[uUlL]*\s*;\s*\1\s*(<|<=)\s*([A-Za-z_]\w*|\d+[uUlL]*)"
+            r"(\d+)[uUlL]*\s*;\s*\1\s*(<|<=)\s*([^;]+?)"
             r"\s*;\s*(?:\+\+\s*\1|\1\s*\+\+)\s*\)\s*\{"
         )
         for match in pattern.finditer(body):
             variable, start_text, comparator, bound_text = match.groups()
             start = int(start_text)
-            clean_bound = re.sub(r"[uUlL]+$", "", bound_text)
-            bound = (int(clean_bound) if clean_bound.isdigit()
-                     else macro_values.get(clean_bound))
+            clean_bound = re.sub(r"(?<=\d)[uUlL]+", "", bound_text.strip())
+            m_expr = re.match(r"^([A-Za-z_]\w*|\d+)(?:\s*([+-])\s*(\d+))?$", clean_bound)
+            if not m_expr:
+                continue
+            base_tok, op, offset = m_expr.groups()
+            bound = (int(base_tok) if base_tok.isdigit()
+                     else macro_values.get(base_tok))
             if bound is None:
                 continue
+            if op and offset:
+                bound = bound + int(offset) if op == "+" else bound - int(offset)
             trip_count = max(0, bound - start + (1 if comparator == "<=" else 0))
             opening = match.end() - 1
             closing = StagedPredictor._matching_brace(body, opening)

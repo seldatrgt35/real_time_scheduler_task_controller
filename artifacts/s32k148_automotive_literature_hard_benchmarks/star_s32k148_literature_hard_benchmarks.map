@@ -1,7 +1,7 @@
 Archive member included to satisfy reference by file (symbol)
 
 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
-                              C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o (__aeabi_uldivmod)
+                              C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o (__aeabi_uldivmod)
 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
                               c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o) (__udivmoddi4)
 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
@@ -9,20 +9,20 @@ c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gc
 
 Discarded input sections
 
- .group         0x00000000        0xc C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
- .text          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
- .data          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
- .bss           0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
- .group         0x00000000        0xc C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
- .text          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
- .data          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
- .bss           0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
- .debug_macro   0x00000000      0xa8a C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
- .group         0x00000000        0xc C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
- .text          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
- .data          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
- .bss           0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
- .debug_macro   0x00000000      0xa8a C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
+ .group         0x00000000        0xc C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .text          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .data          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .bss           0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .group         0x00000000        0xc C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+ .text          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+ .data          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+ .bss           0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+ .debug_macro   0x00000000      0xa8a C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+ .group         0x00000000        0xc C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+ .text          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+ .data          0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+ .bss           0x00000000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+ .debug_macro   0x00000000      0xa8a C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
  .data          0x00000000        0x0 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
  .bss           0x00000000        0x0 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
  .data          0x00000000        0x0 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
@@ -40,9 +40,9 @@ RAM              0x1ffe0000         0x0003f000         xrw
 
 Linker script and memory map
 
-LOAD C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
-LOAD C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
-LOAD C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
+LOAD C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+LOAD C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+LOAD C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
 START GROUP
 LOAD c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a
 LOAD c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/../../../../arm-none-eabi/lib/thumb/v7e-m/nofp\libg.a
@@ -52,290 +52,317 @@ END GROUP
 
 .isr_vector     0x00000000      0x400
  *(.isr_vector)
- .isr_vector    0x00000000      0x400 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
+ .isr_vector    0x00000000      0x400 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
                 0x00000000                g_pfnVectors
 
 .flash_config   0x00000400       0x10
  *(.flash_config)
- .flash_config  0x00000400       0x10 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
+ .flash_config  0x00000400       0x10 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
                 0x00000400                g_s32k148_flash_config
 
-.text           0x00000410     0x15dc
+.text           0x00000410     0x1950
  *(.text*)
  .text.MatrixMult2x2
-                0x00000410       0x92 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000410       0x92 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .text.MatrixAdd2x2
-                0x000004a2       0x68 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x000004a2       0x68 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  *fill*         0x0000050a        0x2 
  .text.KalmanPredict
-                0x0000050c       0xb4 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x0000050c       0xb4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .text.KalmanUpdate
-                0x000005c0       0xc4 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x000005c0       0xc4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .text.AdasKalmanFilter_Task10ms
-                0x00000684       0x34 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000684       0x34 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
                 0x00000684                AdasKalmanFilter_Task10ms
  .text.CordicStep
-                0x000006b8       0x82 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x000006b8       0x82 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  *fill*         0x0000073a        0x2 
  .text.CordicVectorRotate
-                0x0000073c       0x60 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x0000073c       0x60 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .text.CordicResolver_Task1ms
-                0x0000079c       0x3c C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x0000079c       0x3c C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
                 0x0000079c                CordicResolver_Task1ms
  .text.AesSubBytes
-                0x000007d8       0x40 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x000007d8       0x40 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .text.AesShiftRows
-                0x00000818       0x9a C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000818       0x9a C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .text.AesXtime
-                0x000008b2       0x32 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x000008b2       0x32 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .text.AesMixColumns
-                0x000008e4      0x14e C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x000008e4      0x14e C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .text.AesAddRoundKey
-                0x00000a32       0x44 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000a32       0x44 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  *fill*         0x00000a76        0x2 
  .text.SecOcAesBlock_Task5ms
-                0x00000a78       0x74 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000a78       0x74 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
                 0x00000a78                SecOcAesBlock_Task5ms
  .text.FftBitReverse
-                0x00000aec       0xb4 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000aec       0xb4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .text.FftButterflyStages
-                0x00000ba0      0x174 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000ba0      0x174 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .text.FftPowerSpectrum
-                0x00000d14       0x60 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000d14       0x60 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .text.PowertrainKnockFft_Task20ms
-                0x00000d74       0x4c C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000d74       0x4c C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
                 0x00000d74                PowertrainKnockFft_Task20ms
  .text.AccStateTransition
-                0x00000dc0       0xa8 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000dc0       0xa8 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .text.AccPidCompute
-                0x00000e68       0xdc C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000e68       0xdc C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .text.AccSlewRateLimit
-                0x00000f44       0x42 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000f44       0x42 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  *fill*         0x00000f86        0x2 
  .text.AccAdaptiveControl_Task20ms
-                0x00000f88       0xec C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000f88       0xec C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
                 0x00000f88                AccAdaptiveControl_Task20ms
+ .text.FocClarkeTransform
+                0x00001074       0x44 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .text.FocParkTransform
+                0x000010b8       0x62 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ *fill*         0x0000111a        0x2 
+ .text.FocPiController
+                0x0000111c       0xa0 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .text.FocInvParkTransform
+                0x000011bc       0x60 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .text.FocSvpwmSector
+                0x0000121c       0x96 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ *fill*         0x000012b2        0x2 
+ .text.MotorFoc_CurrentLoop_Task1ms
+                0x000012b4       0xd8 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+                0x000012b4                MotorFoc_CurrentLoop_Task1ms
  .text.LiteratureHardBenchmarks_Initialize
-                0x00001074      0x1a4 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
-                0x00001074                LiteratureHardBenchmarks_Initialize
+                0x0000138c      0x1fc C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+                0x0000138c                LiteratureHardBenchmarks_Initialize
  .text.EnableCodeCache
-                0x00001218       0x38 C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
+                0x00001588       0x38 C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
  .text.MeasureOverhead
-                0x00001250       0x4c C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
- .text.main     0x0000129c      0x1ac C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
-                0x0000129c                main
+                0x000015c0       0x4c C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+ .text.main     0x0000160c      0x1ac C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+                0x0000160c                main
  .text.Reset_Handler
-                0x00001448       0x44 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
-                0x00001448                Reset_Handler
+                0x000017b8       0x44 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+                0x000017b8                Reset_Handler
  .text.Default_Handler
-                0x0000148c       0x5c C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
-                0x0000148c                Default_Handler
+                0x000017fc       0x5c C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+                0x000017fc                Default_Handler
  .text.rts_s32k148_reset_entry
-                0x000014e8       0x6c C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
-                0x000014e8                rts_s32k148_reset_entry
- .text          0x00001554       0x30 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
-                0x00001554                __aeabi_uldivmod
- .text          0x00001584      0x2d8 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
-                0x00001584                __udivmoddi4
- .text          0x0000185c        0x4 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
-                0x0000185c                __aeabi_idiv0
-                0x0000185c                __aeabi_ldiv0
+                0x00001858       0x6c C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+                0x00001858                rts_s32k148_reset_entry
+ .text          0x000018c4       0x30 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+                0x000018c4                __aeabi_uldivmod
+ .text          0x000018f4      0x2d8 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+                0x000018f4                __udivmoddi4
+ .text          0x00001bcc        0x4 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
+                0x00001bcc                __aeabi_idiv0
+                0x00001bcc                __aeabi_ldiv0
  *(.rodata*)
  .rodata.s_cordic_atan_lut
-                0x00001860       0x40 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00001bd0       0x40 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .rodata.s_aes_sbox
-                0x000018a0      0x100 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00001c10      0x100 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .rodata.s_aes_round_key
-                0x000019a0       0x10 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00001d10       0x10 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .rodata.s_twiddle_cos
-                0x000019b0       0x10 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00001d20       0x10 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .rodata.s_twiddle_sin
-                0x000019c0       0x10 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00001d30       0x10 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .rodata.s_tasks
-                0x000019d0       0x14 C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
+                0x00001d40       0x18 C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
  *(.ARM.extab*)
  *(.ARM.exidx*)
- .ARM.exidx     0x000019e4        0x8 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+ .ARM.exidx     0x00001d58        0x8 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
 
-.glue_7         0x000019ec        0x0
- .glue_7        0x000019ec        0x0 linker stubs
+.glue_7         0x00001d60        0x0
+ .glue_7        0x00001d60        0x0 linker stubs
 
-.glue_7t        0x000019ec        0x0
- .glue_7t       0x000019ec        0x0 linker stubs
+.glue_7t        0x00001d60        0x0
+ .glue_7t       0x00001d60        0x0 linker stubs
 
-.vfp11_veneer   0x000019ec        0x0
- .vfp11_veneer  0x000019ec        0x0 linker stubs
+.vfp11_veneer   0x00001d60        0x0
+ .vfp11_veneer  0x00001d60        0x0 linker stubs
 
-.v4_bx          0x000019ec        0x0
- .v4_bx         0x000019ec        0x0 linker stubs
+.v4_bx          0x00001d60        0x0
+ .v4_bx         0x00001d60        0x0 linker stubs
 
-.iplt           0x000019ec        0x0
- .iplt          0x000019ec        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+.iplt           0x00001d60        0x0
+ .iplt          0x00001d60        0x0 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
 
-.rel.dyn        0x000019ec        0x0
- .rel.iplt      0x000019ec        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+.rel.dyn        0x00001d60        0x0
+ .rel.iplt      0x00001d60        0x0 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
 
-.data           0x1ffe0000        0x0 load address 0x000019ec
+.data           0x1ffe0000        0x0 load address 0x00001d60
                 0x1ffe0000                . = ALIGN (0x4)
                 0x1ffe0000                __data_start__ = .
  *(.data*)
                 0x1ffe0000                . = ALIGN (0x4)
                 0x1ffe0000                __data_end__ = .
-                0x000019ec                __data_load__ = LOADADDR (.data)
+                0x00001d60                __data_load__ = LOADADDR (.data)
 
 .igot.plt       0x1ffe0000        0x0
- .igot.plt      0x1ffe0000        0x0 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+ .igot.plt      0x1ffe0000        0x0 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
 
-.bss            0x1ffe0000      0x15c
+.bss            0x1ffe0000      0x188
                 0x1ffe0000                . = ALIGN (0x4)
                 0x1ffe0000                __bss_start__ = .
  *(.bss*)
  .bss.g_bench_sink32
-                0x1ffe0000        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe0000        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
                 0x1ffe0000                g_bench_sink32
  .bss.g_bench_sink8
-                0x1ffe0004        0x1 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe0004        0x1 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
                 0x1ffe0004                g_bench_sink8
  *fill*         0x1ffe0005        0x3 
- .bss.s_kf_x    0x1ffe0008        0x8 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
- .bss.s_kf_P    0x1ffe0010       0x10 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
- .bss.s_kf_A    0x1ffe0020       0x10 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
- .bss.s_kf_Q    0x1ffe0030       0x10 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+ .bss.s_kf_x    0x1ffe0008        0x8 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .bss.s_kf_P    0x1ffe0010       0x10 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .bss.s_kf_A    0x1ffe0020       0x10 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .bss.s_kf_Q    0x1ffe0030       0x10 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .bss.s_kf_meas_pos
-                0x1ffe0040        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe0040        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .bss.s_cordic_target_angle
-                0x1ffe0044        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe0044        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .bss.s_aes_state
-                0x1ffe0048       0x10 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe0048       0x10 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .bss.s_fft_real
-                0x1ffe0058       0x20 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe0058       0x20 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .bss.s_fft_imag
-                0x1ffe0078       0x20 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe0078       0x20 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .bss.s_fft_power
-                0x1ffe0098       0x20 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe0098       0x20 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .bss.s_acc_state
-                0x1ffe00b8        0x1 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe00b8        0x1 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  *fill*         0x1ffe00b9        0x3 
  .bss.s_acc_ego_speed
-                0x1ffe00bc        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe00bc        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .bss.s_acc_set_speed
-                0x1ffe00c0        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe00c0        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .bss.s_acc_target_dist
-                0x1ffe00c4        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe00c4        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .bss.s_acc_target_relspd
-                0x1ffe00c8        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe00c8        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .bss.s_acc_integral_err
-                0x1ffe00cc        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe00cc        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .bss.s_acc_prev_err
-                0x1ffe00d0        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe00d0        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .bss.s_acc_prev_cmd
-                0x1ffe00d4        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x1ffe00d4        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .bss.s_foc_ia  0x1ffe00d8        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .bss.s_foc_ib  0x1ffe00dc        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .bss.s_foc_id_ref
+                0x1ffe00e0        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .bss.s_foc_iq_ref
+                0x1ffe00e4        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .bss.s_foc_id_integ
+                0x1ffe00e8        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .bss.s_foc_iq_integ
+                0x1ffe00ec        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .bss.s_foc_sector
+                0x1ffe00f0        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .bss.g_star_literature_bench_complete
-                0x1ffe00d8        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
-                0x1ffe00d8                g_star_literature_bench_complete
+                0x1ffe00f4        0x4 C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+                0x1ffe00f4                g_star_literature_bench_complete
  .bss.g_star_literature_bench_current
-                0x1ffe00dc        0x4 C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
-                0x1ffe00dc                g_star_literature_bench_current
+                0x1ffe00f8        0x4 C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+                0x1ffe00f8                g_star_literature_bench_current
  .bss.g_star_literature_bench_results
-                0x1ffe00e0       0x68 C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
-                0x1ffe00e0                g_star_literature_bench_results
+                0x1ffe00fc       0x78 C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+                0x1ffe00fc                g_star_literature_bench_results
  .bss.g_star_holdout_v6_exception_number
-                0x1ffe0148        0x4 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
-                0x1ffe0148                g_star_holdout_v6_exception_number
+                0x1ffe0174        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+                0x1ffe0174                g_star_holdout_v6_exception_number
  .bss.g_star_holdout_v6_fault_cfsr
-                0x1ffe014c        0x4 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
-                0x1ffe014c                g_star_holdout_v6_fault_cfsr
+                0x1ffe0178        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+                0x1ffe0178                g_star_holdout_v6_fault_cfsr
  .bss.g_star_holdout_v6_fault_hfsr
-                0x1ffe0150        0x4 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
-                0x1ffe0150                g_star_holdout_v6_fault_hfsr
+                0x1ffe017c        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+                0x1ffe017c                g_star_holdout_v6_fault_hfsr
  .bss.g_star_holdout_v6_fault_mmfar
-                0x1ffe0154        0x4 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
-                0x1ffe0154                g_star_holdout_v6_fault_mmfar
+                0x1ffe0180        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+                0x1ffe0180                g_star_holdout_v6_fault_mmfar
  .bss.g_star_holdout_v6_fault_bfar
-                0x1ffe0158        0x4 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
-                0x1ffe0158                g_star_holdout_v6_fault_bfar
+                0x1ffe0184        0x4 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+                0x1ffe0184                g_star_holdout_v6_fault_bfar
  *(COMMON)
-                0x1ffe015c                . = ALIGN (0x4)
-                0x1ffe015c                __bss_end__ = .
+                0x1ffe0188                . = ALIGN (0x4)
+                0x1ffe0188                __bss_end__ = .
 OUTPUT(C:\Users\nxg19748\OneDrive - NXP\Desktop\real_time_scheduler_task_controller\artifacts\s32k148_automotive_literature_hard_benchmarks\star_s32k148_literature_hard_benchmarks.elf elf32-littlearm)
 LOAD linker stubs
 
-.debug_info     0x00000000     0x17b7
- .debug_info    0x00000000      0xbee C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
- .debug_info    0x00000bee      0x2d0 C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
- .debug_info    0x00000ebe      0x1c0 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
- .debug_info    0x0000107e       0x24 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
- .debug_info    0x000010a2      0x6f1 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
- .debug_info    0x00001793       0x24 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
+.debug_info     0x00000000     0x1b2d
+ .debug_info    0x00000000      0xf5e C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .debug_info    0x00000f5e      0x2d6 C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+ .debug_info    0x00001234      0x1c0 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+ .debug_info    0x000013f4       0x24 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+ .debug_info    0x00001418      0x6f1 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+ .debug_info    0x00001b09       0x24 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
 
-.debug_abbrev   0x00000000      0x62e
- .debug_abbrev  0x00000000      0x252 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
- .debug_abbrev  0x00000252      0x13e C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
- .debug_abbrev  0x00000390      0x10c C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
- .debug_abbrev  0x0000049c       0x14 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
- .debug_abbrev  0x000004b0      0x16a c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
- .debug_abbrev  0x0000061a       0x14 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
+.debug_abbrev   0x00000000      0x640
+ .debug_abbrev  0x00000000      0x264 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .debug_abbrev  0x00000264      0x13e C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+ .debug_abbrev  0x000003a2      0x10c C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+ .debug_abbrev  0x000004ae       0x14 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+ .debug_abbrev  0x000004c2      0x16a c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+ .debug_abbrev  0x0000062c       0x14 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
 
-.debug_aranges  0x00000000      0x130
+.debug_aranges  0x00000000      0x160
  .debug_aranges
-                0x00000000       0xd0 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000000      0x100 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .debug_aranges
-                0x000000d0       0x30 C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
+                0x00000100       0x30 C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
  .debug_aranges
-                0x00000100       0x30 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
+                0x00000130       0x30 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
 
 .debug_rnglists
-                0x00000000      0x157
+                0x00000000      0x17e
  .debug_rnglists
-                0x00000000       0xa3 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000000       0xca C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .debug_rnglists
-                0x000000a3       0x20 C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
+                0x000000ca       0x20 C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
  .debug_rnglists
-                0x000000c3       0x1f C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
+                0x000000ea       0x1f C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
  .debug_rnglists
-                0x000000e2       0x75 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+                0x00000109       0x75 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
 
-.debug_macro    0x00000000      0xb3e
- .debug_macro   0x00000000       0x2e C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
- .debug_macro   0x0000002e      0xa8a C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
- .debug_macro   0x00000ab8       0x5d C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
- .debug_macro   0x00000b15       0x29 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
+.debug_macro    0x00000000      0xb5a
+ .debug_macro   0x00000000       0x4a C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .debug_macro   0x0000004a      0xa8a C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .debug_macro   0x00000ad4       0x5d C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+ .debug_macro   0x00000b31       0x29 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
 
-.debug_line     0x00000000     0x149f
- .debug_line    0x00000000      0xa9e C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
- .debug_line    0x00000a9e      0x282 C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
- .debug_line    0x00000d20      0x13d C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
- .debug_line    0x00000e5d       0x4e c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
- .debug_line    0x00000eab      0x5aa c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
- .debug_line    0x00001455       0x4a c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
+.debug_line     0x00000000     0x1645
+ .debug_line    0x00000000      0xc44 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .debug_line    0x00000c44      0x282 C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+ .debug_line    0x00000ec6      0x13d C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+ .debug_line    0x00001003       0x4e c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+ .debug_line    0x00001051      0x5aa c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+ .debug_line    0x000015fb       0x4a c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
 
-.debug_str      0x00000000     0x4128
- .debug_str     0x00000000     0x3418 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
-                               0x34ba (size before relaxing)
- .debug_str     0x00003418      0x3c9 C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
-                               0x33a9 (size before relaxing)
- .debug_str     0x000037e1      0x2ac C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
+.debug_str      0x00000000     0x4290
+ .debug_str     0x00000000     0x3580 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+                               0x3622 (size before relaxing)
+ .debug_str     0x00003580      0x3c9 C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+                               0x33c6 (size before relaxing)
+ .debug_str     0x00003949      0x2ac C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
                                0x3180 (size before relaxing)
- .debug_str     0x00003a8d       0x9e c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
- .debug_str     0x00003b2b      0x5c5 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+ .debug_str     0x00003bf5       0x9e c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+ .debug_str     0x00003c93      0x5c5 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
                                 0x6c7 (size before relaxing)
- .debug_str     0x000040f0       0x38 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
+ .debug_str     0x00004258       0x38 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
                                  0xa2 (size before relaxing)
 
 .comment        0x00000000       0x88
- .comment       0x00000000       0x88 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+ .comment       0x00000000       0x88 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
                                  0x89 (size before relaxing)
- .comment       0x00000088       0x89 C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
- .comment       0x00000088       0x89 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
+ .comment       0x00000088       0x89 C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+ .comment       0x00000088       0x89 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
 
 .ARM.attributes
                 0x00000000       0x2e
  .ARM.attributes
-                0x00000000       0x2e C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
+                0x00000000       0x2e C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
  .ARM.attributes
-                0x0000002e       0x2e C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
+                0x0000002e       0x2e C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
  .ARM.attributes
-                0x0000005c       0x2e C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
+                0x0000005c       0x2e C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
  .ARM.attributes
                 0x0000008a       0x1e c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
  .ARM.attributes
@@ -343,12 +370,12 @@ LOAD linker stubs
  .ARM.attributes
                 0x000000d6       0x1e c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_dvmd_tls.o)
 
-.debug_frame    0x00000000      0x4b4
- .debug_frame   0x00000000      0x374 C:\Users\nxg19748\AppData\Local\Temp\cc2rIvr7.o
- .debug_frame   0x00000374       0x80 C:\Users\nxg19748\AppData\Local\Temp\ccntGmTl.o
- .debug_frame   0x000003f4       0x60 C:\Users\nxg19748\AppData\Local\Temp\cciLFYaP.o
- .debug_frame   0x00000454       0x2c c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
- .debug_frame   0x00000480       0x34 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
+.debug_frame    0x00000000      0x5a4
+ .debug_frame   0x00000000      0x464 C:\Users\nxg19748\AppData\Local\Temp\ccZuktbn.o
+ .debug_frame   0x00000464       0x80 C:\Users\nxg19748\AppData\Local\Temp\cczeg1dC.o
+ .debug_frame   0x000004e4       0x60 C:\Users\nxg19748\AppData\Local\Temp\cc1V65SX.o
+ .debug_frame   0x00000544       0x2c c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_aeabi_uldivmod.o)
+ .debug_frame   0x00000570       0x34 c:/nxp/s32ds.3.6.9/s32ds/build_tools/gcc_v11.4/gcc-11.4-arm32-eabi/bin/../lib/gcc/arm-none-eabi/11.4.0/thumb/v7e-m/nofp\libgcc.a(_udivmoddi4.o)
 
 .debug_line_str
                 0x00000000       0x9e

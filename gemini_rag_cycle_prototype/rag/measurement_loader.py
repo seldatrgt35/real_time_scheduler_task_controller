@@ -87,9 +87,10 @@ C_RESERVED_KEYWORDS = {
 
 
 def function_names(source: str) -> list[str]:
+    clean = strip_comments(source)
     names = re.findall(
         r"\b(?:void|[A-Za-z_]\w*(?:\s*\*)?)\s+([A-Za-z_]\w*)\s*\([^;]*?\)\s*\{",
-        source,
+        clean,
         flags=re.S,
     )
     return list(dict.fromkeys(name for name in names if name not in C_RESERVED_KEYWORDS))

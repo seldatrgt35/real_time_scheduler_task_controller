@@ -14,7 +14,7 @@ typedef __UINT64_TYPE__ uint64_t;
 
 #define STAR_SAMPLES     (40U)
 #define STAR_WARMUPS     (8U)
-#define STAR_TASK_COUNT  (5U)
+#define STAR_TASK_COUNT  (6U)
 
 typedef void (*StarTaskFunction)(void);
 
@@ -46,7 +46,8 @@ static const StarTaskFunction s_tasks[STAR_TASK_COUNT] = {
     CordicResolver_Task1ms,
     SecOcAesBlock_Task5ms,
     PowertrainKnockFft_Task20ms,
-    AccAdaptiveControl_Task20ms
+    AccAdaptiveControl_Task20ms,
+    MotorFoc_CurrentLoop_Task1ms
 };
 
 static void EnableCodeCache(void)
