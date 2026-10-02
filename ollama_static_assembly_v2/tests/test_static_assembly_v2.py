@@ -445,6 +445,28 @@ class StaticAssemblyV2Tests(unittest.TestCase):
         # Should not dump 60+ repeated mov r0, r1 instructions
         self.assertNotIn("mov r0, r1\n" * 50, prompt)
 
+    def test_evaluate_cfg_dag_selects_longest_mutually_exclusive_branch(self):
+        predictor = self.predictor(FakeClient([]))
+        assembly = [
+            "BranchFn:",
+            "cmp r0, #0",
+            "bgt ArmB",
+            "movs r0, #1",
+            "b End",
+            "ArmB:",
+            "movs r0, #10",
+            "adds r0, #1",
+            "adds r0, #2",
+            "End:",
+            "bx lr",
+        ]
+        res = predictor._evaluate_cfg_dag(assembly)
+        self.assertIsNotNone(res)
+        cycles, callees = res
+        self.assertLess(cycles, 18)
+        self.assertGreaterEqual(cycles, 11)
+
 
 if __name__ == "__main__":
     unittest.main()
+

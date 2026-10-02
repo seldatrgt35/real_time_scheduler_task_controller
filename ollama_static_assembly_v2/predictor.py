@@ -927,6 +927,117 @@ or
 
         return exec_counts
 
+    def _evaluate_cfg_dag(
+        self, assembly: list[str]
+    ) -> tuple[int, Counter[str]] | None:
+        """Evaluate longest path (WCET) on forward-branch basic block DAG."""
+        instructions: list[str] = []
+        labels_to_inst: dict[str, int] = {}
+        for line in assembly:
+            clean = re.sub(r"@.*$", "", line).strip()
+            if not clean or clean.startswith("."):
+                continue
+            if clean.endswith(":"):
+                labels_to_inst[clean[:-1].strip()] = len(instructions)
+            else:
+                instructions.append(clean)
+
+        n = len(instructions)
+        if n == 0:
+            return 0, Counter()
+
+        leaders: set[int] = {0}
+        for i, inst in enumerate(instructions):
+            m_br = re.match(
+                r"^\s*(?:b(?:eq|ne|cs|hs|cc|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al)?|cbz|cbnz)(?:\.[nw])?\s+([A-Za-z_0-9.]+)\b",
+                inst, flags=re.I,
+            )
+            m_ret = re.match(r"^\s*(?:bx\s+lr|pop\s+\{.*pc.*\})", inst, flags=re.I)
+            if m_br:
+                tgt = m_br.group(1)
+                if tgt in labels_to_inst:
+                    leaders.add(labels_to_inst[tgt])
+                if i + 1 < n:
+                    leaders.add(i + 1)
+            elif m_ret:
+                if i + 1 < n:
+                    leaders.add(i + 1)
+
+        sorted_leaders = sorted(leaders)
+        block_map: dict[int, int] = {}
+        blocks: list[tuple[int, int]] = []
+        for b_id, start in enumerate(sorted_leaders):
+            end = sorted_leaders[b_id + 1] if b_id + 1 < len(sorted_leaders) else n
+            blocks.append((start, end))
+            for idx in range(start, end):
+                block_map[idx] = b_id
+
+        block_weights: list[int] = []
+        block_callees: list[Counter[str]] = []
+        for start, end in blocks:
+            w = 0
+            callees: Counter[str] = Counter()
+            for idx in range(start, end):
+                inst = instructions[idx]
+                cc = StagedPredictor._classify_instruction(inst)
+                for cname, cqty in cc.items():
+                    w += cqty * self.timing_cycles.get(cname, 1)
+                m_bl = re.search(r"\bblx?\s+([A-Za-z_]\w*)\b", inst, flags=re.I)
+                if m_bl:
+                    callees[m_bl.group(1)] += 1
+            block_weights.append(w)
+            block_callees.append(callees)
+
+        adj: dict[int, list[int]] = {b_id: [] for b_id in range(len(blocks))}
+        has_backward = False
+        for b_id, (start, end) in enumerate(blocks):
+            last_inst = instructions[end - 1]
+            m_uncond = re.match(r"^\s*b(?:\.[nw])?\s+([A-Za-z_0-9.]+)\b", last_inst, flags=re.I)
+            m_cond = re.match(r"^\s*(?:b(?:eq|ne|cs|hs|cc|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al)|cbz|cbnz)(?:\.[nw])?\s+([A-Za-z_0-9.]+)\b", last_inst, flags=re.I)
+            m_ret = re.match(r"^\s*(?:bx\s+lr|pop\s+\{.*pc.*\})", last_inst, flags=re.I)
+
+            if m_uncond:
+                tgt = m_uncond.group(1)
+                if tgt in labels_to_inst and labels_to_inst[tgt] in block_map:
+                    tgt_b = block_map[labels_to_inst[tgt]]
+                    adj[b_id].append(tgt_b)
+                    if tgt_b <= b_id:
+                        has_backward = True
+            elif m_cond:
+                tgt = m_cond.group(1)
+                if tgt in labels_to_inst and labels_to_inst[tgt] in block_map:
+                    tgt_b = block_map[labels_to_inst[tgt]]
+                    adj[b_id].append(tgt_b)
+                    if tgt_b <= b_id:
+                        has_backward = True
+                if b_id + 1 < len(blocks):
+                    adj[b_id].append(b_id + 1)
+            elif not m_ret and b_id + 1 < len(blocks):
+                adj[b_id].append(b_id + 1)
+
+        if has_backward:
+            return None
+
+        memo: dict[int, tuple[int, Counter[str]]] = {}
+        def longest_dag(u: int) -> tuple[int, Counter[str]]:
+            if u in memo:
+                return memo[u]
+            max_w = 0
+            best_c: Counter[str] = Counter()
+            for v in adj[u]:
+                if v > u:
+                    vw, vc = longest_dag(v)
+                    if vw > max_w:
+                        max_w = vw
+                        best_c = vc
+            tot_w = block_weights[u] + max_w
+            merged_c = Counter(best_c)
+            merged_c.update(block_callees[u])
+            memo[u] = (tot_w, merged_c)
+            return memo[u]
+
+        return longest_dag(0)
+
     def _evaluate_execution_cycles(
         self,
         target: str,
@@ -954,31 +1065,42 @@ or
             exec_counts = self._calculate_instruction_execution_counts(
                 analysis.assembly, body, func_macros
             )
+            has_loop = any(c > 1 for c in exec_counts)
+            cfg_res = None
+            if not has_loop:
+                cfg_res = self._evaluate_cfg_dag(analysis.assembly)
 
-            total_func_cycles = 0
-            callee_counts: Counter[str] = Counter()
-            for idx, inst in enumerate(instructions):
-                count = exec_counts[idx]
-                m_bl = re.search(r"\bblx?\s+([A-Za-z_]\w*)\b", inst, flags=re.I)
-                if m_bl:
-                    callee = m_bl.group(1)
-                    if callee in functions:
-                        callee_counts[callee] += count
+            if cfg_res is not None:
+                w, callees = cfg_res
+                func_internal_cycles[name] = w
+                func_callee_calls[name] = Counter(
+                    {c: cnt for c, cnt in callees.items() if c in functions}
+                )
+            else:
+                total_func_cycles = 0
+                callee_counts: Counter[str] = Counter()
+                for idx, inst in enumerate(instructions):
+                    count = exec_counts[idx]
+                    m_bl = re.search(r"\bblx?\s+([A-Za-z_]\w*)\b", inst, flags=re.I)
+                    if m_bl:
+                        callee = m_bl.group(1)
+                        if callee in functions:
+                            callee_counts[callee] += count
 
-                class_counts = StagedPredictor._classify_instruction(inst)
-                for cls_name, cls_qty in class_counts.items():
-                    cycles_each = self.timing_cycles.get(cls_name, 1)
-                    if cls_name == "conditional_branch_taken" and count > 1:
-                        inst_cycle_cost = (
-                            (count - 1) * self.timing_cycles.get("conditional_branch_taken", 4)
-                            + 1 * self.timing_cycles.get("conditional_branch_not_taken", 1)
-                        )
-                    else:
-                        inst_cycle_cost = count * cls_qty * cycles_each
-                    total_func_cycles += inst_cycle_cost
+                    class_counts = StagedPredictor._classify_instruction(inst)
+                    for cls_name, cls_qty in class_counts.items():
+                        cycles_each = self.timing_cycles.get(cls_name, 1)
+                        if cls_name == "conditional_branch_taken" and count > 1:
+                            inst_cycle_cost = (
+                                (count - 1) * self.timing_cycles.get("conditional_branch_taken", 4)
+                                + 1 * self.timing_cycles.get("conditional_branch_not_taken", 1)
+                            )
+                        else:
+                            inst_cycle_cost = count * cls_qty * cycles_each
+                        total_func_cycles += inst_cycle_cost
 
-            func_internal_cycles[name] = total_func_cycles
-            func_callee_calls[name] = callee_counts
+                func_internal_cycles[name] = total_func_cycles
+                func_callee_calls[name] = callee_counts
 
         graph: dict[str, list[str]] = {fn: [] for fn in functions}
         for caller, callees in func_callee_calls.items():
