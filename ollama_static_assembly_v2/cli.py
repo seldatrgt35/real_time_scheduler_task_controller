@@ -33,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     if not args.source.exists():
         raise FileNotFoundError(f"C source not found: {args.source}")
-    os.environ.setdefault("OLLAMA_NUM_PREDICT", "4096")
+    os.environ.setdefault("OLLAMA_NUM_PREDICT", "6144")
     client = OllamaClient(model=args.model)
     report, raw_outputs = StaticAssemblyPredictor(
         args.repository_root, client

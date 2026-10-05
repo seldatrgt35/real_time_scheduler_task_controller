@@ -252,7 +252,7 @@ STRICT RULES
 8. Use symbolic labels and symbols. Each assembly array item is exactly one label or instruction.
 9. If exact code generation is genuinely unresolved, state the narrow uncertainty in `unresolved`; do not
    hide missing source behavior or manufacture hundreds of repeated instructions.
-10. The `assembly` array has a HARD LIMIT of 320 items and normally should be much shorter. Never approach
+10. The `assembly` array has a HARD LIMIT of 480 items and normally should be much shorter. Never approach
     that limit by expanding iterations, branch executions, lookup-table contents or source array data.
 11. Emit function-body instructions only. Refer to constants and global tables by symbol; do not emit their
     `.word`, `.byte`, initializer, literal-pool data or other translation-unit data in this response.
@@ -655,7 +655,7 @@ or
         instructions = self._instruction_lines(draft.assembly)
         if len(instructions) < 2:
             errors.append("assembly contains fewer than two instructions")
-        if len(draft.assembly) >= 310:
+        if len(draft.assembly) >= 460:
             errors.append("assembly reached the output ceiling and is probably truncated")
         if StagedPredictor._has_repeated_instruction_ngram(instructions):
             errors.append("assembly contains a repeated 8-instruction sequence three times")

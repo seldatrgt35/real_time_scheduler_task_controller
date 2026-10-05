@@ -63,7 +63,7 @@ class StaticAssemblyV2Tests(unittest.TestCase):
         self.assertIn("STATIC", prompt)
         self.assertIn("NEVER unroll a loop", prompt)
         self.assertIn("Do not calculate cycles", prompt)
-        self.assertIn("HARD LIMIT of 320 items", prompt)
+        self.assertIn("HARD LIMIT of 480 items", prompt)
         self.assertIn("do not emit their", prompt)
         self.assertIn("SYMBOL KIND CONTRACT", prompt)
         self.assertIn("subscripted DATA expression", prompt)
@@ -116,7 +116,7 @@ class StaticAssemblyV2Tests(unittest.TestCase):
 
     def test_llm_schema_caps_static_assembly_length(self):
         schema = StaticAssemblyFunction.model_json_schema()
-        self.assertEqual(320, schema["properties"]["assembly"]["maxItems"])
+        self.assertEqual(480, schema["properties"]["assembly"]["maxItems"])
 
     def test_loop_requires_backward_branch(self):
         draft = StaticAssemblyFunction(
